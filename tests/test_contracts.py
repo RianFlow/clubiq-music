@@ -194,6 +194,41 @@ class OfflineFrontendContractTests(unittest.TestCase):
         self.assertIn("playlist_target_count", schema)
         self.assertIn("reuse_previous_playlist", schema)
 
+    def test_pwa_and_companion_views_are_local_only(self):
+        manifest = (ROOT / "manifest.webmanifest").read_text(encoding="utf-8")
+        service_worker = (ROOT / "sw.js").read_text(encoding="utf-8")
+        remote = (ROOT / "remote.html").read_text(encoding="utf-8")
+        party = (ROOT / "party.html").read_text(encoding="utf-8")
+        self.assertIn('"display": "standalone"', manifest)
+        self.assertIn('"sizes": "192x192"', manifest)
+        self.assertIn('"sizes": "512x512"', manifest)
+        self.assertIn('url.pathname.startsWith("/api/")', service_worker)
+        self.assertNotIn("youtube", service_worker.lower())
+        self.assertIn("DJ-Fernbedienung", remote)
+        self.assertIn("Party-Anzeige", party)
+
+    def test_player_recovery_and_backup_service_are_configured(self):
+        agent = (ROOT / "player_agent.py").read_text(encoding="utf-8")
+        compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+        backup = (ROOT / "scripts" / "backup-loop.sh").read_text(encoding="utf-8")
+        self.assertIn("def checkpoint_playback", agent)
+        self.assertIn("def restore_session", agent)
+        self.assertIn('"resume_position"', agent)
+        self.assertIn("backup:", compose)
+        self.assertIn("music_backups:/backups", compose)
+        self.assertIn("pg_dump --clean", backup)
+        self.assertIn(".clubiq-backup-target", backup)
+
+    def test_main_page_links_companion_views_and_installation(self):
+        html_source = (ROOT / "index.html").read_text(encoding="utf-8")
+        script_source = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+        self.assertIn('rel="manifest"', html_source)
+        self.assertIn('href="/remote"', html_source)
+        self.assertIn('href="/party"', html_source)
+        self.assertIn('id="installPwa"', html_source)
+        self.assertIn("beforeinstallprompt", script_source)
+        self.assertIn('/api/v1/music/admin/backup/status', script_source)
+
 
 if __name__ == "__main__":
     unittest.main()

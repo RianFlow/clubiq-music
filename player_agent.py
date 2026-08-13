@@ -92,6 +92,10 @@ class MpvController:
         self.connected_speaker = ""
         self.sound_active = False
         self.track_was_active = False
+        self.resume_position = 0.0
+        self.resume_paused = True
+        self.restored_at = ""
+        self.last_checkpoint = 0.0
         self.load_state()
 
     def load_state(self) -> None:
@@ -102,7 +106,10 @@ class MpvController:
             self.repeat = saved.get("repeat", "off")
             self.shuffle = bool(saved.get("shuffle", False))
             self.volume = max(0, min(100, int(saved.get("volume", 70))))
+            self.muted = bool(saved.get("muted", False))
             self.connected_speaker = saved.get("connected_speaker", "")
+            self.resume_position = max(0.0, float(saved.get("resume_position", 0) or 0))
+            self.resume_paused = bool(saved.get("resume_paused", True))
         except (OSError, ValueError, TypeError):
             pass
 
@@ -115,9 +122,44 @@ class MpvController:
             "repeat": self.repeat,
             "shuffle": self.shuffle,
             "volume": self.volume,
+            "muted": self.muted,
             "connected_speaker": self.connected_speaker,
+            "resume_position": round(self.resume_position, 1),
+            "resume_paused": self.resume_paused,
         }, ensure_ascii=False), encoding="utf-8")
         temp.replace(STATE_FILE)
+
+    def checkpoint_playback(self) -> None:
+        """Persist enough state to resume after a reboot or Bluetooth outage."""
+        if self.sound_active:
+            return
+        running = bool(self.process and self.process.poll() is None and MPV_SOCKET.exists())
+        if running and not bool(self.property("idle-active", True)):
+            self.resume_position = max(0.0, float(self.property("time-pos", 0) or 0))
+            self.resume_paused = bool(self.property("pause", True))
+        self.save_state()
+
+    def restore_session(self) -> None:
+        """Reconnect mpv to the saved track without losing queue or position."""
+        if not (0 <= self.current_index < len(self.queue)):
+            return
+        self.ensure_mpv()
+        item = self.queue[self.current_index]
+        self.command("loadfile", item["url"], "replace", start=False)
+        self.command("set_property", "pause", True, start=False)
+        deadline = time.monotonic() + 12
+        while time.monotonic() < deadline:
+            if not bool(self.property("idle-active", True)):
+                break
+            time.sleep(.2)
+        if self.resume_position > 1:
+            self.command("set_property", "time-pos", self.resume_position, start=False)
+        self.command("set_property", "mute", self.muted, start=False)
+        self.command("set_property", "pause", self.resume_paused, start=False)
+        self.track_was_active = not self.resume_paused
+        self.restored_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        self.last_error = ""
+        self.save_state()
 
     def ensure_mpv(self) -> None:
         if self.process and self.process.poll() is None and MPV_SOCKET.exists():
@@ -184,6 +226,8 @@ class MpvController:
             return
         self.current_index %= len(self.queue)
         item = self.queue[self.current_index]
+        self.resume_position = 0.0
+        self.resume_paused = not play
         self.command("loadfile", item["url"], "replace")
         self.track_was_active = False
         if not play:
@@ -343,8 +387,11 @@ class MpvController:
                     self.load_current()
                 else:
                     self.command("set_property", "pause", False)
+                self.resume_paused = False
+                self.save_state()
             elif action == "pause":
                 self.command("set_property", "pause", True)
+                self.checkpoint_playback()
             elif action in {"next", "previous"}:
                 if self.queue:
                     step = 1 if action == "next" else -1
@@ -352,6 +399,8 @@ class MpvController:
                     self.load_current()
             elif action == "seek":
                 self.command("set_property", "time-pos", max(0, float(value)))
+                self.resume_position = max(0, float(value))
+                self.save_state()
             elif action == "volume":
                 self.volume = max(0, min(100, int(value)))
                 self.command("set_property", "volume", self.volume)
@@ -359,6 +408,7 @@ class MpvController:
             elif action == "mute":
                 self.muted = bool(value)
                 self.command("set_property", "mute", self.muted)
+                self.save_state()
             elif action == "shuffle":
                 self.shuffle = bool(value)
                 self.save_state()
@@ -377,9 +427,9 @@ class MpvController:
         item = self.queue[self.current_index] if 0 <= self.current_index < len(self.queue) else None
         running = bool(self.process and self.process.poll() is None and MPV_SOCKET.exists())
         idle = bool(self.property("idle-active", True)) if running else True
-        paused = bool(self.property("pause", True)) if running else True
+        paused = bool(self.property("pause", self.resume_paused)) if running else self.resume_paused
         duration = (self.property("duration", 0) or 0) if running else 0
-        position = (self.property("time-pos", 0) or 0) if running else 0
+        position = (self.property("time-pos", self.resume_position) or 0) if running else self.resume_position
         speaker = device_info(self.connected_speaker) if self.connected_speaker else None
         reported_volume = self.property("volume", None) if running else None
         return {
@@ -398,6 +448,8 @@ class MpvController:
             "current": item,
             "speaker": speaker,
             "sound_active": self.sound_active,
+            "recovery_ready": bool(item and self.connected_speaker),
+            "restored_at": self.restored_at,
             "last_error": self.last_error,
         }
 
@@ -468,7 +520,7 @@ class Handler(BaseHTTPRequestHandler):
                         raise RuntimeError("Die Box hat die Verbindung nicht angenommen. Bitte Kopplungsmodus aktivieren.")
                     PLAYER.connected_speaker = address
                     PLAYER.save_state()
-                    PLAYER.ensure_mpv()
+                    PLAYER.restore_session()
                     return self.reply(200, {"device": info, "log": output[-500:]})
                 if operation == "disconnect":
                     PLAYER.stop_mpv()
@@ -541,16 +593,22 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def reconnect_loop(stop: threading.Event) -> None:
-    while not stop.wait(15):
+    while not stop.is_set():
         address = PLAYER.connected_speaker
-        if not address:
-            continue
-        try:
-            if not device_info(address)["connected"]:
-                PLAYER.stop_mpv()
-                bluetoothctl("power on", f"connect {address}", timeout=12)
-        except Exception as exc:
-            PLAYER.last_error = f"Bluetooth-Wiederverbindung: {exc}"
+        if address:
+            try:
+                connected = bool(device_info(address)["connected"])
+                if not connected:
+                    PLAYER.checkpoint_playback()
+                    PLAYER.stop_mpv()
+                    bluetoothctl("power on", f"connect {address}", timeout=12)
+                    connected = bool(device_info(address)["connected"])
+                if connected and not (PLAYER.process and PLAYER.process.poll() is None):
+                    with PLAYER.lock:
+                        PLAYER.restore_session()
+            except Exception as exc:
+                PLAYER.last_error = f"Bluetooth-Wiederverbindung: {exc}"
+        stop.wait(10)
 
 
 def playback_loop(stop: threading.Event) -> None:
@@ -560,6 +618,12 @@ def playback_loop(stop: threading.Event) -> None:
         idle = bool(PLAYER.property("idle-active", True))
         if not idle:
             PLAYER.track_was_active = True
+            if time.monotonic() - PLAYER.last_checkpoint >= 5:
+                PLAYER.last_checkpoint = time.monotonic()
+                try:
+                    PLAYER.checkpoint_playback()
+                except Exception as exc:
+                    PLAYER.last_error = f"Player-Sicherung: {exc}"
         elif PLAYER.track_was_active:
             PLAYER.track_was_active = False
             try:
@@ -586,6 +650,11 @@ def main() -> None:
         server.serve_forever()
     finally:
         stop.set()
+        try:
+            with PLAYER.lock:
+                PLAYER.checkpoint_playback()
+        except Exception:
+            pass
         SOCKET_PATH.unlink(missing_ok=True)
 
 

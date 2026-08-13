@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#163c36">
+  <title>ClubIQ DJ-Fernbedienung</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/pics/logo.png">
+  <link rel="apple-touch-icon" href="/pics/logo.png">
+  <link rel="stylesheet" href="/static/companion.css?v=20260813-4">
+  <script defer src="/static/remote.js?v=20260813-4"></script>
+</head>
+<body class="remote-body">
+  <header class="companion-header">
+    <a href="/"><img src="/pics/logo.png" alt=""><span><strong>ClubIQ Music</strong><small>DJ-Fernbedienung</small></span></a>
+    <span id="remoteStatus" class="connection bad">Nicht verbunden</span>
+  </header>
+  <main class="remote-shell">
+    <section id="remoteLogin" class="remote-card login-card">
+      <p class="eyebrow">Geschützt</p><h1>DJ-Steuerung öffnen</h1>
+      <form id="remoteLoginForm"><label>Verwaltungskennwort<input id="remotePassword" type="password" autocomplete="current-password" required></label><button type="submit">Öffnen</button></form>
+      <p id="remoteError" class="error" hidden></p>
+    </section>
+    <div id="remoteArea" hidden>
+      <section class="remote-card now-card">
+        <img id="remoteCover" src="/pics/logo.png" alt="">
+        <div><p class="eyebrow">Jetzt läuft</p><h1 id="remoteTitle">Noch kein Song</h1><p id="remoteArtist">–</p></div>
+      </section>
+      <section class="remote-card">
+        <input id="remoteProgress" class="range" type="range" min="0" max="1" value="0" aria-label="Wiedergabeposition">
+        <div class="time"><span id="remotePosition">0:00</span><span id="remoteDuration">0:00</span></div>
+        <div class="transport">
+          <button data-action="previous" aria-label="Vorheriger Song">Zurück</button>
+          <button id="remotePlay" data-action="play" class="play" aria-label="Wiedergabe">Start</button>
+          <button data-action="next" aria-label="Nächster Song">Weiter</button>
+        </div>
+        <div class="volume"><button id="remoteMute" data-action="mute">Ton</button><input id="remoteVolume" type="range" min="0" max="100" value="70" aria-label="Lautstärke"><b id="remoteVolumeValue">70 %</b></div>
+      </section>
+      <section class="remote-card">
+        <div class="section-title"><div><p class="eyebrow">Live</p><h2>Als Nächstes</h2></div><button id="remoteRefresh" class="secondary">Neu laden</button></div>
+        <div id="remoteQueue" class="remote-queue"></div>
+      </section>
+      <nav class="remote-links"><a href="/">Hauptseite</a><a href="/party">Party-Anzeige</a><button id="remoteLogout">Abmelden</button></nav>
+    </div>
+  </main>
+</body>
+</html>

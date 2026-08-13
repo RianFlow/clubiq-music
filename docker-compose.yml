@@ -30,6 +30,9 @@ services:
     env_file: .env
     volumes:
       - /run/clubiq-music:/run/clubiq-music
+      - music_backups:/backups:ro
+    environment:
+      MUSIC_BACKUP_STATUS_FILE: /backups/status.json
     depends_on:
       db:
         condition: service_healthy
@@ -48,5 +51,40 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  backup:
+    image: postgres:15-alpine
+    env_file: .env
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: ${DB_NAME:?DB_NAME fehlt in .env}
+      PGUSER: ${DB_USER:?DB_USER fehlt in .env}
+      PGPASSWORD: ${DB_PASSWORD:?DB_PASSWORD fehlt in .env}
+      MUSIC_BACKUP_INTERVAL_SECONDS: ${MUSIC_BACKUP_INTERVAL_SECONDS:-21600}
+      MUSIC_BACKUP_RETENTION_DAYS: ${MUSIC_BACKUP_RETENTION_DAYS:-30}
+    volumes:
+      - music_backups:/backups
+      - ${MUSIC_USB_BACKUP_PATH:-/mnt/vereinskasse-sicherung}:/backups/usb
+      - ./scripts/backup-loop.sh:/usr/local/bin/backup-loop.sh:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/backup-loop.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test -s /backups/status.json"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   postgres_data:
+  music_backups:

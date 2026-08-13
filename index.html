@@ -5,9 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#163c36">
   <title>ClubIQ Music</title>
+  <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/pics/logo.png">
-  <link rel="stylesheet" href="/static/app.css?v=20260813-3">
-  <script defer src="/static/app.js?v=20260813-3"></script>
+  <link rel="apple-touch-icon" href="/pics/logo.png">
+  <link rel="stylesheet" href="/static/app.css?v=20260813-4">
+  <script defer src="/static/app.js?v=20260813-4"></script>
 </head>
 <body>
   <header class="topbar">
@@ -20,6 +22,7 @@
     </a>
     <div class="top-actions">
       <span id="connectionState" class="status-pill"><i></i> Lokal bereit</span>
+      <button id="installPwa" class="button ghost" type="button" hidden>App installieren</button>
       <button id="adminOpen" class="button ghost" type="button">Verwaltung</button>
       <button id="memberOpen" class="button primary" type="button">Anmelden</button>
     </div>
@@ -79,6 +82,10 @@
         <span id="speakerBadge" class="speaker-badge offline">Keine Box verbunden</span>
       </div>
       <p class="muted player-network-hint">YouTube-Songs benötigen Internet. Soundboard-Clips laufen lokal vom Raspberry.</p>
+      <nav class="companion-actions" aria-label="Weitere Player-Ansichten">
+        <a class="button ghost" href="/remote">DJ-Fernbedienung</a>
+        <a class="button ghost" href="/party">Party-Anzeige</a>
+      </nav>
       <div class="player-layout">
         <article class="player-console">
           <div class="now-playing">
@@ -260,6 +267,14 @@
             <small>MP3, WAV, OGG, M4A oder WebM · maximal 3 MB.</small>
           </form>
           <div id="adminSoundboard" class="admin-list"></div>
+          <div class="panel-box backup-panel">
+            <div class="section-head compact">
+              <div><p class="eyebrow">Datenschutz</p><h3>Musik-Sicherung</h3></div>
+              <button id="refreshBackup" class="button ghost small" type="button">Prüfen</button>
+            </div>
+            <p class="muted">Mitglieder, Abstimmungen und Player-Einstellungen werden automatisch gesichert. Musikdateien aus dem Internet werden nicht offline gespeichert.</p>
+            <div id="backupStatus" class="backup-status"><span>Noch nicht geprüft</span></div>
+          </div>
         </section>
       </div>
     </div>

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101514">
+  <title>ClubIQ Party-Anzeige</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/pics/logo.png">
+  <link rel="stylesheet" href="/static/companion.css?v=20260813-4">
+  <script defer src="/static/party.js?v=20260813-4"></script>
+</head>
+<body class="party-body">
+  <header class="party-header"><img src="/pics/logo.png" alt=""><strong>ClubIQ Music</strong><span id="partyConnection">Verbinden …</span><button id="partyFullscreen">Vollbild</button></header>
+  <main class="party-shell">
+    <section class="party-now">
+      <img id="partyCover" src="/pics/logo.png" alt="">
+      <div><p>Jetzt läuft</p><h1 id="partyTitle">Die Playlist wird vorbereitet</h1><h2 id="partyArtist">ClubIQ Music</h2><div class="party-progress"><i id="partyBar"></i></div><span id="partyTime">0:00 / 0:00</span></div>
+    </section>
+    <aside><p class="eyebrow">Danach</p><div id="partyQueue" class="party-queue"></div></aside>
+  </main>
+  <footer class="party-footer"><span id="partyCycle">Gemeinsam die Playlist bestimmen.</span><strong id="partyCountdown"></strong></footer>
+</body>
+</html>

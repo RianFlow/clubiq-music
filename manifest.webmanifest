@@ -1,0 +1,19 @@
+{
+  "name": "ClubIQ Music",
+  "short_name": "ClubIQ Music",
+  "description": "Voting, DJ-Steuerung und Party-Anzeige für den Vereinsabend.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f4ef",
+  "theme_color": "#163c36",
+  "icons": [
+    {"src": "/pics/logo.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "/pics/pwa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ],
+  "shortcuts": [
+    {"name": "DJ-Fernbedienung", "short_name": "DJ", "url": "/remote"},
+    {"name": "Party-Anzeige", "short_name": "Anzeige", "url": "/party"}
+  ]
+}

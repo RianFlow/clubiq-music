@@ -10,6 +10,7 @@ import secrets
 import socket
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import psycopg
 import requests
@@ -32,6 +33,7 @@ SESSION_DAYS = max(1, int(os.getenv("SESSION_DAYS", "30")))
 PLAYER_AGENT_SOCKET = os.getenv("PLAYER_AGENT_SOCKET", "/run/clubiq-music/player.sock")
 PLAYER_AGENT_TOKEN = os.getenv("PLAYER_AGENT_TOKEN", "")
 PLAYER_PUBLIC_BASE_URL = os.getenv("PLAYER_PUBLIC_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+BACKUP_STATUS_FILE = Path(os.getenv("MUSIC_BACKUP_STATUS_FILE", "/backups/status.json"))
 PIN_ITERATIONS = 210_000
 YOUTUBE_VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{6,20}$")
 SOUNDBOARD_MEDIA_TYPES = {"audio/mpeg", "audio/ogg", "audio/wav", "audio/x-wav", "audio/webm", "audio/mp4"}
@@ -319,6 +321,29 @@ class DjQueueMove(BaseModel):
 @app.get("/")
 def read_root():
     return FileResponse("index.html")
+
+
+@app.get("/remote")
+def dj_remote():
+    return FileResponse("remote.html")
+
+
+@app.get("/party")
+def party_display():
+    return FileResponse("party.html")
+
+
+@app.get("/manifest.webmanifest")
+def pwa_manifest():
+    return FileResponse("manifest.webmanifest", media_type="application/manifest+json")
+
+
+@app.get("/sw.js")
+def service_worker():
+    return FileResponse(
+        "sw.js", media_type="application/javascript",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
 
 
 @app.get("/health")
@@ -911,9 +936,38 @@ def control_player(command: PlayerCommand, member: dict = Depends(require_member
     return player_agent("POST", "/command", command.model_dump())
 
 
+@app.post("/api/v1/music/admin/player/command", dependencies=[Depends(require_admin)])
+def admin_control_player(command: PlayerCommand):
+    allowed_values = {
+        "seek": lambda value: isinstance(value, (int, float)) and 0 <= float(value) <= 86400,
+        "volume": lambda value: isinstance(value, (int, float)) and 0 <= float(value) <= 100,
+        "mute": lambda value: isinstance(value, bool),
+        "shuffle": lambda value: isinstance(value, bool),
+        "repeat": lambda value: value in {"off", "one", "all"},
+    }
+    if command.action in allowed_values and not allowed_values[command.action](command.value):
+        raise HTTPException(status_code=422, detail="Ungültiger Wert für den Player-Befehl.")
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO music_player_audit (member_id, action, detail_json) VALUES (NULL, %s, %s);",
+            (f"dj_{command.action}", json.dumps({"value": command.value})),
+        )
+        conn.commit()
+    return player_agent("POST", "/command", command.model_dump())
+
+
 @app.get("/api/v1/music/admin/player/search", dependencies=[Depends(require_admin)])
 def dj_search(q: str = Query(min_length=3, max_length=100)):
     return {"results": youtube_search(q)}
+
+
+@app.get("/api/v1/music/admin/backup/status", dependencies=[Depends(require_admin)])
+def backup_status():
+    try:
+        status = json.loads(BACKUP_STATUS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        status = {"ok": False, "message": "Noch keine automatische Sicherung vorhanden."}
+    return status
 
 
 @app.post("/api/v1/music/admin/player/queue", dependencies=[Depends(require_admin)])

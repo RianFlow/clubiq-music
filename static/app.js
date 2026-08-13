@@ -24,6 +24,7 @@ const esc = (value = "") => String(value).replace(/[&<>'"]/g, char => ({
 
 let toastTimer;
 let countdownTransition = "";
+let deferredInstallPrompt = null;
 function toast(message, error = false) {
   const node = $("#toast");
   node.textContent = message;
@@ -773,7 +774,7 @@ async function showAdminArea() {
   setCycleFormDefaults();
   await Promise.all([
     loadAdminStats(), loadAdminCycles(), loadAdminMembers(), loadVoteHistory(),
-    loadSpeakers(true), loadSoundboard(),
+    loadSpeakers(true), loadSoundboard(), loadBackupStatus(),
   ]);
   await loadPlayerState(true);
 }
@@ -792,6 +793,28 @@ async function loadAdminStats() {
   $("#adminStats").innerHTML = [
     ["Mitglieder", data.members], ["Songs", data.songs], ["Stimmen", data.votes],
   ].map(([label, value]) => `<div class="stat"><span>${label}</span><strong>${value}</strong></div>`).join("");
+}
+
+async function loadBackupStatus() {
+  const node = $("#backupStatus");
+  try {
+    const status = await api("/api/v1/music/admin/backup/status", {}, true);
+    node.className = `backup-status${status.ok ? " good" : " bad"}`;
+    const finished = status.finished_at ? formatDate(status.finished_at) : "noch nicht ausgeführt";
+    const size = status.size_bytes ? `${Math.max(1, Math.round(status.size_bytes / 1024))} KB` : "–";
+    node.innerHTML = `<strong>${status.ok ? "Sicherung geprüft" : "Sicherung prüfen"}</strong><span>${esc(status.message || finished)} · ${size}${status.usb_copied ? " · zusätzlich auf USB" : ""}</span>`;
+  } catch (error) {
+    node.className = "backup-status bad";
+    node.innerHTML = `<strong>Nicht abrufbar</strong><span>${esc(error.message)}</span>`;
+  }
+}
+
+async function installPwa() {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  $("#installPwa").hidden = true;
 }
 
 async function loadAdminCycles() {
@@ -964,6 +987,8 @@ function bindEvents() {
   $("#djSearchForm").addEventListener("submit", searchDjSongs);
   $("#refreshDjQueue").addEventListener("click", () => loadPlayerState());
   $("#refreshActivity").addEventListener("click", () => loadActivity());
+  $("#refreshBackup").addEventListener("click", () => loadBackupStatus());
+  $("#installPwa").addEventListener("click", installPwa);
   window.addEventListener("online", () => { $("#connectionState").innerHTML = "<i></i> Lokal bereit"; });
   window.addEventListener("offline", () => { $("#connectionState").innerHTML = "<i></i> Offline im Kassen-WLAN"; });
 }
@@ -981,6 +1006,18 @@ async function start() {
 }
 
 start();
+if ("serviceWorker" in navigator && window.isSecureContext) {
+  navigator.serviceWorker.register("/sw.js").catch(() => {});
+}
+window.addEventListener("beforeinstallprompt", event => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  $("#installPwa").hidden = false;
+});
+window.addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  $("#installPwa").hidden = true;
+});
 setInterval(updateCountdown, 1000);
 setInterval(() => loadPlaylist().catch(() => {}), 30000);
 setInterval(() => loadActivity(true).catch(() => {}), 30000);

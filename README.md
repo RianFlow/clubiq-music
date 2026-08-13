@@ -104,6 +104,20 @@ Standardmäßig landet die Sicherung unter `./backups`. Für den ClubIQ-USB-Stic
 
 ```bash
 sudo env BACKUP_DIR=/mnt/vereinskasse-sicherung/clubiq-music ./scripts/backup.sh
+
+Zusätzlich erstellt der Docker-Dienst `backup` automatisch alle sechs Stunden eine
+geprüfte PostgreSQL-Sicherung. Ist der gemeinsame USB-Stick mit der Markierung
+`.clubiq-backup-target` eingehängt, wird dort eine zweite Kopie abgelegt.
+
+## PWA, DJ-Fernbedienung und Party-Anzeige
+
+- Haupt-App: `/`
+- kompakte DJ-Steuerung: `/remote`
+- Vollbildanzeige für einen zweiten Bildschirm: `/party`
+
+Die PWA wird über das Browsermenü oder die Schaltfläche `App installieren`
+installiert. Dafür muss ClubIQ Music über HTTPS geöffnet sein. Es wird nur die
+Bedienoberfläche zwischengespeichert, keine Online-Musik.
 ```
 
 Die Sicherung wird komprimiert, inhaltlich geprüft und mit SHA-256 versehen.
