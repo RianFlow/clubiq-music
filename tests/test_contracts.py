@@ -37,6 +37,21 @@ class SecurityContractTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             main.PlayerCommand(action="shell", value="reboot")
 
+    def test_player_permission_is_separate_and_radio_urls_are_validated(self):
+        allowed = main.require_player_operator({
+            "member_id": "member-1", "display_name": "DJ", "can_control_player": True,
+        })
+        self.assertEqual(allowed["member_id"], "member-1")
+        with self.assertRaises(HTTPException) as context:
+            main.require_player_operator({
+                "member_id": "member-2", "display_name": "Gast", "can_control_player": False,
+            })
+        self.assertEqual(context.exception.status_code, 403)
+        self.assertEqual(main.validate_media_url("https://radio.example/stream", "Stream", True),
+                         "https://radio.example/stream")
+        with self.assertRaises(HTTPException):
+            main.validate_media_url("file:///etc/passwd", "Stream", True)
+
     def test_dj_queue_payloads_are_bounded(self):
         item = main.DjQueueItem(
             external_id="dQw4w9WgXcQ", title="Testtitel", position="next"
@@ -220,6 +235,20 @@ class OfflineFrontendContractTests(unittest.TestCase):
         self.assertIn(".clubiq-backup-target", backup)
         self.assertNotIn("zgrep", backup)
         self.assertIn('gzip -dc "$archive" | grep -q', backup)
+
+    def test_player_permissions_and_radio_are_wired_end_to_end(self):
+        schema = (ROOT / "bootstrap.py").read_text(encoding="utf-8")
+        api = (ROOT / "main.py").read_text(encoding="utf-8")
+        agent = (ROOT / "player_agent.py").read_text(encoding="utf-8")
+        html_source = (ROOT / "index.html").read_text(encoding="utf-8")
+        script_source = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+        self.assertIn("can_control_player BOOLEAN NOT NULL DEFAULT FALSE", schema)
+        self.assertIn("music_radio_stations", schema)
+        self.assertIn("Depends(require_player_operator)", api)
+        self.assertIn('/api/v1/music/player/radio/{station_id}/play', api)
+        self.assertIn('if self.path == "/radio"', agent)
+        self.assertIn('id="radioStations"', html_source)
+        self.assertIn("data-toggle-player", script_source)
 
     def test_main_page_links_companion_views_and_installation(self):
         html_source = (ROOT / "index.html").read_text(encoding="utf-8")

@@ -8,8 +8,8 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/pics/logo.png">
   <link rel="apple-touch-icon" href="/pics/logo.png">
-  <link rel="stylesheet" href="/static/app.css?v=20260813-4">
-  <script defer src="/static/app.js?v=20260813-4"></script>
+  <link rel="stylesheet" href="/static/app.css?v=20260813-5">
+  <script defer src="/static/app.js?v=20260813-5"></script>
 </head>
 <body>
   <header class="topbar">
@@ -82,6 +82,10 @@
         <span id="speakerBadge" class="speaker-badge offline">Keine Box verbunden</span>
       </div>
       <p class="muted player-network-hint">YouTube-Songs benötigen Internet. Soundboard-Clips laufen lokal vom Raspberry.</p>
+      <section class="radio-panel panel-box">
+        <div class="section-head compact"><div><p class="eyebrow">Alternative Wiedergabe</p><h3>Internetradio</h3></div><button id="stopRadio" class="button ghost small" data-player-control type="button" hidden>Zur Playlist</button></div>
+        <div id="radioStations" class="radio-grid"><div class="empty">Noch keine Radiosender eingerichtet.</div></div>
+      </section>
       <nav class="companion-actions" aria-label="Weitere Player-Ansichten">
         <a class="button ghost" href="/remote">DJ-Fernbedienung</a>
         <a class="button ghost" href="/party">Party-Anzeige</a>
@@ -94,7 +98,7 @@
           </div>
           <input id="playerProgress" class="player-progress" type="range" min="0" max="1" value="0" aria-label="Wiedergabeposition">
           <div class="time-row"><span id="playerPosition">0:00</span><span id="playerDuration">0:00</span></div>
-          <div id="playerControls" class="player-controls" data-member-only hidden>
+          <div id="playerControls" class="player-controls" data-player-control hidden>
             <button class="player-icon" data-player-action="shuffle" type="button" title="Zufällige Reihenfolge">⇄</button>
             <button class="player-icon" data-player-action="previous" type="button" title="Vorheriger Song">‹</button>
             <button id="playerPlay" class="player-icon primary" data-player-action="play" type="button" title="Wiedergabe">▶</button>
@@ -106,11 +110,11 @@
             <input id="playerVolume" type="range" min="0" max="100" value="70" aria-label="Lautstärke">
             <strong id="playerVolumeValue">70 %</strong>
           </div>
-          <div id="playerLoginGate" class="player-login" data-guest-only>
+          <div id="playerLoginGate" class="player-login">
             <span>Zum Steuern des Players bitte einmal anmelden.</span>
             <button class="button primary small" data-open-member type="button">Anmelden</button>
           </div>
-          <div class="player-actions" data-member-only hidden>
+          <div class="player-actions" data-player-control hidden>
             <button id="queueFromRanking" class="button primary" type="button">Playlist erstellen &amp; abspielen</button>
             <button id="refreshPlayer" class="button ghost" type="button">Status aktualisieren</button>
           </div>
@@ -267,6 +271,18 @@
             <small>MP3, WAV, OGG, M4A oder WebM · maximal 3 MB.</small>
           </form>
           <div id="adminSoundboard" class="admin-list"></div>
+          <form id="radioStationForm" class="panel-box form-grid">
+            <h3>Internetradio-Sender hinzufügen</h3>
+            <label>Name<input id="radioName" maxlength="120" required placeholder="z. B. NDR 2"></label>
+            <label>Genre<input id="radioGenre" maxlength="80" placeholder="z. B. Pop"></label>
+            <label class="wide">Direkte Stream-Adresse<input id="radioStreamUrl" type="url" maxlength="1000" required placeholder="https://…/stream.mp3"></label>
+            <label class="wide">Ersatz-Stream (optional)<input id="radioFallbackUrl" type="url" maxlength="1000" placeholder="https://…"></label>
+            <label class="wide">Logo-Adresse (optional)<input id="radioLogoUrl" type="url" maxlength="1000" placeholder="https://…/logo.png"></label>
+            <button class="button primary" type="submit">Sender speichern</button>
+            <small>Bitte die direkte MP3-/AAC-/HLS-Stream-Adresse eintragen, nicht die normale Sender-Webseite.</small>
+          </form>
+          <div class="section-head compact"><div><p class="eyebrow">Senderliste</p><h3>Internetradio steuern</h3></div><button id="adminStopRadio" class="button ghost small" type="button">Zur Playlist</button></div>
+          <div id="adminRadioStations" class="admin-list"></div>
           <div class="panel-box backup-panel">
             <div class="section-head compact">
               <div><p class="eyebrow">Datenschutz</p><h3>Musik-Sicherung</h3></div>

@@ -16,6 +16,14 @@
   font-synthesis: none;
 }
 
+.radio-panel { margin: 1rem 0; }
+.radio-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: .75rem; }
+.radio-card { display: flex; align-items: center; gap: .75rem; min-height: 70px; padding: .75rem; border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: inherit; text-align: left; cursor: pointer; }
+.radio-card:hover,.radio-card.active { border-color: var(--green); box-shadow: 0 0 0 2px rgba(29,91,76,.12); }
+.radio-card img,.radio-icon { width: 46px; height: 46px; border-radius: 10px; object-fit: cover; display: grid; place-items: center; background: var(--green-soft); font-size: 1.5rem; }
+.radio-card span:last-child { display: grid; gap: .2rem; }
+.radio-card small { color: var(--muted); }
+
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html { min-height: 100%; background: var(--paper); }

@@ -118,6 +118,19 @@ geprüfte PostgreSQL-Sicherung. Ist der gemeinsame USB-Stick mit der Markierung
 Die PWA wird über das Browsermenü oder die Schaltfläche `App installieren`
 installiert. Dafür muss ClubIQ Music über HTTPS geöffnet sein. Es wird nur die
 Bedienoberfläche zwischengespeichert, keine Online-Musik.
+
+## Player-Freigaben und Internetradio
+
+Player-Befehle sind für normale Mitglieder standardmäßig gesperrt. In
+**Verwaltung → Mitglieder** kann ein Admin mit **Player freigeben** einzelne
+Mitglieder berechtigen. Diese Freigabe wird bei jedem schreibenden API-Aufruf
+serverseitig geprüft; Abstimmen und Vorschlagen bleiben davon unabhängig.
+
+Unter **Verwaltung → Player & Box** lassen sich Internetradio-Sender mit einer
+direkten MP3-, AAC- oder HLS-Stream-Adresse verwalten. Optional kann ein
+Ersatz-Stream hinterlegt werden. Freigeschaltete Mitglieder wechseln im Player
+zwischen Playlist und Radio; die Party-Anzeige übernimmt Sender und verfügbare
+Titelinformationen automatisch.
 ```
 
 Die Sicherung wird komprimiert, inhaltlich geprüft und mit SHA-256 versehen.

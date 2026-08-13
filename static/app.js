@@ -12,6 +12,7 @@ const state = {
   playlist: [],
   player: { available: false, queue: [], current_index: -1, volume: 70, repeat: "off", shuffle: false },
   soundboard: [],
+  radioStations: [],
   speakers: [],
   activity: [],
 };
@@ -132,7 +133,7 @@ function setTab(name) {
   $$(".tab-panel").forEach(panel => panel.classList.toggle("active", panel.id === `tab-${name}`));
   if (name === "mine") renderMyVotes();
   if (name === "voting") loadActivity(true).catch(() => {});
-  if (name === "player") Promise.all([loadPlayerState(), loadSoundboard()]).catch(error => toast(error.message, true));
+  if (name === "player") Promise.all([loadPlayerState(), loadSoundboard(), loadRadioStations()]).catch(error => toast(error.message, true));
 }
 
 function setAdminTab(name) {
@@ -142,9 +143,17 @@ function setAdminTab(name) {
 
 function renderSession() {
   const loggedIn = Boolean(state.member);
+  const canControlPlayer = Boolean(state.member?.can_control_player);
   $("#loginHint").hidden = loggedIn;
   $$('[data-member-only]').forEach(node => { node.hidden = !loggedIn; });
   $$('[data-guest-only]').forEach(node => { node.hidden = loggedIn; });
+  $$('[data-player-control]').forEach(node => { node.hidden = !canControlPlayer; });
+  const playerGate = $("#playerLoginGate");
+  playerGate.hidden = canControlPlayer;
+  playerGate.querySelector("span").textContent = loggedIn
+    ? "Die Verwaltung muss dich für die Player-Bedienung freigeben."
+    : "Zum Steuern des Players bitte einmal anmelden.";
+  playerGate.querySelector("button").hidden = loggedIn;
   $("#memberOpen").textContent = loggedIn ? `${state.member.display_name} · Abmelden` : "Anmelden";
   $("#budgetRemaining").textContent = loggedIn ? state.budget.remaining : "–";
   $("#budgetMeta").textContent = loggedIn
@@ -488,6 +497,76 @@ function renderPlayer() {
       <div><strong>${esc(item.title)}</strong><small>${index < player.current_index ? "Gespielt · " : index === player.current_index ? "Jetzt · " : index === player.current_index + 1 ? "Als Nächstes · " : ""}${esc(item.artist || "Unbekannter Interpret")} · ${queueSourceLabel(item.source)}</small></div>
     </div>`).join("") : '<div class="empty">Noch keine Songs geladen.</div>';
   renderDjQueue();
+  $("#stopRadio").hidden = player.source_mode !== "radio" || !state.member?.can_control_player;
+  if (state.radioStations.length) renderRadioStations();
+}
+
+async function loadRadioStations() {
+  const data = await api("/api/v1/music/player/radio/stations");
+  state.radioStations = data.stations || [];
+  renderRadioStations();
+}
+
+function renderRadioStations() {
+  const root = $("#radioStations");
+  root.innerHTML = state.radioStations.length ? state.radioStations.map(station => `
+    <button class="radio-card${state.player.radio_station?.id === station.id ? " active" : ""}" data-radio-play="${station.id}" type="button">
+      ${station.logo_url ? `<img src="${esc(station.logo_url)}" alt="">` : '<span class="radio-icon">♪</span>'}
+      <span><strong>${esc(station.name)}</strong><small>${esc(station.genre || "Internetradio")}</small></span>
+    </button>`).join("") : '<div class="empty">Noch keine Radiosender eingerichtet.</div>';
+  $$('[data-radio-play]', root).forEach(button => button.addEventListener("click", async () => {
+    if (!state.member) return openMemberDialog();
+    if (!state.member.can_control_player) return toast("Du bist für die Player-Bedienung nicht freigegeben.", true);
+    button.disabled = true;
+    try {
+      state.player = await api(`/api/v1/music/player/radio/${button.dataset.radioPlay}/play`, { method: "POST" });
+      renderPlayer(); renderRadioStations(); toast("Internetradio läuft.");
+    } catch (error) { toast(error.message, true); }
+    finally { button.disabled = false; }
+  }));
+}
+
+async function stopRadio() {
+  try {
+    state.player = await api("/api/v1/music/player/radio/stop", { method: "POST" });
+    renderPlayer(); renderRadioStations(); toast("Zur Playlist gewechselt.");
+  } catch (error) { toast(error.message, true); }
+}
+
+async function loadAdminRadioStations() {
+  const data = await api("/api/v1/music/admin/radio/stations", {}, true);
+  state.radioStations = (data.stations || []).filter(station => station.active);
+  renderRadioStations();
+  $("#adminRadioStations").innerHTML = (data.stations || []).map(station => `
+    <div class="admin-row"><div><strong>${esc(station.name)}</strong><span>${esc(station.genre || "Ohne Genre")} · ${station.active ? "Aktiv" : "Deaktiviert"}</span></div>
+      <div class="row-actions"><button class="button primary small" data-admin-radio-play="${station.id}" ${station.active ? "" : "disabled"}>Abspielen</button><button class="button ghost small" data-radio-toggle="${station.id}" data-active="${station.active}">${station.active ? "Deaktivieren" : "Aktivieren"}</button><button class="button ghost small" data-radio-delete="${station.id}">Löschen</button></div></div>`).join("") || '<div class="empty">Noch keine Sender gespeichert.</div>';
+  $$('[data-admin-radio-play]').forEach(button => button.addEventListener("click", async () => {
+    try {
+      state.player = await api(`/api/v1/music/admin/radio/stations/${button.dataset.adminRadioPlay}/play`, { method: "POST" }, true);
+      renderPlayer(); toast("Internetradio läuft.");
+    } catch (error) { toast(error.message, true); }
+  }));
+  $$('[data-radio-toggle]').forEach(button => button.addEventListener("click", async () => {
+    await api(`/api/v1/music/admin/radio/stations/${button.dataset.radioToggle}`, { method: "PATCH", ...adminHeadersBody({ active: button.dataset.active !== "true" }) }, true);
+    await loadAdminRadioStations();
+  }));
+  $$('[data-radio-delete]').forEach(button => button.addEventListener("click", async () => {
+    if (!confirm("Diesen Radiosender wirklich löschen?")) return;
+    await api(`/api/v1/music/admin/radio/stations/${button.dataset.radioDelete}`, { method: "DELETE" }, true);
+    await loadAdminRadioStations();
+  }));
+}
+
+async function createRadioStation(event) {
+  event.preventDefault();
+  try {
+    await api("/api/v1/music/admin/radio/stations", { method: "POST", ...adminHeadersBody({
+      name: $("#radioName").value.trim(), genre: $("#radioGenre").value.trim() || null,
+      stream_url: $("#radioStreamUrl").value.trim(), fallback_url: $("#radioFallbackUrl").value.trim() || null,
+      logo_url: $("#radioLogoUrl").value.trim() || null,
+    }) }, true);
+    event.target.reset(); await loadAdminRadioStations(); toast("Radiosender gespeichert.");
+  } catch (error) { toast(error.message, true); }
 }
 
 async function loadActivity(silent = false) {
@@ -598,6 +677,7 @@ async function loadPlayerState(silent = false) {
 
 async function playerCommand(action, value = null) {
   if (!state.member) return openMemberDialog();
+  if (!state.member.can_control_player) return toast("Du bist für die Player-Bedienung nicht freigegeben.", true);
   try {
     state.player = await api("/api/v1/music/player/command", {
       method: "POST", body: JSON.stringify({ action, value }),
@@ -620,6 +700,7 @@ async function handlePlayerAction(button) {
 
 async function queueRanking() {
   if (!state.member) return openMemberDialog();
+  if (!state.member.can_control_player) return toast("Du bist für die Player-Bedienung nicht freigegeben.", true);
   const button = $("#queueFromRanking");
   button.disabled = true;
   try {
@@ -641,6 +722,7 @@ async function loadSoundboard() {
   `).join("") : '<div class="empty">Noch keine Sounds eingerichtet.</div>';
   $$('[data-play-sound]').forEach(button => button.addEventListener("click", async () => {
     if (!state.member) return openMemberDialog();
+    if (!state.member.can_control_player) return toast("Du bist für die Player-Bedienung nicht freigegeben.", true);
     button.disabled = true;
     try {
       state.player = await api(`/api/v1/music/player/soundboard/${button.dataset.playSound}/play`, { method: "POST" });
@@ -774,7 +856,7 @@ async function showAdminArea() {
   setCycleFormDefaults();
   await Promise.all([
     loadAdminStats(), loadAdminCycles(), loadAdminMembers(), loadVoteHistory(),
-    loadSpeakers(true), loadSoundboard(), loadBackupStatus(),
+    loadSpeakers(true), loadSoundboard(), loadBackupStatus(), loadAdminRadioStations(),
   ]);
   await loadPlayerState(true);
 }
@@ -906,8 +988,9 @@ async function loadAdminMembers() {
   const root = $("#memberList");
   root.innerHTML = (data.members || []).map(member => `
     <div class="admin-row">
-      <div><strong>${esc(member.display_name)}</strong><span>${member.active ? "Aktiv" : "Deaktiviert"} · ${member.pin_ready ? "PIN eingerichtet" : "PIN beim ersten Login festlegen"}</span></div>
+      <div><strong>${esc(member.display_name)}</strong><span>${member.active ? "Aktiv" : "Deaktiviert"} · ${member.pin_ready ? "PIN eingerichtet" : "PIN beim ersten Login festlegen"} · ${member.can_control_player ? "Player freigegeben" : "Player gesperrt"}</span></div>
       <div class="row-actions">
+        <button class="button ghost small" data-toggle-player="${esc(member.member_id)}" data-player="${member.can_control_player}">${member.can_control_player ? "Player sperren" : "Player freigeben"}</button>
         <button class="button ghost small" data-reset-pin="${esc(member.member_id)}">PIN ändern</button>
         <button class="button ghost small" data-toggle-member="${esc(member.member_id)}" data-active="${member.active}">${member.active ? "Deaktivieren" : "Aktivieren"}</button>
       </div>
@@ -931,6 +1014,15 @@ async function loadAdminMembers() {
       }, true);
       await Promise.all([loadAdminMembers(), loadAdminStats(), loadMembers()]);
       toast("Mitglied aktualisiert.");
+    } catch (error) { toast(error.message, true); }
+  }));
+  $$('[data-toggle-player]', root).forEach(button => button.addEventListener("click", async () => {
+    try {
+      await api(`/api/v1/music/admin/members/${encodeURIComponent(button.dataset.togglePlayer)}`, {
+        method: "PATCH", ...adminHeadersBody({ can_control_player: button.dataset.player !== "true" }),
+      }, true);
+      await loadAdminMembers();
+      toast("Player-Freigabe aktualisiert.");
     } catch (error) { toast(error.message, true); }
   }));
 }
@@ -977,6 +1069,14 @@ function bindEvents() {
   $("#adminLogout").addEventListener("click", adminLogout);
   $("#cycleForm").addEventListener("submit", createCycle);
   $("#memberCreateForm").addEventListener("submit", createMember);
+  $("#radioStationForm").addEventListener("submit", createRadioStation);
+  $("#adminStopRadio").addEventListener("click", async () => {
+    try {
+      state.player = await api("/api/v1/music/admin/radio/stop", { method: "POST" }, true);
+      renderPlayer(); toast("Zur Playlist gewechselt.");
+    } catch (error) { toast(error.message, true); }
+  });
+  $("#stopRadio").addEventListener("click", stopRadio);
   $$('[data-player-action]').forEach(button => button.addEventListener("click", () => handlePlayerAction(button)));
   $("#queueFromRanking").addEventListener("click", queueRanking);
   $("#refreshPlayer").addEventListener("click", () => loadPlayerState());
@@ -996,7 +1096,7 @@ function bindEvents() {
 async function start() {
   bindEvents();
   try {
-    await Promise.all([loadCycles(), loadMembers(), loadPlayerState(true), loadSoundboard(), loadActivity(true)]);
+    await Promise.all([loadCycles(), loadMembers(), loadPlayerState(true), loadSoundboard(), loadRadioStations(), loadActivity(true)]);
     await restoreMember();
     renderSession();
     await loadPlaylist();

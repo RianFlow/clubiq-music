@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS club_members (
     display_name VARCHAR(255) NOT NULL,
     pin_hash TEXT,
     active BOOLEAN NOT NULL DEFAULT TRUE,
+    can_control_player BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -109,6 +110,19 @@ CREATE TABLE IF NOT EXISTS music_cycle_playlists (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS music_radio_stations (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(120) NOT NULL,
+    stream_url TEXT NOT NULL,
+    fallback_url TEXT,
+    logo_url TEXT,
+    genre VARCHAR(80),
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_search_cache_lookup
 ON music_provider_search_cache (provider, normalized_query, market, expires_at);
 
@@ -120,6 +134,7 @@ ON music_player_audit (created_at DESC);
 
 ALTER TABLE club_members ADD COLUMN IF NOT EXISTS pin_hash TEXT;
 ALTER TABLE club_members ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE club_members ADD COLUMN IF NOT EXISTS can_control_player BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE music_cycles ADD COLUMN IF NOT EXISTS max_budget INTEGER;
 UPDATE music_cycles SET max_budget = 10 WHERE max_budget IS NULL;
 ALTER TABLE music_cycles ALTER COLUMN max_budget SET DEFAULT 10;

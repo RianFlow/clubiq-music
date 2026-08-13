@@ -96,6 +96,10 @@ class MpvController:
         self.resume_paused = True
         self.restored_at = ""
         self.last_checkpoint = 0.0
+        self.source_mode = "playlist"
+        self.radio_station: dict | None = None
+        self.radio_retry_count = 0
+        self.radio_last_load_at = 0.0
         self.load_state()
 
     def load_state(self) -> None:
@@ -110,6 +114,8 @@ class MpvController:
             self.connected_speaker = saved.get("connected_speaker", "")
             self.resume_position = max(0.0, float(saved.get("resume_position", 0) or 0))
             self.resume_paused = bool(saved.get("resume_paused", True))
+            self.source_mode = saved.get("source_mode", "playlist")
+            self.radio_station = saved.get("radio_station")
         except (OSError, ValueError, TypeError):
             pass
 
@@ -126,12 +132,17 @@ class MpvController:
             "connected_speaker": self.connected_speaker,
             "resume_position": round(self.resume_position, 1),
             "resume_paused": self.resume_paused,
+            "source_mode": self.source_mode,
+            "radio_station": self.radio_station,
         }, ensure_ascii=False), encoding="utf-8")
         temp.replace(STATE_FILE)
 
     def checkpoint_playback(self) -> None:
         """Persist enough state to resume after a reboot or Bluetooth outage."""
         if self.sound_active:
+            return
+        if self.source_mode == "radio":
+            self.save_state()
             return
         running = bool(self.process and self.process.poll() is None and MPV_SOCKET.exists())
         if running and not bool(self.property("idle-active", True)):
@@ -141,6 +152,9 @@ class MpvController:
 
     def restore_session(self) -> None:
         """Reconnect mpv to the saved track without losing queue or position."""
+        if self.source_mode == "radio" and self.radio_station:
+            self.play_radio(self.radio_station)
+            return
         if not (0 <= self.current_index < len(self.queue)):
             return
         self.ensure_mpv()
@@ -225,6 +239,8 @@ class MpvController:
             self.save_state()
             return
         self.current_index %= len(self.queue)
+        self.source_mode = "playlist"
+        self.radio_station = None
         item = self.queue[self.current_index]
         self.resume_position = 0.0
         self.resume_paused = not play
@@ -236,6 +252,8 @@ class MpvController:
 
     def set_queue(self, items: list[dict]) -> None:
         with self.lock:
+            self.source_mode = "playlist"
+            self.radio_station = None
             self.queue = items[:250]
             self.current_index = 0 if self.queue else -1
             self.save_state()
@@ -325,6 +343,8 @@ class MpvController:
         MPV_SOCKET.unlink(missing_ok=True)
 
     def advance_after_end(self) -> None:
+        if self.source_mode == "radio":
+            return
         if not self.queue or self.sound_active:
             return
         if self.repeat == "one":
@@ -352,6 +372,8 @@ class MpvController:
         saved_index = self.current_index
         saved_position = float(self.property("time-pos", 0) or 0)
         saved_paused = bool(self.property("pause", True))
+        saved_mode = self.source_mode
+        saved_station = dict(self.radio_station) if self.radio_station else None
 
         def worker() -> None:
             try:
@@ -365,7 +387,11 @@ class MpvController:
                     elif active_seen:
                         break
                     time.sleep(.15)
-                if 0 <= saved_index < len(self.queue):
+                if saved_mode == "radio" and saved_station:
+                    self.play_radio(saved_station)
+                    if saved_paused:
+                        self.command("set_property", "pause", True)
+                elif 0 <= saved_index < len(self.queue):
                     self.current_index = saved_index
                     self.load_current(play=not saved_paused)
                     if saved_position:
@@ -376,6 +402,57 @@ class MpvController:
                 self.sound_active = False
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def play_radio(self, station: dict) -> None:
+        stream_url = str(station.get("stream_url", ""))
+        if not stream_url.startswith(("http://", "https://")):
+            raise ValueError("Nicht erlaubte Radio-Adresse.")
+        if self.source_mode == "playlist":
+            self.checkpoint_playback()
+        self.ensure_mpv()
+        self.source_mode = "radio"
+        self.radio_station = {
+            "id": int(station["id"]),
+            "name": str(station["name"])[:120],
+            "stream_url": stream_url,
+            "fallback_url": str(station.get("fallback_url") or "")[:1000],
+            "logo_url": str(station.get("logo_url") or "")[:1000],
+            "genre": str(station.get("genre") or "")[:80],
+        }
+        self.command("loadfile", stream_url, "replace", start=False)
+        self.command("set_property", "pause", False, start=False)
+        self.resume_paused = False
+        self.track_was_active = False
+        self.radio_retry_count = 0
+        self.radio_last_load_at = time.monotonic()
+        self.last_error = ""
+        self.save_state()
+
+    def retry_radio(self) -> None:
+        if self.source_mode != "radio" or not self.radio_station:
+            return
+        fallback_url = str(self.radio_station.get("fallback_url") or "")
+        use_fallback = self.radio_retry_count >= 2 and fallback_url.startswith(("http://", "https://"))
+        stream_url = fallback_url if use_fallback else str(self.radio_station["stream_url"])
+        self.radio_retry_count += 1
+        self.radio_last_load_at = time.monotonic()
+        self.command("loadfile", stream_url, "replace", start=False)
+        self.command("set_property", "pause", False, start=False)
+        source = "Ersatz-Stream" if use_fallback else "Haupt-Stream"
+        self.last_error = f"Internetradio: {source} wird erneut verbunden."
+
+    def stop_radio(self) -> None:
+        if self.source_mode != "radio":
+            return
+        self.command("stop")
+        self.source_mode = "playlist"
+        self.radio_station = None
+        self.radio_retry_count = 0
+        self.radio_last_load_at = 0.0
+        self.resume_paused = True
+        self.save_state()
+        if 0 <= self.current_index < len(self.queue):
+            self.restore_session()
 
     def act(self, action: str, value=None) -> dict:
         with self.lock:
@@ -424,7 +501,7 @@ class MpvController:
         return self.state()
 
     def state(self) -> dict:
-        item = self.queue[self.current_index] if 0 <= self.current_index < len(self.queue) else None
+        playlist_item = self.queue[self.current_index] if 0 <= self.current_index < len(self.queue) else None
         running = bool(self.process and self.process.poll() is None and MPV_SOCKET.exists())
         idle = bool(self.property("idle-active", True)) if running else True
         paused = bool(self.property("pause", self.resume_paused)) if running else self.resume_paused
@@ -432,6 +509,16 @@ class MpvController:
         position = (self.property("time-pos", self.resume_position) or 0) if running else self.resume_position
         speaker = device_info(self.connected_speaker) if self.connected_speaker else None
         reported_volume = self.property("volume", None) if running else None
+        metadata = self.property("metadata", {}) if running and self.source_mode == "radio" else {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        radio_title = metadata.get("icy-title") or metadata.get("title") or self.property("media-title", "")
+        item = ({
+            "title": radio_title or self.radio_station.get("name", "Internetradio"),
+            "artist": self.radio_station.get("name", "Internetradio"),
+            "thumbnail": self.radio_station.get("logo_url", ""),
+            "source": "radio",
+        } if self.source_mode == "radio" and self.radio_station else playlist_item)
         return {
             "available": True,
             "running": running,
@@ -446,6 +533,8 @@ class MpvController:
             "queue": self.queue,
             "current_index": self.current_index,
             "current": item,
+            "source_mode": self.source_mode,
+            "radio_station": self.radio_station,
             "speaker": speaker,
             "sound_active": self.sound_active,
             "recovery_ready": bool(item and self.connected_speaker),
@@ -553,6 +642,12 @@ class Handler(BaseHTTPRequestHandler):
                     })
                 PLAYER.set_queue(safe)
                 return self.reply(200, PLAYER.state())
+            if self.path == "/radio":
+                PLAYER.play_radio(data.get("station", {}))
+                return self.reply(200, PLAYER.state())
+            if self.path == "/radio/stop":
+                PLAYER.stop_radio()
+                return self.reply(200, PLAYER.state())
             if self.path == "/queue/add":
                 item = data.get("item", {})
                 url = str(item.get("url", ""))
@@ -618,12 +713,22 @@ def playback_loop(stop: threading.Event) -> None:
         idle = bool(PLAYER.property("idle-active", True))
         if not idle:
             PLAYER.track_was_active = True
+            if PLAYER.source_mode == "radio":
+                PLAYER.radio_retry_count = 0
+                PLAYER.last_error = ""
             if time.monotonic() - PLAYER.last_checkpoint >= 5:
                 PLAYER.last_checkpoint = time.monotonic()
                 try:
                     PLAYER.checkpoint_playback()
                 except Exception as exc:
                     PLAYER.last_error = f"Player-Sicherung: {exc}"
+        elif PLAYER.source_mode == "radio" and time.monotonic() - PLAYER.radio_last_load_at >= 5:
+            try:
+                with PLAYER.lock:
+                    PLAYER.retry_radio()
+            except Exception as exc:
+                PLAYER.last_error = f"Internetradio: {exc}"
+                PLAYER.radio_last_load_at = time.monotonic()
         elif PLAYER.track_was_active:
             PLAYER.track_was_active = False
             try:

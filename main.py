@@ -11,6 +11,7 @@ import socket
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 import psycopg
 import requests
@@ -123,7 +124,7 @@ def require_member(authorization: str | None = Header(default=None)) -> dict:
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute(
             """
-            SELECT m.member_id, m.display_name
+            SELECT m.member_id, m.display_name, m.can_control_player
             FROM music_member_sessions s
             JOIN club_members m ON m.member_id = s.member_id
             WHERE s.token_hash = %s
@@ -135,7 +136,19 @@ def require_member(authorization: str | None = Header(default=None)) -> dict:
         row = cur.fetchone()
     if not row:
         raise HTTPException(status_code=401, detail="Anmeldung abgelaufen. Bitte erneut anmelden.")
-    return {"member_id": row[0], "display_name": row[1], "token_hash": token_hash(token)}
+    return {
+        "member_id": row[0], "display_name": row[1],
+        "can_control_player": bool(row[2]), "token_hash": token_hash(token),
+    }
+
+
+def require_player_operator(member: dict = Depends(require_member)) -> dict:
+    if not member["can_control_player"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Die Verwaltung muss dich zuerst für die Player-Bedienung freigeben.",
+        )
+    return member
 
 
 def optional_member(authorization: str | None = Header(default=None)) -> dict | None:
@@ -260,6 +273,7 @@ class MemberAdminCreate(BaseModel):
 class MemberAdminUpdate(BaseModel):
     pin: str | None = Field(default=None, pattern=r"^\d{4,8}$")
     active: bool | None = None
+    can_control_player: bool | None = None
 
 
 class SuggestionCreate(BaseModel):
@@ -301,6 +315,38 @@ class CycleUpdate(BaseModel):
 class PlayerCommand(BaseModel):
     action: str = Field(pattern=r"^(play|pause|next|previous|seek|volume|mute|shuffle|repeat)$")
     value: float | int | bool | str | None = None
+
+
+class RadioStationCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    stream_url: str = Field(min_length=8, max_length=1000)
+    fallback_url: str | None = Field(default=None, max_length=1000)
+    logo_url: str | None = Field(default=None, max_length=1000)
+    genre: str | None = Field(default=None, max_length=80)
+    active: bool = True
+    sort_order: int = Field(default=0, ge=-1000, le=1000)
+
+
+class RadioStationUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    stream_url: str | None = Field(default=None, min_length=8, max_length=1000)
+    fallback_url: str | None = Field(default=None, max_length=1000)
+    logo_url: str | None = Field(default=None, max_length=1000)
+    genre: str | None = Field(default=None, max_length=80)
+    active: bool | None = None
+    sort_order: int | None = Field(default=None, ge=-1000, le=1000)
+
+
+def validate_media_url(value: str | None, label: str, required: bool = False) -> str | None:
+    cleaned = value.strip() if value else ""
+    if not cleaned:
+        if required:
+            raise HTTPException(status_code=422, detail=f"{label} fehlt.")
+        return None
+    parsed = urlparse(cleaned)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise HTTPException(status_code=422, detail=f"{label} muss eine vollständige HTTP- oder HTTPS-Adresse sein.")
+    return cleaned
 
 
 class BluetoothDeviceAction(BaseModel):
@@ -369,7 +415,7 @@ def member_login(login: MemberLogin):
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute(
             """
-            SELECT member_id, display_name, pin_hash, active
+            SELECT member_id, display_name, pin_hash, active, can_control_player
             FROM club_members
             WHERE lower(display_name) = lower(%s)
             ORDER BY id
@@ -424,7 +470,10 @@ def member_login(login: MemberLogin):
         "status": "success",
         "token": token,
         "expires_at": expires_at,
-        "member": {"member_id": member_id, "display_name": display_name},
+        "member": {
+            "member_id": member_id, "display_name": display_name,
+            "can_control_player": bool(row[4]),
+        },
         "budget": {"remaining": max(0, maximum - used), "maximum": maximum},
         "active_cycle_id": cycle[0] if cycle else None,
         "pin_created": first_pin,
@@ -485,7 +534,10 @@ def member_register(registration: MemberRegister):
         "status": "success",
         "token": token,
         "expires_at": expires_at,
-        "member": {"member_id": member_id, "display_name": display_name},
+        "member": {
+            "member_id": member_id, "display_name": display_name,
+            "can_control_player": False,
+        },
         "budget": {"remaining": maximum, "maximum": maximum},
         "active_cycle_id": cycle[0] if cycle else None,
     }
@@ -517,7 +569,11 @@ def member_me(member: dict = Depends(require_member)):
             used = int(cur.fetchone()[0])
     maximum = int(cycle[2]) if cycle else DEFAULT_MAX_BUDGET
     return {
-        "member": {"member_id": member["member_id"], "display_name": member["display_name"]},
+        "member": {
+            "member_id": member["member_id"],
+            "display_name": member["display_name"],
+            "can_control_player": member["can_control_player"],
+        },
         "active_cycle_id": cycle[0] if cycle else None,
         "budget": {"remaining": max(0, maximum - used), "maximum": maximum},
     }
@@ -734,6 +790,56 @@ def get_player_state():
     return state
 
 
+def radio_station_dict(row) -> dict:
+    return {
+        "id": row[0], "name": row[1], "stream_url": row[2],
+        "fallback_url": row[3], "logo_url": row[4], "genre": row[5],
+        "active": row[6], "sort_order": row[7],
+    }
+
+
+@app.get("/api/v1/music/player/radio/stations")
+def list_radio_stations():
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """SELECT id, name, stream_url, fallback_url, logo_url, genre, active, sort_order
+               FROM music_radio_stations WHERE active = TRUE
+               ORDER BY sort_order, lower(name);"""
+        )
+        return {"stations": [radio_station_dict(row) for row in cur.fetchall()]}
+
+
+@app.post("/api/v1/music/player/radio/{station_id}/play")
+def play_radio_station(station_id: int, member: dict = Depends(require_player_operator)):
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """SELECT id, name, stream_url, fallback_url, logo_url, genre, active, sort_order
+               FROM music_radio_stations WHERE id = %s AND active = TRUE;""",
+            (station_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Radiosender nicht gefunden.")
+        station = radio_station_dict(row)
+        cur.execute(
+            "INSERT INTO music_player_audit (member_id, action, detail_json) VALUES (%s, 'radio_play', %s);",
+            (member["member_id"], json.dumps({"station_id": station_id, "name": station["name"]})),
+        )
+        conn.commit()
+    return player_agent("POST", "/radio", {"station": station})
+
+
+@app.post("/api/v1/music/player/radio/stop")
+def stop_radio(member: dict = Depends(require_player_operator)):
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO music_player_audit (member_id, action, detail_json) VALUES (%s, 'radio_stop', '{}');",
+            (member["member_id"],),
+        )
+        conn.commit()
+    return player_agent("POST", "/radio/stop", {})
+
+
 @app.get("/api/v1/music/activity")
 def activity_leaderboard(limit: int = Query(default=8, ge=1, le=25)):
     """Return a transparent, spam-resistant leaderboard for the current voting window."""
@@ -800,7 +906,7 @@ def activity_leaderboard(limit: int = Query(default=8, ge=1, le=25)):
 
 
 @app.post("/api/v1/music/player/queue/current")
-def use_current_ranking(member: dict = Depends(require_member)):
+def use_current_ranking(member: dict = Depends(require_player_operator)):
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute(
             """
@@ -917,7 +1023,7 @@ def use_current_ranking(member: dict = Depends(require_member)):
 
 
 @app.post("/api/v1/music/player/command")
-def control_player(command: PlayerCommand, member: dict = Depends(require_member)):
+def control_player(command: PlayerCommand, member: dict = Depends(require_player_operator)):
     allowed_values = {
         "seek": lambda value: isinstance(value, (int, float)) and 0 <= float(value) <= 86400,
         "volume": lambda value: isinstance(value, (int, float)) and 0 <= float(value) <= 100,
@@ -1051,7 +1157,7 @@ def soundboard_audio(item_id: int):
 
 
 @app.post("/api/v1/music/player/soundboard/{item_id}/play")
-def play_soundboard(item_id: int, member: dict = Depends(require_member)):
+def play_soundboard(item_id: int, member: dict = Depends(require_player_operator)):
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute("SELECT id FROM music_soundboard_items WHERE id = %s AND active = TRUE;", (item_id,))
         if not cur.fetchone():
@@ -1215,7 +1321,8 @@ def admin_members():
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute(
             """
-            SELECT member_id, display_name, active, pin_hash IS NOT NULL, created_at
+            SELECT member_id, display_name, active, pin_hash IS NOT NULL, created_at,
+                   can_control_player
             FROM club_members
             ORDER BY active DESC, lower(display_name);
             """
@@ -1228,6 +1335,7 @@ def admin_members():
                     "active": row[2],
                     "pin_ready": row[3],
                     "created_at": row[4],
+                    "can_control_player": bool(row[5]),
                 }
                 for row in cur.fetchall()
             ]
@@ -1266,10 +1374,11 @@ def update_member(member_id: str, update: MemberAdminUpdate):
             """
             UPDATE club_members
             SET pin_hash = COALESCE(%s, pin_hash),
-                active = COALESCE(%s, active)
+                active = COALESCE(%s, active),
+                can_control_player = COALESCE(%s, can_control_player)
             WHERE member_id = %s;
             """,
-            (pin_hash, update.active, member_id),
+            (pin_hash, update.active, update.can_control_player, member_id),
         )
         if cur.rowcount != 1:
             raise HTTPException(status_code=404, detail="Mitglied nicht gefunden.")
@@ -1277,6 +1386,87 @@ def update_member(member_id: str, update: MemberAdminUpdate):
             cur.execute("DELETE FROM music_member_sessions WHERE member_id = %s;", (member_id,))
         conn.commit()
     return {"status": "success"}
+
+
+@app.get("/api/v1/music/admin/radio/stations", dependencies=[Depends(require_admin)])
+def admin_radio_stations():
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """SELECT id, name, stream_url, fallback_url, logo_url, genre, active, sort_order
+               FROM music_radio_stations ORDER BY sort_order, lower(name);"""
+        )
+        return {"stations": [radio_station_dict(row) for row in cur.fetchall()]}
+
+
+@app.post("/api/v1/music/admin/radio/stations", dependencies=[Depends(require_admin)], status_code=201)
+def create_radio_station(station: RadioStationCreate):
+    stream_url = validate_media_url(station.stream_url, "Stream-Adresse", True)
+    fallback_url = validate_media_url(station.fallback_url, "Ersatz-Stream")
+    logo_url = validate_media_url(station.logo_url, "Logo-Adresse")
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO music_radio_stations
+               (name, stream_url, fallback_url, logo_url, genre, active, sort_order)
+               VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id;""",
+            (station.name.strip(), stream_url, fallback_url, logo_url,
+             station.genre.strip() if station.genre else None, station.active, station.sort_order),
+        )
+        station_id = cur.fetchone()[0]
+        conn.commit()
+    return {"status": "success", "id": station_id}
+
+
+@app.patch("/api/v1/music/admin/radio/stations/{station_id}", dependencies=[Depends(require_admin)])
+def update_radio_station(station_id: int, update: RadioStationUpdate):
+    fields = update.model_dump(exclude_unset=True)
+    if not fields:
+        return {"status": "success"}
+    if "stream_url" in fields:
+        fields["stream_url"] = validate_media_url(fields["stream_url"], "Stream-Adresse", True)
+    for field, label in (("fallback_url", "Ersatz-Stream"), ("logo_url", "Logo-Adresse")):
+        if field in fields:
+            fields[field] = validate_media_url(fields[field], label)
+    allowed = {"name", "stream_url", "fallback_url", "logo_url", "genre", "active", "sort_order"}
+    assignments = [f"{field} = %s" for field in fields if field in allowed]
+    values = [fields[field] for field in fields if field in allowed]
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            f"UPDATE music_radio_stations SET {', '.join(assignments)}, updated_at = CURRENT_TIMESTAMP WHERE id = %s;",
+            (*values, station_id),
+        )
+        if cur.rowcount != 1:
+            raise HTTPException(status_code=404, detail="Radiosender nicht gefunden.")
+        conn.commit()
+    return {"status": "success"}
+
+
+@app.delete("/api/v1/music/admin/radio/stations/{station_id}", dependencies=[Depends(require_admin)])
+def delete_radio_station(station_id: int):
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM music_radio_stations WHERE id = %s;", (station_id,))
+        if cur.rowcount != 1:
+            raise HTTPException(status_code=404, detail="Radiosender nicht gefunden.")
+        conn.commit()
+    return {"status": "success"}
+
+
+@app.post("/api/v1/music/admin/radio/stations/{station_id}/play", dependencies=[Depends(require_admin)])
+def admin_play_radio_station(station_id: int):
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """SELECT id, name, stream_url, fallback_url, logo_url, genre, active, sort_order
+               FROM music_radio_stations WHERE id = %s AND active = TRUE;""",
+            (station_id,),
+        )
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Radiosender nicht gefunden.")
+    return player_agent("POST", "/radio", {"station": radio_station_dict(row)})
+
+
+@app.post("/api/v1/music/admin/radio/stop", dependencies=[Depends(require_admin)])
+def admin_stop_radio():
+    return player_agent("POST", "/radio/stop", {})
 
 
 @app.post("/api/v1/music/admin/cycles", dependencies=[Depends(require_admin)])
