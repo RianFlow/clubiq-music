@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#163c36">
   <title>ClubIQ Music</title>
   <link rel="icon" href="/pics/logo.png">
-  <link rel="stylesheet" href="/static/app.css?v=20260813-2">
-  <script defer src="/static/app.js?v=20260813-2"></script>
+  <link rel="stylesheet" href="/static/app.css?v=20260813-3">
+  <script defer src="/static/app.js?v=20260813-3"></script>
 </head>
 <body>
   <header class="topbar">
@@ -56,8 +56,9 @@
     </nav>
 
     <section id="tab-voting" class="tab-panel active">
-      <div class="section-head">
+      <div class="section-head branded-heading">
         <div><p class="eyebrow">Rangliste</p><h2>Eure Favoriten</h2></div>
+        <img class="section-brand-mark" src="/pics/clubiq-symbol-gold.png" alt="" aria-hidden="true">
         <div class="list-actions"><span id="playlistSummary" class="muted"></span><button id="refreshPlaylist" class="button ghost small" type="button">Aktualisieren</button></div>
       </div>
       <div id="playlist" class="song-list" aria-live="polite"></div>
@@ -72,8 +73,9 @@
     </section>
 
     <section id="tab-player" class="tab-panel">
-      <div class="section-head">
+      <div class="section-head branded-heading">
         <div><p class="eyebrow">Zentrale Wiedergabe</p><h2>ClubIQ Player</h2></div>
+        <img class="section-brand-mark" src="/pics/clubiq-symbol-gold.png" alt="" aria-hidden="true">
         <span id="speakerBadge" class="speaker-badge offline">Keine Box verbunden</span>
       </div>
       <p class="muted player-network-hint">YouTube-Songs benötigen Internet. Soundboard-Clips laufen lokal vom Raspberry.</p>
@@ -204,7 +206,7 @@
             <label>Voting startet<input id="cycleStartsAt" type="datetime-local" required></label>
             <label>Voting endet<input id="cycleClosesAt" type="datetime-local" required></label>
             <label>Punkte je Mitglied<input id="cycleBudget" type="number" min="1" max="100" value="10" required></label>
-            <label>Playlist-Größe<input id="cyclePlaylistTarget" type="number" min="1" max="50" value="20" required></label>
+            <label>Playlist-Länge (Songs)<input id="cyclePlaylistTarget" type="number" min="1" max="50" value="20" required><small>Anzahl der Titel, nicht Minuten.</small></label>
             <label>Auffüll-Genre<input id="cycleFallbackGenre" maxlength="80" value="Party"></label>
             <label class="check-control"><input id="cycleReusePrevious" type="checkbox" checked><span>Vorherige Playlist verwenden</span></label>
             <label class="check-control"><input id="cycleUseGenre" type="checkbox" checked><span>Mit Genre-Hits auffüllen</span></label>
@@ -262,6 +264,12 @@
       </div>
     </div>
   </dialog>
+
+  <footer class="site-footer">
+    <img src="/pics/clubiq-symbol-gold.png" alt="" aria-hidden="true">
+    <div><strong>ClubIQ Music</strong><span>Gemeinsam die Playlist bestimmen.</span></div>
+    <span class="footer-club">für SV Barver Darts</span>
+  </footer>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>

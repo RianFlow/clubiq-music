@@ -19,7 +19,14 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html { min-height: 100%; background: var(--paper); }
-body { min-height: 100vh; margin: 0; background: radial-gradient(circle at 90% 0, #e8eee7 0, transparent 30rem), var(--paper); }
+body { position: relative; min-height: 100vh; margin: 0; background: radial-gradient(circle at 90% 0, #e8eee7 0, transparent 30rem), var(--paper); }
+body::before {
+  content: ""; position: fixed; z-index: 0; right: clamp(-100px, -5vw, -35px); bottom: clamp(-55px, -3vw, -20px);
+  width: min(52vw, 620px); aspect-ratio: 1.25; pointer-events: none;
+  background: url('/pics/sv-barver-darts.png') center / contain no-repeat;
+  opacity: .035; filter: grayscale(1); transform: rotate(-7deg);
+}
+.topbar, .shell, .site-footer { position: relative; }
 button, input, select { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .48; }
@@ -80,6 +87,9 @@ h3 { margin: 0; font-size: 1.05rem; }
 .tab-panel.active, .admin-panel.active { display: block; }
 .tab-panel { min-height: 320px; padding-top: 28px; }
 .section-head { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.branded-heading { justify-content: flex-start; }
+.branded-heading .list-actions, .branded-heading .speaker-badge { margin-left: auto; }
+.section-brand-mark { width: 35px; height: 35px; margin: 0 0 2px 2px; object-fit: contain; opacity: .7; }
 .list-actions { display: flex; align-items: center; gap: 12px; }
 
 .song-list { display: grid; gap: 10px; }
@@ -131,6 +141,7 @@ input:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px rgba(36,92,81,
 .subtab { min-height: 40px; padding: 8px 13px; }
 .form-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: end; }
 .form-grid h3 { grid-column: 1 / -1; }
+.form-grid label > small { color: var(--muted); font-size: .72rem; font-weight: 500; line-height: 1.25; }
 .form-grid > .button { min-height: 46px; }
 .check-control { display: flex; align-items: center; gap: 9px; min-height: 46px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: white; font-weight: 700; }
 .check-control input { width: 19px; min-height: 19px; margin: 0; accent-color: var(--green); }
@@ -215,6 +226,16 @@ input:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px rgba(36,92,81,
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .toast.error { background: var(--danger); }
 
+.site-footer {
+  z-index: 1; width: min(1040px, calc(100% - 32px)); margin: -40px auto 24px; padding: 14px 0 4px;
+  display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--line); color: var(--muted);
+}
+.site-footer img { width: 32px; height: 32px; opacity: .72; }
+.site-footer div { display: grid; }
+.site-footer strong { color: var(--ink); font-size: .86rem; }
+.site-footer span { font-size: .75rem; }
+.site-footer .footer-club { margin-left: auto; color: var(--green); font-weight: 750; }
+
 @media (max-width: 720px) {
   .topbar { align-items: flex-start; }
   .brand-copy small, .status-pill, .club-signature small { display: none; }
@@ -230,6 +251,7 @@ input:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px rgba(36,92,81,
   .tabs { top: 71px; overflow-x: auto; }
   .tab { white-space: nowrap; flex: 1; padding-inline: 12px; }
   .section-head { align-items: flex-start; }
+  .section-brand-mark { width: 29px; height: 29px; }
   .list-actions { align-items: flex-end; flex-direction: column; }
   .song-card { grid-template-columns: 92px minmax(0, 1fr); gap: 12px; }
   .song-visual, .song-cover { width: 92px; height: 54px; }
@@ -257,4 +279,6 @@ input:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px rgba(36,92,81,
   .dj-result, .dj-queue-row { grid-template-columns: 54px minmax(0, 1fr); }
   .dj-result img { width: 54px; height: 36px; }
   .dj-result .row-actions, .dj-queue-row .row-actions { grid-column: 2; justify-content: start; }
+  body::before { width: min(90vw, 520px); right: -25vw; opacity: .028; }
+  .site-footer { width: min(100% - 22px, 1040px); margin-top: -42px; }
 }

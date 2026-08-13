@@ -800,7 +800,7 @@ async function loadAdminCycles() {
   root.innerHTML = state.cycles.map(cycle => `
     <div class="cycle-admin-card">
       <div class="admin-row">
-        <div><strong>${esc(cycle.name)}</strong><span>${cyclePhase(cycle) === "active" ? "Aktiv" : cyclePhase(cycle) === "closed" ? "Beendet" : "Geplant"} · ${formatDate(cycle.starts_at)} bis ${formatDate(cycle.closes_at)} · ${cycle.max_budget} Punkte</span><span>Playlist: ${cycle.playlist_target_count} Songs · vorherige Liste ${cycle.reuse_previous_playlist ? "an" : "aus"} · ${cycle.genre_fallback_enabled ? `mit ${esc(cycle.fallback_genre)} auffüllen` : "Genre-Auffüllung aus"}</span></div>
+        <div><strong>${esc(cycle.name)}</strong><span>${cyclePhase(cycle) === "active" ? "Aktiv" : cyclePhase(cycle) === "closed" ? "Beendet" : "Geplant"} · ${formatDate(cycle.starts_at)} bis ${formatDate(cycle.closes_at)} · ${cycle.max_budget} Punkte</span><span>Playlist-Länge: ${cycle.playlist_target_count} Songs · vorherige Liste ${cycle.reuse_previous_playlist ? "an" : "aus"} · ${cycle.genre_fallback_enabled ? `mit ${esc(cycle.fallback_genre)} auffüllen` : "Genre-Auffüllung aus"}</span></div>
         <div class="row-actions">
           ${cyclePhase(cycle) === "planned" && !state.activeCycle ? `<button class="button ghost small" data-cycle-action="active" data-cycle-id="${cycle.id}">Jetzt starten</button>` : ""}
           ${cycle.status === "active" ? `<button class="button ghost small" data-cycle-action="closed" data-cycle-id="${cycle.id}">Beenden</button>` : ""}
@@ -809,7 +809,7 @@ async function loadAdminCycles() {
       <details class="cycle-settings">
         <summary>Playlist-Regeln bearbeiten</summary>
         <form class="cycle-rule-form" data-cycle-settings="${cycle.id}">
-          <label>Zielgröße<input name="playlist_target_count" type="number" min="1" max="50" value="${cycle.playlist_target_count}" required></label>
+          <label>Länge (Songs)<input name="playlist_target_count" type="number" min="1" max="50" value="${cycle.playlist_target_count}" required></label>
           <label>Auffüll-Genre<input name="fallback_genre" maxlength="80" value="${esc(cycle.fallback_genre || "Party")}"></label>
           <label class="check-control"><input name="reuse_previous_playlist" type="checkbox" ${cycle.reuse_previous_playlist ? "checked" : ""}><span>Vorherige Playlist nutzen</span></label>
           <label class="check-control"><input name="genre_fallback_enabled" type="checkbox" ${cycle.genre_fallback_enabled ? "checked" : ""}><span>Mit Genre-Hits auffüllen</span></label>
