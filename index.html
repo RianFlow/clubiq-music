@@ -55,24 +55,18 @@
         
         <div id="mod-section" class="hidden mt-6 glass p-6 rounded-2xl border border-emerald-500/30 space-y-6">
             <h2 class="text-2xl font-bold text-emerald-400 border-b border-emerald-500/20 pb-4">DJ & Moderator Pult</h2>
-            
-            <div class="grid md:grid-cols-2 gap-6">
-                <div class="bg-gray-900 p-4 rounded-xl border border-gray-800 space-y-4">
-                    <h3 class="font-bold text-gray-300">Player Steuerung</h3>
-                    <div class="flex gap-2">
-                        <button onclick="playerCommand('play')" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2 rounded font-bold">Play</button>
-                        <button onclick="playerCommand('skip')" class="flex-1 bg-amber-600 hover:bg-amber-500 py-2 rounded font-bold">Skip</button>
-                        <button onclick="playerCommand('stop')" class="flex-1 bg-red-600 hover:bg-red-500 py-2 rounded font-bold">Stop</button>
-                    </div>
+            <div id="mod-locked" class="bg-gray-900 p-4 rounded-xl border border-gray-800 space-y-3">
+                <p class="text-sm text-gray-400">Das Moderator-Pult ist geschützt. Verwende das Verwaltungskennwort.</p>
+                <div class="flex gap-2">
+                    <input type="password" id="mod-pass" placeholder="Verwaltungskennwort" class="flex-1 bg-black border border-gray-700 rounded-xl p-2.5 text-white text-sm">
+                    <button onclick="unlockModerator()" class="bg-emerald-600 hover:bg-emerald-500 px-4 rounded-xl font-bold text-sm">Entsperren</button>
                 </div>
+            </div>
 
-                <div class="bg-gray-900 p-4 rounded-xl border border-gray-800 space-y-4">
-                    <h3 class="font-bold text-gray-300">Bluetooth Box</h3>
-                    <button onclick="loadBluetooth()" class="w-auto bg-blue-600 hover:bg-blue-500 px-4 py-1.5 text-xs rounded font-bold">Geräte scannen</button>
-                    <div id="bluetooth-list" class="text-xs space-y-2 mt-2 max-h-32 overflow-y-auto">
-                        <p class="text-gray-500">Klicke auf Scannen, um gekoppelte Boxen zu finden.</p>
-                    </div>
-                </div>
+            <div id="mod-content" class="hidden space-y-6">
+            <div class="bg-gray-900 p-4 rounded-xl border border-gray-800">
+                <h3 class="font-bold text-gray-300">Wiedergabe</h3>
+                <p class="mt-2 text-sm text-gray-500">Die Musik wird auf einem getrennt eingerichteten Abspielgerät wiedergegeben. Diese Voting-App steuert keine Bluetooth-Geräte des Raspberry.</p>
             </div>
 
             <div class="bg-gray-900 p-4 rounded-xl border border-gray-800 space-y-4">
@@ -109,6 +103,7 @@
                 </div>
                 <div id="mod-playlist-container" class="space-y-2 max-h-60 overflow-y-auto"></div>
             </div>
+            </div>
         </div>
 
         <div id="admin-section" class="hidden mt-6 glass p-6 rounded-2xl border border-red-900/30">
@@ -139,18 +134,48 @@
                     <div id="admin-logs-list" class="text-xs font-mono bg-black p-4 rounded max-h-60 overflow-y-auto space-y-1"></div>
                 </div>
 
-                <div class="mt-8 pt-4 border-t border-gray-800">
-                    <h3 class="font-bold text-gray-300 mb-2">System & Updates</h3>
-                    <button onclick="triggerUpdate()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-xs font-bold">Von GitHub aktualisieren</button>
-                    <div id="update-status" class="mt-2 text-xs text-gray-400"></div>
-                </div>
             </div>
         </div>
     </div>
 
     <script>
         const API_URL = "/api/v1/music";
-        const CYCLE_ID = 1;
+        let activeCycleId = null;
+
+        function adminHeaders(extra = {}) {
+            return {
+                ...extra,
+                "X-Admin-Password": document.getElementById("admin-pass").value
+            };
+        }
+
+        function moderatorHeaders(extra = {}) {
+            return {
+                ...extra,
+                "X-Admin-Password": document.getElementById("mod-pass").value
+            };
+        }
+
+        function errorMessage(data, fallback = "Die Aktion ist fehlgeschlagen.") {
+            return data?.detail || data?.error || fallback;
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? "").replace(/[&<>'"]/g, char => ({
+                "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"
+            })[char]);
+        }
+
+        function encodedArgument(value) {
+            return encodeURIComponent(String(value ?? "")).replace(/'/g, "%27");
+        }
+
+        async function refreshActiveCycle() {
+            const response = await fetch(`${API_URL}/cycles`);
+            const data = await response.json();
+            activeCycleId = data.cycles?.find(cycle => cycle.status === "active")?.id || null;
+            return activeCycleId;
+        }
 
         window.onload = () => {
             if (localStorage.getItem("club_member_id")) showDashboard();
@@ -176,8 +201,9 @@
                 localStorage.setItem("club_member_id", data.member.member_id);
                 localStorage.setItem("club_member_name", data.member.display_name);
                 document.getElementById("remaining-budget").innerText = data.budget.remaining;
+                activeCycleId = data.active_cycle_id;
                 showDashboard();
-            }
+            } else alert(errorMessage(data, "Anmeldung fehlgeschlagen."));
         }
 
         function logout() {
@@ -186,9 +212,16 @@
         }
 
         async function loadPlaylist() {
-            const res = await fetch(`${API_URL}/cycles/${CYCLE_ID}/playlist`);
-            const data = await res.json();
+            if (!activeCycleId) {
+                await refreshActiveCycle();
+            }
             const container = document.getElementById("playlist-container");
+            if (!activeCycleId) {
+                container.innerHTML = '<p class="text-gray-500 text-center py-4">Aktuell ist kein Voting geöffnet.</p>';
+                return;
+            }
+            const res = await fetch(`${API_URL}/cycles/${activeCycleId}/playlist`);
+            const data = await res.json();
             if (!data.playlist || data.playlist.length === 0) {
                 container.innerHTML = '<p class="text-gray-500 text-center py-4">Noch keine Songs vorhanden. Schlage jetzt einen vor!</p>';
                 return;
@@ -197,8 +230,8 @@
                 <div class="glass p-4 rounded-xl flex items-center justify-between border border-gray-800">
                     <div>
                         <span class="text-xl font-black text-indigo-500">#${s.rank}</span>
-                        <span class="ml-3 font-semibold">${s.title}</span>
-                        <p class="text-xs text-gray-500 ml-9">${s.channel_title || ''}</p>
+                        <span class="ml-3 font-semibold">${escapeHtml(s.title)}</span>
+                        <p class="text-xs text-gray-500 ml-9">${escapeHtml(s.channel_title)}</p>
                     </div>
                     <div class="flex items-center gap-4">
                         <span class="text-emerald-400 font-bold">${s.total_points} Pkt</span>
@@ -213,12 +246,12 @@
 
         async function vote(id) {
             const pts = document.getElementById(`pts-${id}`).value;
-            const res = await fetch(`${API_URL}/cycles/${CYCLE_ID}/votes`, {
+            const res = await fetch(`${API_URL}/cycles/${activeCycleId}/votes`, {
                 method: "POST", headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({ member_id: localStorage.getItem("club_member_id"), suggestion_id: id, points: parseInt(pts) })
             });
             const data = await res.json();
-            if(data.error) alert(data.error);
+            if(!res.ok) alert(errorMessage(data));
             else {
                 document.getElementById("remaining-budget").innerText = data.budget_remaining;
                 loadPlaylist();
@@ -233,24 +266,24 @@
             const data = await res.json();
             const container = document.getElementById("search-results");
             
-            if(data.error) {
-                container.innerHTML = `<p class="text-red-400 text-sm">${data.error}</p>`;
+            if(!res.ok) {
+                container.textContent = errorMessage(data);
                 return;
             }
 
             container.innerHTML = data.results.map(r => `
                 <div class="bg-gray-900 p-3 rounded-xl flex items-center justify-between border border-gray-800">
                     <div>
-                        <p class="font-semibold text-sm text-white">${r.title}</p>
-                        <p class="text-xs text-gray-400">${r.channel_title}</p>
+                        <p class="font-semibold text-sm text-white">${escapeHtml(r.title)}</p>
+                        <p class="text-xs text-gray-400">${escapeHtml(r.channel_title)}</p>
                     </div>
-                    <button onclick="suggestTrack('${r.external_id}', '${r.title.replace(/'/g, "\\'")}', '${r.channel_title ? r.channel_title.replace(/'/g, "\\'") : ''}', ${r.duration_ms})" class="bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded-lg text-xs font-bold text-white">Vorschlagen</button>
+                    <button onclick="suggestTrack(decodeURIComponent('${encodedArgument(r.external_id)}'), decodeURIComponent('${encodedArgument(r.title)}'), decodeURIComponent('${encodedArgument(r.channel_title)}'), ${Number(r.duration_ms) || 0})" class="bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded-lg text-xs font-bold text-white">Vorschlagen</button>
                 </div>
             `).join('');
         }
 
         async function suggestTrack(externalId, title, channelTitle, durationMs) {
-            const res = await fetch(`${API_URL}/cycles/${CYCLE_ID}/suggestions`, {
+            const res = await fetch(`${API_URL}/cycles/${activeCycleId}/suggestions`, {
                 method: "POST", headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({
                     member_id: localStorage.getItem("club_member_id"),
@@ -262,7 +295,7 @@
                 })
             });
             const data = await res.json();
-            if(data.error) alert(data.error);
+            if(!res.ok) alert(errorMessage(data));
             else {
                 alert("Song erfolgreich vorgeschlagen!");
                 document.getElementById("search-results").innerHTML = "";
@@ -295,46 +328,20 @@
             }
         }
 
-        function toggleMod() { 
+        function toggleMod() {
             const modSec = document.getElementById("mod-section");
             modSec.classList.toggle("hidden");
-            if(!modSec.classList.contains("hidden")) {
-                loadModPlaylist();
+        }
+
+        async function unlockModerator() {
+            const verification = await fetch(`${API_URL}/admin/verify`, {headers: moderatorHeaders()});
+            if (!verification.ok) return alert("Verwaltungskennwort falsch.");
+            if (!activeCycleId && !(await refreshActiveCycle())) {
+                return alert("Aktuell ist kein Voting geöffnet.");
             }
-        }
-
-        async function playerCommand(action) {
-            const res = await fetch(`${API_URL}/mod/player`, {
-                method: "POST", headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({ action: action })
-            });
-            const data = await res.json();
-            alert(`Player Befehl ausgeführt: ${data.executed_action}`);
-        }
-
-        async function loadBluetooth() {
-            const res = await fetch(`${API_URL}/mod/bluetooth/devices`);
-            const data = await res.json();
-            const container = document.getElementById("bluetooth-list");
-            if(data.devices) {
-                container.innerHTML = data.devices.map(d => `
-                    <div class="flex justify-between items-center bg-black p-2 rounded">
-                        <span>${d.name} (${d.mac})</span>
-                        <button onclick="connectBluetooth('${d.mac}')" class="bg-blue-600 px-2 py-1 rounded text-xs">Verbinden</button>
-                    </div>
-                `).join('');
-            } else {
-                container.innerHTML = `<pre class="text-gray-300 whitespace-pre-wrap">${data.output || "Keine Geräte gefunden"}</pre>`;
-            }
-        }
-
-        async function connectBluetooth(mac) {
-            const res = await fetch(`${API_URL}/mod/bluetooth/connect`, {
-                method: "POST", headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({ mac_address: mac })
-            });
-            const data = await res.json();
-            alert(data.message || data.error);
+            document.getElementById("mod-locked").classList.add("hidden");
+            document.getElementById("mod-content").classList.remove("hidden");
+            loadModPlaylist();
         }
 
         async function modSearchTracks() {
@@ -345,25 +352,25 @@
             const data = await res.json();
             const container = document.getElementById("mod-search-results");
             
-            if(data.error) {
-                container.innerHTML = `<p class="text-red-400 text-xs">${data.error}</p>`;
+            if(!res.ok) {
+                container.textContent = errorMessage(data);
                 return;
             }
 
             container.innerHTML = data.results.map(r => `
                 <div class="bg-black p-2 rounded flex justify-between items-center border border-gray-800">
                     <div>
-                        <p class="text-xs font-semibold text-white">${r.title}</p>
-                        <p class="text-[10px] text-gray-400">${r.channel_title}</p>
+                        <p class="text-xs font-semibold text-white">${escapeHtml(r.title)}</p>
+                        <p class="text-[10px] text-gray-400">${escapeHtml(r.channel_title)}</p>
                     </div>
-                    <button onclick="modSuggestTrack('${r.external_id}', '${r.title.replace(/'/g, "\\'")}', '${r.channel_title ? r.channel_title.replace(/'/g, "\\'") : ''}', ${r.duration_ms})" class="bg-emerald-600 hover:bg-emerald-500 px-2.5 py-1 rounded text-[10px] font-bold text-white">Hinzufügen</button>
+                    <button onclick="modSuggestTrack(decodeURIComponent('${encodedArgument(r.external_id)}'), decodeURIComponent('${encodedArgument(r.title)}'), decodeURIComponent('${encodedArgument(r.channel_title)}'), ${Number(r.duration_ms) || 0})" class="bg-emerald-600 hover:bg-emerald-500 px-2.5 py-1 rounded text-[10px] font-bold text-white">Hinzufügen</button>
                 </div>
             `).join('');
         }
 
         async function modSuggestTrack(externalId, title, channelTitle, durationMs) {
-            const res = await fetch(`${API_URL}/cycles/${CYCLE_ID}/suggestions`, {
-                method: "POST", headers: {"Content-Type": "application/json"},
+            const res = await fetch(`${API_URL}/admin/cycles/${activeCycleId}/suggestions`, {
+                method: "POST", headers: moderatorHeaders({"Content-Type": "application/json"}),
                 body: JSON.stringify({
                     member_id: "mod_dj",
                     provider: "youtube",
@@ -374,7 +381,7 @@
                 })
             });
             const data = await res.json();
-            if(data.error) alert(data.error);
+            if(!res.ok) alert(errorMessage(data));
             else {
                 alert("Song direkt eingereiht!");
                 document.getElementById("mod-search-results").innerHTML = "";
@@ -385,7 +392,7 @@
         }
 
         async function loadModPlaylist() {
-            const res = await fetch(`${API_URL}/cycles/${CYCLE_ID}/playlist`);
+            const res = await fetch(`${API_URL}/cycles/${activeCycleId}/playlist`);
             const data = await res.json();
             const container = document.getElementById("mod-playlist-container");
             if (!data.playlist || data.playlist.length === 0) {
@@ -396,7 +403,7 @@
                 <div class="bg-black p-2.5 rounded flex items-center justify-between border border-gray-800 text-xs">
                     <div>
                         <span class="font-bold text-indigo-400">#${s.rank}</span>
-                        <span class="ml-2 text-white font-medium">${s.title}</span>
+                        <span class="ml-2 text-white font-medium">${escapeHtml(s.title)}</span>
                     </div>
                     <div class="flex items-center gap-3">
                         <span class="text-emerald-400 font-bold">${s.total_points} Pkt</span>
@@ -408,7 +415,9 @@
 
         async function modDeleteSong(id) {
             if(!confirm("Song aus Playlist entfernen?")) return;
-            await fetch(`${API_URL}/admin/suggestions/${id}`, {method: 'DELETE'});
+            await fetch(`${API_URL}/admin/suggestions/${id}`, {
+                method: 'DELETE', headers: moderatorHeaders()
+            });
             loadModPlaylist();
             loadPlaylist();
         }
@@ -421,15 +430,18 @@
         }
         
         async function loadAdminCycles() {
-            if(document.getElementById("admin-pass").value !== "admin123") return alert("Falsches Passwort");
+            const verification = await fetch(`${API_URL}/admin/verify`, {headers: adminHeaders()});
+            if (!verification.ok) {
+                return alert("Verwaltungskennwort falsch oder serverseitig noch nicht eingerichtet.");
+            }
             document.getElementById("admin-content-area").classList.remove("hidden");
-            
             const res = await fetch(`${API_URL}/cycles`);
             const data = await res.json();
+            activeCycleId = data.cycles?.find(cycle => cycle.status === "active")?.id || null;
             const container = document.getElementById("admin-cycles-list");
             container.innerHTML = data.cycles.map(c => `
                 <div class="bg-gray-900 p-3 rounded flex justify-between items-center border border-gray-800">
-                    <span>${c.name} (Status: <strong>${c.status}</strong>)</span>
+                    <span>${escapeHtml(c.name)} (Status: <strong>${escapeHtml(c.status)}</strong>)</span>
                     <div>
                         ${c.status === 'active' ? `<button onclick="closeCycle(${c.id})" class="bg-red-600 hover:bg-red-500 px-3 py-1 text-xs rounded font-bold">Schließen</button>` : '<span class="text-xs text-gray-500">Geschlossen</span>'}
                     </div>
@@ -441,23 +453,30 @@
         }
 
         async function closeCycle(id) {
-            await fetch(`${API_URL}/admin/cycles/${id}`, {
-                method: "PATCH", headers: {"Content-Type": "application/json"},
+            const response = await fetch(`${API_URL}/admin/cycles/${id}`, {
+                method: "PATCH", headers: adminHeaders({"Content-Type": "application/json"}),
                 body: JSON.stringify({ status: "closed" })
             });
+            if (!response.ok) return alert("Voting konnte nicht geschlossen werden.");
+            if (activeCycleId === id) activeCycleId = null;
             loadAdminCycles();
         }
 
         async function createCycle() {
             const name = document.getElementById('new-cycle-name').value.trim();
             if(!name) return alert("Bitte Namen eingeben");
-            await fetch(`${API_URL}/admin/cycles?name=${encodeURIComponent(name)}`, {method: 'POST'});
+            const response = await fetch(`${API_URL}/admin/cycles?name=${encodeURIComponent(name)}`, {
+                method: 'POST', headers: adminHeaders()
+            });
+            const data = await response.json();
+            if (!response.ok) return alert(errorMessage(data));
+            activeCycleId = data.cycle_id;
             document.getElementById('new-cycle-name').value = '';
             loadAdminCycles();
         }
 
         async function loadAdminSongs() {
-            const res = await fetch(`${API_URL}/cycles/${CYCLE_ID}/suggestions`);
+            const res = await fetch(`${API_URL}/cycles/${activeCycleId}/suggestions`, {headers: adminHeaders()});
             const data = await res.json();
             const container = document.getElementById('admin-songs-list');
             if(!data.suggestions || data.suggestions.length === 0) {
@@ -467,8 +486,8 @@
             container.innerHTML = data.suggestions.map(s => `
                 <div class="flex justify-between items-center bg-gray-900 p-3 rounded border border-gray-800">
                     <div>
-                        <span class="font-semibold text-white">${s.title}</span>
-                        <p class="text-xs text-gray-500">Vorgeschlagen von: ${s.member_id} | ${s.total_points} Pkt</p>
+                        <span class="font-semibold text-white">${escapeHtml(s.title)}</span>
+                        <p class="text-xs text-gray-500">Vorgeschlagen von: ${escapeHtml(s.member_id)} | ${Number(s.total_points) || 0} Pkt</p>
                     </div>
                     <button onclick="deleteSong(${s.suggestion_id})" class="bg-red-900/40 hover:bg-red-900 text-red-300 px-3 py-1 text-xs rounded border border-red-500/30">Löschen</button>
                 </div>
@@ -477,13 +496,15 @@
 
         async function deleteSong(id) {
             if(!confirm("Wirklich löschen?")) return;
-            await fetch(`${API_URL}/admin/suggestions/${id}`, {method: 'DELETE'});
+            await fetch(`${API_URL}/admin/suggestions/${id}`, {
+                method: 'DELETE', headers: adminHeaders()
+            });
             loadAdminSongs();
             loadPlaylist();
         }
 
         async function loadLogs() {
-            const res = await fetch(`${API_URL}/admin/all-votes`);
+            const res = await fetch(`${API_URL}/admin/all-votes`, {headers: adminHeaders()});
             const data = await res.json();
             const container = document.getElementById('admin-logs-list');
             if(!data.votes || data.votes.length === 0) {
@@ -492,35 +513,11 @@
             }
             container.innerHTML = data.votes.map(v => `
                 <div class="border-b border-gray-800/60 py-1 text-gray-300">
-                    <span class="text-gray-500">[${v[3]}]</span> <span class="text-indigo-400 font-bold">${v[0]}</span> gab <span class="text-emerald-400">${v[2]} Pkt</span> für "<span class="text-white">${v[1]}</span>"
+                    <span class="text-gray-500">[${escapeHtml(v[3])}]</span> <span class="text-indigo-400 font-bold">${escapeHtml(v[0])}</span> gab <span class="text-emerald-400">${Number(v[2]) || 0} Pkt</span> für "<span class="text-white">${escapeHtml(v[1])}</span>"
                 </div>
             `).join('');
         }
 
-        async function triggerUpdate() {
-            const password = document.getElementById("admin-pass").value;
-            if(password !== "admin123") return alert("Bitte erst Admin-Bereich entsperren!");
-            if(!confirm("Möchtest du das System jetzt vom GitHub-Repository aktualisieren?")) return;
-            
-            document.getElementById("update-status").innerText = "Lade Update herunter...";
-            
-            try {
-                const res = await fetch(`${API_URL}/admin/update`, { method: "POST" });
-                const data = await res.json();
-                
-                if(data.error) {
-                    document.getElementById("update-status").innerText = "Fehler: " + data.error;
-                } else {
-                    document.getElementById("update-status").innerText = "Erfolgreich! Server startet neu...";
-                    setTimeout(() => {
-                        alert("Update durchgeführt! Die Seite wird neu geladen.");
-                        location.reload();
-                    }, 4000);
-                }
-            } catch (e) {
-                document.getElementById("update-status").innerText = "Verbindungsfehler beim Update.";
-            }
-        }
     </script>
 </body>
 </html>

@@ -1,17 +1,50 @@
-version: '3.8'
 services:
   db:
     image: postgres:15-alpine
-    container_name: music_voting_db
-    restart: always
     environment:
-      POSTGRES_DB: music_voting_dev
-      POSTGRES_USER: clubiq_dev
-      POSTGRES_PASSWORD: devpassword
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: ${DB_NAME:?DB_NAME fehlt in .env}
+      POSTGRES_USER: ${DB_USER:?DB_USER fehlt in .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD fehlt in .env}
+    env_file: .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  web:
+    build: .
+    ports:
+      - "${MUSIC_BIND_ADDRESS:-0.0.0.0}:${MUSIC_PORT:-8000}:8000"
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   postgres_data:
