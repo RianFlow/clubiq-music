@@ -202,6 +202,74 @@ class MpvController:
             if connected:
                 self.load_current(play=False)
 
+    def add_queue_item(self, item: dict, position: str) -> None:
+        with self.lock:
+            if len(self.queue) >= 250:
+                raise ValueError("Die Warteschlange ist voll.")
+            queue_was_empty = not self.queue
+            insert_at = len(self.queue)
+            if position == "next":
+                insert_at = self.current_index + 1 if self.current_index >= 0 else 0
+            self.queue.insert(insert_at, item)
+            if self.current_index < 0:
+                self.current_index = 0
+            elif insert_at <= self.current_index:
+                self.current_index += 1
+            self.save_state()
+            if queue_was_empty:
+                try:
+                    connected = bool(
+                        self.connected_speaker
+                        and device_info(self.connected_speaker)["connected"]
+                    )
+                except RuntimeError:
+                    connected = False
+                if connected:
+                    self.load_current(play=False)
+
+    def move_queue_item(self, source_index: int, target_index: int) -> None:
+        with self.lock:
+            if not 0 <= source_index < len(self.queue):
+                raise ValueError("Song nicht mehr in der Warteschlange.")
+            target_index = max(0, min(target_index, len(self.queue) - 1))
+            current_item = self.queue[self.current_index] if 0 <= self.current_index < len(self.queue) else None
+            item = self.queue.pop(source_index)
+            self.queue.insert(target_index, item)
+            if current_item is not None:
+                self.current_index = next(
+                    (index for index, queued in enumerate(self.queue) if queued is current_item),
+                    self.current_index,
+                )
+            self.save_state()
+
+    def remove_queue_item(self, index: int) -> None:
+        with self.lock:
+            if not 0 <= index < len(self.queue):
+                raise ValueError("Song nicht mehr in der Warteschlange.")
+            removing_current = index == self.current_index
+            was_playing = bool(self.process and self.process.poll() is None) and not bool(
+                self.property("pause", True)
+            )
+            self.queue.pop(index)
+            if not self.queue:
+                self.current_index = -1
+                if self.process and self.process.poll() is None:
+                    self.command("stop")
+            elif index < self.current_index:
+                self.current_index -= 1
+            elif removing_current:
+                self.current_index = min(index, len(self.queue) - 1)
+                if self.connected_speaker and device_info(self.connected_speaker)["connected"]:
+                    self.load_current(play=was_playing)
+            self.save_state()
+
+    def play_queue_item(self, index: int) -> None:
+        with self.lock:
+            if not 0 <= index < len(self.queue):
+                raise ValueError("Song nicht mehr in der Warteschlange.")
+            self.current_index = index
+            self.load_current(play=True)
+
     def stop_mpv(self) -> None:
         if self.process and self.process.poll() is None:
             self.process.terminate()
@@ -270,6 +338,8 @@ class MpvController:
             if action == "play":
                 if self.current_index < 0 and self.queue:
                     self.current_index = 0
+                    self.load_current()
+                elif self.current_index >= 0 and bool(self.property("idle-active", True)):
                     self.load_current()
                 else:
                     self.command("set_property", "pause", False)
@@ -425,11 +495,40 @@ class Handler(BaseHTTPRequestHandler):
                     if not (url.startswith("https://www.youtube.com/watch?v=") or url.startswith("http://127.0.0.1:")):
                         raise ValueError("Nicht erlaubte Medienadresse.")
                     safe.append({
-                        "id": int(item["id"]), "title": str(item["title"])[:255],
+                        "id": str(item["id"])[:100], "title": str(item["title"])[:255],
                         "artist": str(item.get("artist", ""))[:255], "thumbnail": str(item.get("thumbnail", ""))[:500],
-                        "url": url,
+                        "url": url, "source": str(item.get("source", "ranking"))[:20],
                     })
                 PLAYER.set_queue(safe)
+                return self.reply(200, PLAYER.state())
+            if self.path == "/queue/add":
+                item = data.get("item", {})
+                url = str(item.get("url", ""))
+                if not url.startswith("https://www.youtube.com/watch?v="):
+                    raise ValueError("Nicht erlaubte Medienadresse.")
+                safe_item = {
+                    "id": str(item.get("id", ""))[:100],
+                    "title": str(item.get("title", ""))[:255],
+                    "artist": str(item.get("artist", ""))[:255],
+                    "thumbnail": str(item.get("thumbnail", ""))[:500],
+                    "url": url,
+                    "source": "dj",
+                }
+                if not safe_item["id"] or not safe_item["title"]:
+                    raise ValueError("Songangaben fehlen.")
+                position = str(data.get("position", "end"))
+                if position not in {"next", "end"}:
+                    raise ValueError("Ungültige Position.")
+                PLAYER.add_queue_item(safe_item, position)
+                return self.reply(200, PLAYER.state())
+            if self.path == "/queue/move":
+                PLAYER.move_queue_item(int(data.get("source_index", -1)), int(data.get("target_index", -1)))
+                return self.reply(200, PLAYER.state())
+            if self.path == "/queue/remove":
+                PLAYER.remove_queue_item(int(data.get("index", -1)))
+                return self.reply(200, PLAYER.state())
+            if self.path == "/queue/play":
+                PLAYER.play_queue_item(int(data.get("index", -1)))
                 return self.reply(200, PLAYER.state())
             if self.path == "/command":
                 return self.reply(200, PLAYER.act(str(data.get("action", "")), data.get("value")))

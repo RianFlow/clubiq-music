@@ -102,6 +102,13 @@ CREATE TABLE IF NOT EXISTS music_player_audit (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS music_cycle_playlists (
+    cycle_id INTEGER PRIMARY KEY REFERENCES music_cycles(id) ON DELETE CASCADE,
+    items_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+    generated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_search_cache_lookup
 ON music_provider_search_cache (provider, normalized_query, market, expires_at);
 
@@ -117,6 +124,22 @@ ALTER TABLE music_cycles ADD COLUMN IF NOT EXISTS max_budget INTEGER;
 UPDATE music_cycles SET max_budget = 10 WHERE max_budget IS NULL;
 ALTER TABLE music_cycles ALTER COLUMN max_budget SET DEFAULT 10;
 ALTER TABLE music_cycles ALTER COLUMN max_budget SET NOT NULL;
+ALTER TABLE music_cycles ADD COLUMN IF NOT EXISTS playlist_target_count INTEGER;
+UPDATE music_cycles SET playlist_target_count = 20 WHERE playlist_target_count IS NULL;
+ALTER TABLE music_cycles ALTER COLUMN playlist_target_count SET DEFAULT 20;
+ALTER TABLE music_cycles ALTER COLUMN playlist_target_count SET NOT NULL;
+ALTER TABLE music_cycles ADD COLUMN IF NOT EXISTS reuse_previous_playlist BOOLEAN;
+UPDATE music_cycles SET reuse_previous_playlist = TRUE WHERE reuse_previous_playlist IS NULL;
+ALTER TABLE music_cycles ALTER COLUMN reuse_previous_playlist SET DEFAULT TRUE;
+ALTER TABLE music_cycles ALTER COLUMN reuse_previous_playlist SET NOT NULL;
+ALTER TABLE music_cycles ADD COLUMN IF NOT EXISTS genre_fallback_enabled BOOLEAN;
+UPDATE music_cycles SET genre_fallback_enabled = TRUE WHERE genre_fallback_enabled IS NULL;
+ALTER TABLE music_cycles ALTER COLUMN genre_fallback_enabled SET DEFAULT TRUE;
+ALTER TABLE music_cycles ALTER COLUMN genre_fallback_enabled SET NOT NULL;
+ALTER TABLE music_cycles ADD COLUMN IF NOT EXISTS fallback_genre VARCHAR(80);
+UPDATE music_cycles SET fallback_genre = 'Party' WHERE fallback_genre IS NULL;
+ALTER TABLE music_cycles ALTER COLUMN fallback_genre SET DEFAULT 'Party';
+ALTER TABLE music_cycles ALTER COLUMN fallback_genre SET NOT NULL;
 """
 
 DEFAULTS_SQL = """

@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#163c36">
   <title>ClubIQ Music</title>
   <link rel="icon" href="/pics/logo.png">
-  <link rel="stylesheet" href="/static/app.css">
-  <script defer src="/static/app.js"></script>
+  <link rel="stylesheet" href="/static/app.css?v=20260813-2">
+  <script defer src="/static/app.js?v=20260813-2"></script>
 </head>
 <body>
   <header class="topbar">
@@ -61,6 +61,14 @@
         <div class="list-actions"><span id="playlistSummary" class="muted"></span><button id="refreshPlaylist" class="button ghost small" type="button">Aktualisieren</button></div>
       </div>
       <div id="playlist" class="song-list" aria-live="polite"></div>
+      <section class="activity-panel">
+        <div class="section-head compact">
+          <div><p class="eyebrow">Mitgemacht</p><h3>Aktivste Mitglieder</h3></div>
+          <button id="refreshActivity" class="button ghost small" type="button">Aktualisieren</button>
+        </div>
+        <p class="muted activity-explanation">Bewertet werden Beteiligung, Vorschläge und sinnvolle Player-Aktionen – nicht die Höhe einzelner Stimmen.</p>
+        <div id="activityLeaderboard" class="activity-list"><div class="empty">Aktivität wird geladen …</div></div>
+      </section>
     </section>
 
     <section id="tab-player" class="tab-panel">
@@ -73,7 +81,7 @@
         <article class="player-console">
           <div class="now-playing">
             <img id="playerCover" class="player-cover" src="/pics/logo.png" alt="">
-            <div><p class="eyebrow">Jetzt läuft</p><h3 id="playerTitle">Noch kein Song gewählt</h3><p id="playerArtist" class="muted">Rangliste in die Warteschlange übernehmen</p></div>
+            <div><p class="eyebrow">Jetzt läuft</p><h3 id="playerTitle">Noch kein Song gewählt</h3><p id="playerArtist" class="muted">Playlist aus Abstimmung und Fallback-Regeln erstellen</p></div>
           </div>
           <input id="playerProgress" class="player-progress" type="range" min="0" max="1" value="0" aria-label="Wiedergabeposition">
           <div class="time-row"><span id="playerPosition">0:00</span><span id="playerDuration">0:00</span></div>
@@ -94,12 +102,12 @@
             <button class="button primary small" data-open-member type="button">Anmelden</button>
           </div>
           <div class="player-actions" data-member-only hidden>
-            <button id="queueFromRanking" class="button primary" type="button">Rangliste abspielen</button>
+            <button id="queueFromRanking" class="button primary" type="button">Playlist erstellen &amp; abspielen</button>
             <button id="refreshPlayer" class="button ghost" type="button">Status aktualisieren</button>
           </div>
         </article>
         <aside class="queue-panel">
-          <div class="section-head compact"><div><p class="eyebrow">Als Nächstes</p><h3>Warteschlange</h3></div><span id="queueCount" class="muted">0 Songs</span></div>
+          <div class="section-head compact"><div><p class="eyebrow">Tatsächliche Reihenfolge</p><h3>Warteschlange</h3></div><span id="queueCount" class="muted">0 Songs</span></div>
           <div id="playerQueue" class="player-queue"><div class="empty">Noch keine Songs geladen.</div></div>
         </aside>
       </div>
@@ -196,6 +204,10 @@
             <label>Voting startet<input id="cycleStartsAt" type="datetime-local" required></label>
             <label>Voting endet<input id="cycleClosesAt" type="datetime-local" required></label>
             <label>Punkte je Mitglied<input id="cycleBudget" type="number" min="1" max="100" value="10" required></label>
+            <label>Playlist-Größe<input id="cyclePlaylistTarget" type="number" min="1" max="50" value="20" required></label>
+            <label>Auffüll-Genre<input id="cycleFallbackGenre" maxlength="80" value="Party"></label>
+            <label class="check-control"><input id="cycleReusePrevious" type="checkbox" checked><span>Vorherige Playlist verwenden</span></label>
+            <label class="check-control"><input id="cycleUseGenre" type="checkbox" checked><span>Mit Genre-Hits auffüllen</span></label>
             <button class="button primary" type="submit">Abstimmung planen</button>
           </form>
           <div id="cycleList" class="admin-list"></div>
@@ -216,6 +228,19 @@
         </section>
 
         <section id="admin-player" class="admin-panel">
+          <div class="panel-box dj-panel">
+            <div class="section-head compact">
+              <div><p class="eyebrow">DJ-Modus</p><h3>Song direkt einreihen</h3></div>
+              <span class="muted">Nur Verwaltung</span>
+            </div>
+            <form id="djSearchForm" class="compact-form dj-search">
+              <label for="djSearchInput">Titel oder Interpret</label>
+              <div><input id="djSearchInput" minlength="3" maxlength="100" autocomplete="off" placeholder="z. B. Queen Don't Stop Me Now" required><button class="button primary" type="submit">Suchen</button></div>
+            </form>
+            <div id="djSearchResults" class="dj-results"><div class="empty">Suche einen Titel und füge ihn als Nächstes oder ans Ende ein.</div></div>
+            <div class="section-head compact dj-queue-head"><div><p class="eyebrow">Live</p><h3>Reihenfolge bearbeiten</h3></div><button id="refreshDjQueue" class="button ghost small" type="button">Aktualisieren</button></div>
+            <div id="djQueue" class="dj-queue"><div class="empty">Noch keine Songs geladen.</div></div>
+          </div>
           <div class="panel-box">
             <div class="section-head compact">
               <div><p class="eyebrow">Bluetooth-Ausgabe</p><h3>Musikbox verbinden</h3></div>

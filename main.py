@@ -25,6 +25,7 @@ from db_config import connection_kwargs
 load_dotenv()
 
 DEFAULT_MAX_BUDGET = int(os.getenv("MAX_BUDGET", "10"))
+DEFAULT_PLAYLIST_TARGET = max(1, min(100, int(os.getenv("PLAYLIST_TARGET_COUNT", "20"))))
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 SESSION_DAYS = max(1, int(os.getenv("SESSION_DAYS", "30")))
@@ -277,6 +278,10 @@ class CycleCreate(BaseModel):
     starts_at: datetime
     closes_at: datetime
     max_budget: int = Field(default=DEFAULT_MAX_BUDGET, ge=1, le=100)
+    playlist_target_count: int = Field(default=DEFAULT_PLAYLIST_TARGET, ge=1, le=50)
+    reuse_previous_playlist: bool = True
+    genre_fallback_enabled: bool = True
+    fallback_genre: str = Field(default="Party", max_length=80)
 
 
 class CycleUpdate(BaseModel):
@@ -285,6 +290,10 @@ class CycleUpdate(BaseModel):
     starts_at: datetime | None = None
     closes_at: datetime | None = None
     max_budget: int | None = Field(default=None, ge=1, le=100)
+    playlist_target_count: int | None = Field(default=None, ge=1, le=50)
+    reuse_previous_playlist: bool | None = None
+    genre_fallback_enabled: bool | None = None
+    fallback_genre: str | None = Field(default=None, max_length=80)
 
 
 class PlayerCommand(BaseModel):
@@ -294,6 +303,17 @@ class PlayerCommand(BaseModel):
 
 class BluetoothDeviceAction(BaseModel):
     address: str = Field(pattern=r"^[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}$")
+
+
+class DjQueueItem(BaseModel):
+    external_id: str = Field(pattern=r"^[A-Za-z0-9_-]{6,20}$")
+    title: str = Field(min_length=1, max_length=255)
+    channel_title: str | None = Field(default=None, max_length=255)
+    position: str = Field(default="end", pattern=r"^(next|end)$")
+
+
+class DjQueueMove(BaseModel):
+    target_index: int = Field(ge=0, le=249)
 
 
 @app.get("/")
@@ -478,11 +498,7 @@ def member_me(member: dict = Depends(require_member)):
     }
 
 
-@app.get("/api/v1/music/provider/search")
-def search_tracks(
-    q: str = Query(min_length=3, max_length=100),
-    _member: dict = Depends(require_member),
-):
+def youtube_search(q: str) -> list[dict]:
     if not YOUTUBE_API_KEY:
         raise HTTPException(status_code=503, detail="YouTube-Suche ist noch nicht eingerichtet.")
     try:
@@ -493,19 +509,134 @@ def search_tracks(
         )
         response.raise_for_status()
         items = response.json().get("items", [])
-        return {
-            "results": [
-                {
-                    "external_id": item["id"]["videoId"],
-                    "title": html.unescape(item["snippet"]["title"]),
-                    "channel_title": html.unescape(item["snippet"]["channelTitle"]),
-                    "thumbnail_url": f"/api/v1/music/thumbnails/youtube/{item['id']['videoId']}",
-                }
-                for item in items
-            ]
-        }
+        return [
+            {
+                "external_id": item["id"]["videoId"],
+                "title": html.unescape(item["snippet"]["title"]),
+                "channel_title": html.unescape(item["snippet"]["channelTitle"]),
+                "thumbnail_url": f"/api/v1/music/thumbnails/youtube/{item['id']['videoId']}",
+            }
+            for item in items
+        ]
     except requests.RequestException as exc:
         raise HTTPException(status_code=502, detail="Musiksuche ist derzeit nicht erreichbar.") from exc
+
+
+def youtube_popular_tracks(genre: str, limit: int) -> list[dict]:
+    """Load popular music for one genre and cache it to protect the YouTube quota."""
+    clean_genre = " ".join(genre.strip().split())[:80]
+    if not clean_genre or not YOUTUBE_API_KEY or limit <= 0:
+        return []
+    cache_key = f"popular:{clean_genre.casefold()}"
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, result_json FROM music_provider_search_cache
+            WHERE provider = 'youtube' AND normalized_query = %s AND market = 'DE'
+              AND expires_at > CURRENT_TIMESTAMP
+            ORDER BY created_at DESC LIMIT 1;
+            """,
+            (cache_key,),
+        )
+        cached = cur.fetchone()
+        if cached:
+            cur.execute(
+                "UPDATE music_provider_search_cache SET hit_count = hit_count + 1 WHERE id = %s;",
+                (cached[0],),
+            )
+            conn.commit()
+            value = cached[1]
+            if isinstance(value, str):
+                value = json.loads(value)
+            return list(value or [])[:limit]
+    try:
+        response = requests.get(
+            "https://www.googleapis.com/youtube/v3/search",
+            params={
+                "part": "snippet", "q": f"{clean_genre} Musik", "type": "video",
+                "videoCategoryId": "10", "videoEmbeddable": "true", "order": "viewCount",
+                "regionCode": "DE", "relevanceLanguage": "de", "safeSearch": "moderate",
+                # Always cache a complete candidate set. A later event can have a
+                # larger target than the request that initially filled the cache.
+                "maxResults": 50, "key": YOUTUBE_API_KEY,
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+        results = [
+            {
+                "external_id": item["id"]["videoId"],
+                "title": html.unescape(item["snippet"]["title"]),
+                "artist": html.unescape(item["snippet"]["channelTitle"]),
+            }
+            for item in response.json().get("items", [])
+            if YOUTUBE_VIDEO_ID.fullmatch(item.get("id", {}).get("videoId", ""))
+        ]
+    except (requests.RequestException, KeyError, TypeError, ValueError):
+        return []
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            DELETE FROM music_provider_search_cache
+            WHERE provider = 'youtube' AND normalized_query = %s AND market = 'DE';
+            """,
+            (cache_key,),
+        )
+        cur.execute(
+            """
+            INSERT INTO music_provider_search_cache
+                (provider, normalized_query, market, result_json, expires_at)
+            VALUES ('youtube', %s, 'DE', %s::jsonb, CURRENT_TIMESTAMP + INTERVAL '12 hours');
+            """,
+            (cache_key, json.dumps(results)),
+        )
+        conn.commit()
+    return results[:limit]
+
+
+def merge_playlist_sources(
+    current_votes: list[dict], previous_playlist: list[dict], genre_tracks: list[dict], target: int
+) -> list[dict]:
+    """Merge sources in the defined order and remove duplicate YouTube videos."""
+    merged: list[dict] = []
+    seen: set[str] = set()
+    for source, candidates in (
+        ("votes", current_votes), ("previous", previous_playlist), ("genre", genre_tracks)
+    ):
+        for candidate in candidates:
+            external_id = str(candidate.get("external_id") or "")
+            if not YOUTUBE_VIDEO_ID.fullmatch(external_id) or external_id in seen:
+                continue
+            seen.add(external_id)
+            merged.append({
+                "external_id": external_id,
+                "title": str(candidate.get("title") or "Unbekannter Titel")[:255],
+                "artist": str(candidate.get("artist") or candidate.get("channel_title") or "")[:255],
+                "source": source,
+            })
+            if len(merged) >= target:
+                return merged
+    return merged
+
+
+def player_item(item: dict) -> dict:
+    external_id = item["external_id"]
+    return {
+        "id": f"{item['source']}:{external_id}",
+        "title": item["title"],
+        "artist": item.get("artist", ""),
+        "thumbnail": f"/api/v1/music/thumbnails/youtube/{external_id}",
+        "url": f"https://www.youtube.com/watch?v={external_id}",
+        "source": item["source"],
+    }
+
+
+@app.get("/api/v1/music/provider/search")
+def search_tracks(
+    q: str = Query(min_length=3, max_length=100),
+    _member: dict = Depends(require_member),
+):
+    return {"results": youtube_search(q)}
 
 
 @app.get("/api/v1/music/cycles")
@@ -513,13 +644,20 @@ def get_cycles():
     close_expired_cycles()
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute(
-            "SELECT id, name, status, starts_at, closes_at, max_budget FROM music_cycles ORDER BY id DESC;"
+            """
+            SELECT id, name, status, starts_at, closes_at, max_budget,
+                   playlist_target_count, reuse_previous_playlist,
+                   genre_fallback_enabled, fallback_genre
+            FROM music_cycles ORDER BY id DESC;
+            """
         )
         return {
             "cycles": [
                 {
                     "id": row[0], "name": row[1], "status": row[2], "starts_at": row[3],
                     "closes_at": row[4], "max_budget": row[5],
+                    "playlist_target_count": row[6], "reuse_previous_playlist": row[7],
+                    "genre_fallback_enabled": row[8], "fallback_genre": row[9],
                 }
                 for row in cur.fetchall()
             ]
@@ -571,36 +709,186 @@ def get_player_state():
     return state
 
 
+@app.get("/api/v1/music/activity")
+def activity_leaderboard(limit: int = Query(default=8, ge=1, le=25)):
+    """Return a transparent, spam-resistant leaderboard for the current voting window."""
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            WITH active_cycle AS (
+                SELECT id, starts_at, closes_at
+                FROM music_cycles
+                WHERE status = 'active' AND starts_at <= CURRENT_TIMESTAMP
+                  AND closes_at > CURRENT_TIMESTAMP
+                ORDER BY id DESC LIMIT 1
+            ), vote_activity AS (
+                SELECT v.member_id, COUNT(*)::int AS voted_songs,
+                       COALESCE(SUM(v.points), 0)::int AS vote_points
+                FROM music_votes v JOIN active_cycle c ON c.id = v.cycle_id
+                GROUP BY v.member_id
+            ), suggestion_activity AS (
+                SELECT s.member_id, COUNT(*)::int AS suggestions
+                FROM music_suggestions s JOIN active_cycle c ON c.id = s.cycle_id
+                WHERE s.status = 'approved'
+                GROUP BY s.member_id
+            ), player_activity AS (
+                SELECT a.member_id, LEAST(COUNT(*), 10)::int AS player_actions
+                FROM music_player_audit a CROSS JOIN active_cycle c
+                WHERE a.member_id IS NOT NULL
+                  AND a.created_at >= c.starts_at AND a.created_at < c.closes_at
+                  AND a.action IN ('play', 'next', 'previous', 'queue_from_ranking', 'soundboard')
+                GROUP BY a.member_id
+            )
+            SELECT m.display_name,
+                   COALESCE(v.voted_songs, 0), COALESCE(v.vote_points, 0),
+                   COALESCE(s.suggestions, 0), COALESCE(p.player_actions, 0),
+                   (COALESCE(v.voted_songs, 0) * 2
+                    + COALESCE(s.suggestions, 0) * 3
+                    + COALESCE(p.player_actions, 0))::int AS activity_score
+            FROM club_members m
+            LEFT JOIN vote_activity v ON v.member_id = m.member_id
+            LEFT JOIN suggestion_activity s ON s.member_id = m.member_id
+            LEFT JOIN player_activity p ON p.member_id = m.member_id
+            WHERE m.active = TRUE
+              AND (v.member_id IS NOT NULL OR s.member_id IS NOT NULL OR p.member_id IS NOT NULL)
+            ORDER BY activity_score DESC, v.vote_points DESC NULLS LAST, lower(m.display_name)
+            LIMIT %s;
+            """,
+            (limit,),
+        )
+        leaders = [
+            {
+                "rank": index,
+                "display_name": row[0],
+                "voted_songs": row[1],
+                "vote_points": row[2],
+                "suggestions": row[3],
+                "player_actions": row[4],
+                "activity_score": row[5],
+            }
+            for index, row in enumerate(cur.fetchall(), start=1)
+        ]
+    return {
+        "leaders": leaders,
+        "formula": "2 je bewertetem Song + 3 je Vorschlag + 1 je sinnvoller Player-Aktion (maximal 10)",
+    }
+
+
 @app.post("/api/v1/music/player/queue/current")
 def use_current_ranking(member: dict = Depends(require_member)):
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute(
             """
-            SELECT s.id, s.title, s.channel_title, s.provider, s.external_id
-            FROM music_suggestions s
-            LEFT JOIN music_votes v ON v.suggestion_id = s.id
-            JOIN music_cycles c ON c.id = s.cycle_id
-            WHERE c.status = 'active' AND c.starts_at <= CURRENT_TIMESTAMP
-              AND c.closes_at > CURRENT_TIMESTAMP AND s.status = 'approved'
-            GROUP BY s.id
-            ORDER BY COALESCE(SUM(v.points), 0) DESC, s.created_at ASC;
+            SELECT id, starts_at, playlist_target_count, reuse_previous_playlist,
+                   genre_fallback_enabled, fallback_genre
+            FROM music_cycles
+            WHERE status = 'active' AND starts_at <= CURRENT_TIMESTAMP
+              AND closes_at > CURRENT_TIMESTAMP
+            ORDER BY id DESC LIMIT 1;
             """
         )
-        items = []
-        for row in cur.fetchall():
-            if row[3] != "youtube" or not YOUTUBE_VIDEO_ID.fullmatch(row[4] or ""):
-                continue
-            items.append({
-                "id": row[0], "title": row[1], "artist": row[2] or "",
-                "thumbnail": f"/api/v1/music/thumbnails/youtube/{row[4]}",
-                "url": f"https://www.youtube.com/watch?v={row[4]}",
-            })
+        cycle = cur.fetchone()
+        if not cycle:
+            raise HTTPException(status_code=409, detail="Zurzeit läuft keine Abstimmung.")
+        cycle_id, starts_at, target, reuse_previous, use_genre, fallback_genre = cycle
+        cur.execute(
+            """
+            SELECT s.title, s.channel_title, s.external_id, COALESCE(SUM(v.points), 0) AS points
+            FROM music_suggestions s
+            JOIN music_votes v ON v.suggestion_id = s.id AND v.cycle_id = s.cycle_id
+            WHERE s.cycle_id = %s AND s.status = 'approved' AND s.provider = 'youtube'
+            GROUP BY s.id
+            HAVING COALESCE(SUM(v.points), 0) > 0
+            ORDER BY points DESC, s.created_at ASC;
+            """,
+            (cycle_id,),
+        )
+        current_votes = [
+            {"title": row[0], "artist": row[1] or "", "external_id": row[2]}
+            for row in cur.fetchall()
+        ]
+        previous_playlist: list[dict] = []
+        if reuse_previous and len(current_votes) < target:
+            cur.execute(
+                """
+                SELECT p.items_json
+                FROM music_cycle_playlists p
+                JOIN music_cycles c ON c.id = p.cycle_id
+                WHERE c.id <> %s AND c.starts_at < %s
+                ORDER BY c.starts_at DESC, p.generated_at DESC
+                LIMIT 1;
+                """,
+                (cycle_id, starts_at),
+            )
+            previous = cur.fetchone()
+            if previous:
+                previous_playlist = previous[0]
+                if isinstance(previous_playlist, str):
+                    previous_playlist = json.loads(previous_playlist)
+            else:
+                cur.execute(
+                    """
+                    WITH previous_cycle AS (
+                        SELECT id FROM music_cycles
+                        WHERE id <> %s AND starts_at < %s
+                        ORDER BY starts_at DESC LIMIT 1
+                    )
+                    SELECT s.title, s.channel_title, s.external_id
+                    FROM music_suggestions s
+                    JOIN music_votes v ON v.suggestion_id = s.id AND v.cycle_id = s.cycle_id
+                    JOIN previous_cycle c ON c.id = s.cycle_id
+                    WHERE s.status = 'approved' AND s.provider = 'youtube'
+                    GROUP BY s.id
+                    HAVING COALESCE(SUM(v.points), 0) > 0
+                    ORDER BY COALESCE(SUM(v.points), 0) DESC, s.created_at ASC
+                    LIMIT %s;
+                    """,
+                    (cycle_id, starts_at, target),
+                )
+                previous_playlist = [
+                    {"title": row[0], "artist": row[1] or "", "external_id": row[2]}
+                    for row in cur.fetchall()
+                ]
+
+    prior = merge_playlist_sources(current_votes, previous_playlist, [], int(target))
+    remaining = max(0, int(target) - len(prior))
+    genre_tracks = youtube_popular_tracks(fallback_genre, remaining) if use_genre else []
+    generated = merge_playlist_sources(current_votes, previous_playlist, genre_tracks, int(target))
+    items = [player_item(item) for item in generated]
+    if not items:
+        raise HTTPException(
+            status_code=409,
+            detail="Es gibt noch keine Stimmen und keine verfügbaren Titel zum Auffüllen.",
+        )
+    counts = {
+        source: sum(1 for item in generated if item["source"] == source)
+        for source in ("votes", "previous", "genre")
+    }
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO music_cycle_playlists (cycle_id, items_json, generated_at, updated_at)
+            VALUES (%s, %s::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT (cycle_id) DO UPDATE
+            SET items_json = EXCLUDED.items_json, generated_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP;
+            """,
+            (cycle_id, json.dumps(generated)),
+        )
         cur.execute(
             "INSERT INTO music_player_audit (member_id, action, detail_json) VALUES (%s, 'queue_from_ranking', %s);",
-            (member["member_id"], json.dumps({"songs": len(items)})),
+            (member["member_id"], json.dumps({
+                "cycle_id": cycle_id, "songs": len(items), "target": target,
+                "genre": fallback_genre if use_genre else None, "sources": counts,
+            })),
         )
         conn.commit()
-    return player_agent("POST", "/queue", {"items": items})
+    result = player_agent("POST", "/queue", {"items": items})
+    result["playlist_build"] = {
+        "target": target, "total": len(items), "sources": counts,
+        "genre": fallback_genre if use_genre else None,
+    }
+    return result
 
 
 @app.post("/api/v1/music/player/command")
@@ -621,6 +909,52 @@ def control_player(command: PlayerCommand, member: dict = Depends(require_member
         )
         conn.commit()
     return player_agent("POST", "/command", command.model_dump())
+
+
+@app.get("/api/v1/music/admin/player/search", dependencies=[Depends(require_admin)])
+def dj_search(q: str = Query(min_length=3, max_length=100)):
+    return {"results": youtube_search(q)}
+
+
+@app.post("/api/v1/music/admin/player/queue", dependencies=[Depends(require_admin)])
+def dj_add_to_queue(item: DjQueueItem):
+    if not YOUTUBE_VIDEO_ID.fullmatch(item.external_id):
+        raise HTTPException(status_code=422, detail="Ungültige YouTube-Kennung.")
+    payload = {
+        "item": {
+            "id": f"dj:{item.external_id}",
+            "title": item.title.strip(),
+            "artist": (item.channel_title or "").strip(),
+            "thumbnail": f"/api/v1/music/thumbnails/youtube/{item.external_id}",
+            "url": f"https://www.youtube.com/watch?v={item.external_id}",
+            "source": "dj",
+        },
+        "position": item.position,
+    }
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO music_player_audit (member_id, action, detail_json) VALUES (NULL, 'dj_queue_add', %s);",
+            (json.dumps({"external_id": item.external_id, "position": item.position}),),
+        )
+        conn.commit()
+    return player_agent("POST", "/queue/add", payload)
+
+
+@app.patch("/api/v1/music/admin/player/queue/{source_index}", dependencies=[Depends(require_admin)])
+def dj_move_queue_item(source_index: int, move: DjQueueMove):
+    return player_agent(
+        "POST", "/queue/move", {"source_index": source_index, "target_index": move.target_index}
+    )
+
+
+@app.post("/api/v1/music/admin/player/queue/{index}/play", dependencies=[Depends(require_admin)])
+def dj_play_queue_item(index: int):
+    return player_agent("POST", "/queue/play", {"index": index})
+
+
+@app.delete("/api/v1/music/admin/player/queue/{index}", dependencies=[Depends(require_admin)])
+def dj_remove_queue_item(index: int):
+    return player_agent("POST", "/queue/remove", {"index": index})
 
 
 @app.get("/api/v1/music/player/bluetooth/devices", dependencies=[Depends(require_admin)])
@@ -894,6 +1228,9 @@ def update_member(member_id: str, update: MemberAdminUpdate):
 @app.post("/api/v1/music/admin/cycles", dependencies=[Depends(require_admin)])
 def create_cycle(cycle: CycleCreate):
     starts_at, closes_at = validate_cycle_window(cycle.starts_at, cycle.closes_at)
+    fallback_genre = " ".join(cycle.fallback_genre.strip().split())
+    if cycle.genre_fallback_enabled and not fallback_genre:
+        raise HTTPException(status_code=422, detail="Bitte ein Genre für die Playlist-Auffüllung angeben.")
     status = "active" if starts_at <= datetime.now(timezone.utc) else "planned"
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute(
@@ -913,11 +1250,17 @@ def create_cycle(cycle: CycleCreate):
         cur.execute(
             """
             INSERT INTO music_cycles
-                (name, type, profile_id, starts_at, closes_at, status, max_budget)
-            VALUES (%s, 'custom', 1, %s, %s, %s, %s)
+                (name, type, profile_id, starts_at, closes_at, status, max_budget,
+                 playlist_target_count, reuse_previous_playlist,
+                 genre_fallback_enabled, fallback_genre)
+            VALUES (%s, 'custom', 1, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id;
             """,
-            (cycle.name.strip(), starts_at, closes_at, status, cycle.max_budget),
+            (
+                cycle.name.strip(), starts_at, closes_at, status, cycle.max_budget,
+                cycle.playlist_target_count, cycle.reuse_previous_playlist,
+                cycle.genre_fallback_enabled, fallback_genre,
+            ),
         )
         cycle_id = cur.fetchone()[0]
         conn.commit()
@@ -929,7 +1272,13 @@ def update_cycle(cycle_id: int, update: CycleUpdate):
     if update.status not in {None, "planned", "active", "closed"}:
         raise HTTPException(status_code=400, detail="Ungültiger Status.")
     with db_connect() as conn, conn.cursor() as cur:
-        cur.execute("SELECT starts_at, closes_at, status FROM music_cycles WHERE id = %s;", (cycle_id,))
+        cur.execute(
+            """
+            SELECT starts_at, closes_at, status, fallback_genre, genre_fallback_enabled
+            FROM music_cycles WHERE id = %s;
+            """,
+            (cycle_id,),
+        )
         existing = cur.fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Abstimmung nicht gefunden.")
@@ -940,6 +1289,16 @@ def update_cycle(cycle_id: int, update: CycleUpdate):
         if closes_at <= starts_at:
             raise HTTPException(status_code=422, detail="Die Endzeit muss nach der Startzeit liegen.")
         target_status = update.status or existing[2]
+        fallback_genre = (
+            " ".join(update.fallback_genre.strip().split())
+            if update.fallback_genre is not None else existing[3]
+        )
+        genre_enabled = (
+            update.genre_fallback_enabled
+            if update.genre_fallback_enabled is not None else existing[4]
+        )
+        if genre_enabled and not fallback_genre:
+            raise HTTPException(status_code=422, detail="Bitte ein Genre für die Playlist-Auffüllung angeben.")
         if target_status in {"planned", "active"}:
             cur.execute(
                 """
@@ -963,10 +1322,18 @@ def update_cycle(cycle_id: int, update: CycleUpdate):
             UPDATE music_cycles
             SET name = COALESCE(%s, name), status = COALESCE(%s, status),
                 starts_at = %s, closes_at = %s, max_budget = COALESCE(%s, max_budget),
+                playlist_target_count = COALESCE(%s, playlist_target_count),
+                reuse_previous_playlist = COALESCE(%s, reuse_previous_playlist),
+                genre_fallback_enabled = COALESCE(%s, genre_fallback_enabled),
+                fallback_genre = %s,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = %s;
             """,
-            (update.name, update.status, starts_at, closes_at, update.max_budget, cycle_id),
+            (
+                update.name, update.status, starts_at, closes_at, update.max_budget,
+                update.playlist_target_count, update.reuse_previous_playlist,
+                update.genre_fallback_enabled, fallback_genre, cycle_id,
+            ),
         )
         if cur.rowcount != 1:
             raise HTTPException(status_code=404, detail="Abstimmung nicht gefunden.")

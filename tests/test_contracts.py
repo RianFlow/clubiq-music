@@ -37,6 +37,16 @@ class SecurityContractTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             main.PlayerCommand(action="shell", value="reboot")
 
+    def test_dj_queue_payloads_are_bounded(self):
+        item = main.DjQueueItem(
+            external_id="dQw4w9WgXcQ", title="Testtitel", position="next"
+        )
+        self.assertEqual(item.position, "next")
+        with self.assertRaises(ValidationError):
+            main.DjQueueItem(external_id="https://example.test", title="Test")
+        with self.assertRaises(ValidationError):
+            main.DjQueueMove(target_index=999)
+
     def test_pin_format_and_vote_bounds_are_validated(self):
         with self.assertRaises(ValidationError):
             main.MemberLogin(display_name="Florian", pin="abcd")
@@ -58,6 +68,43 @@ class SecurityContractTests(unittest.TestCase):
             main.validate_cycle_window(closes_at, starts_at)
         with self.assertRaises(HTTPException):
             main.validate_cycle_window(starts_at.replace(tzinfo=None), closes_at)
+
+    def test_playlist_rules_are_bounded(self):
+        starts_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+        closes_at = starts_at + timedelta(hours=3)
+        cycle = main.CycleCreate(
+            name="Vereinsabend", starts_at=starts_at, closes_at=closes_at,
+            playlist_target_count=25, fallback_genre="Rock",
+            reuse_previous_playlist=True, genre_fallback_enabled=True,
+        )
+        self.assertEqual(cycle.playlist_target_count, 25)
+        self.assertEqual(cycle.fallback_genre, "Rock")
+        with self.assertRaises(ValidationError):
+            main.CycleCreate(
+                name="Zu groß", starts_at=starts_at, closes_at=closes_at,
+                playlist_target_count=51,
+            )
+
+    def test_playlist_sources_keep_priority_and_remove_duplicates(self):
+        current = [
+            {"external_id": "current001", "title": "Aktuell 1", "artist": "A"},
+            {"external_id": "same000001", "title": "Aktuell 2", "artist": "B"},
+        ]
+        previous = [
+            {"external_id": "same000001", "title": "Doppelt", "artist": "B"},
+            {"external_id": "previous01", "title": "Vorher", "artist": "C"},
+        ]
+        genre = [
+            {"external_id": "popular001", "title": "Genre", "artist": "D"},
+            {"external_id": "popular002", "title": "Zu viel", "artist": "E"},
+        ]
+        merged = main.merge_playlist_sources(current, previous, genre, 4)
+        self.assertEqual([item["external_id"] for item in merged], [
+            "current001", "same000001", "previous01", "popular001",
+        ])
+        self.assertEqual([item["source"] for item in merged], [
+            "votes", "votes", "previous", "genre",
+        ])
 
     def test_admin_password_uses_server_configuration(self):
         with patch.object(main, "ADMIN_PASSWORD", "test-secret"):
@@ -114,6 +161,17 @@ class OfflineFrontendContractTests(unittest.TestCase):
         self.assertIn("UnixStreamServer", agent_source)
         self.assertNotIn("0.0.0.0", agent_source)
 
+    def test_activity_and_dj_queue_controls_are_present(self):
+        html_source = (ROOT / "index.html").read_text(encoding="utf-8")
+        script_source = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+        agent_source = (ROOT / "player_agent.py").read_text(encoding="utf-8")
+        self.assertIn('id="activityLeaderboard"', html_source)
+        self.assertIn('id="djSearchForm"', html_source)
+        self.assertIn('/api/v1/music/activity?limit=8', script_source)
+        self.assertIn('/api/v1/music/admin/player/queue', script_source)
+        self.assertIn('if self.path == "/queue/add"', agent_source)
+        self.assertIn('if self.path == "/queue/move"', agent_source)
+
     def test_cycle_form_and_countdown_are_present(self):
         html_source = (ROOT / "index.html").read_text(encoding="utf-8")
         script_source = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
@@ -123,12 +181,18 @@ class OfflineFrontendContractTests(unittest.TestCase):
         self.assertIn("function updateCountdown()", script_source)
         self.assertIn("refreshVotingState()", script_source)
         self.assertNotIn("duration_days", script_source)
+        self.assertIn('id="cyclePlaylistTarget"', html_source)
+        self.assertIn('id="cycleFallbackGenre"', html_source)
+        self.assertIn("data-cycle-settings", script_source)
 
     def test_database_migration_contains_sessions_and_budget(self):
         schema = (ROOT / "bootstrap.py").read_text(encoding="utf-8")
         self.assertIn("music_member_sessions", schema)
         self.assertIn("pin_hash", schema)
         self.assertIn("max_budget", schema)
+        self.assertIn("music_cycle_playlists", schema)
+        self.assertIn("playlist_target_count", schema)
+        self.assertIn("reuse_previous_playlist", schema)
 
 
 if __name__ == "__main__":

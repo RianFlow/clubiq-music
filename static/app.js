@@ -13,6 +13,7 @@ const state = {
   player: { available: false, queue: [], current_index: -1, volume: 70, repeat: "off", shuffle: false },
   soundboard: [],
   speakers: [],
+  activity: [],
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -129,6 +130,7 @@ function setTab(name) {
   $$(".tab").forEach(button => button.classList.toggle("active", button.dataset.tab === name));
   $$(".tab-panel").forEach(panel => panel.classList.toggle("active", panel.id === `tab-${name}`));
   if (name === "mine") renderMyVotes();
+  if (name === "voting") loadActivity(true).catch(() => {});
   if (name === "player") Promise.all([loadPlayerState(), loadSoundboard()]).catch(error => toast(error.message, true));
 }
 
@@ -445,6 +447,10 @@ function mediaTime(value) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
+function queueSourceLabel(source) {
+  return ({ votes: "aktuelle Abstimmung", previous: "vorherige Playlist", genre: "Genre-Auffüllung", dj: "manuell vom DJ" })[source] || "Playlist";
+}
+
 function renderPlayer() {
   const player = state.player || {};
   const current = player.current;
@@ -455,7 +461,7 @@ function renderPlayer() {
   $("#playerIndicator").textContent = connected ? (player.playing ? "▶" : "✓") : "–";
   $("#playerTitle").textContent = player.sound_active ? "Soundboard läuft" : current?.title || "Noch kein Song gewählt";
   $("#playerArtist").textContent = player.sound_active ? "Danach wird der Song automatisch fortgesetzt" : current?.artist || (connected
-    ? "Rangliste in die Warteschlange übernehmen"
+    ? "Playlist aus Abstimmung und Fallback-Regeln erstellen"
     : "Die Verwaltung verbindet zuerst eine Bluetooth-Box");
   $("#playerCover").src = current?.thumbnail || "/pics/logo.png";
   $("#playerCover").onerror = () => { $("#playerCover").src = "/pics/logo.png"; };
@@ -473,12 +479,109 @@ function renderPlayer() {
   $("#playerRepeat").textContent = player.repeat === "one" ? "↻¹" : "↻";
 
   const queue = player.queue || [];
-  $("#queueCount").textContent = `${queue.length} Song${queue.length === 1 ? "" : "s"}`;
+  const remaining = queue.filter((_, index) => index >= player.current_index).length;
+  $("#queueCount").textContent = `${remaining} offen · ${queue.length} gesamt`;
   $("#playerQueue").innerHTML = queue.length ? queue.map((item, index) => `
-    <div class="queue-row${index === player.current_index ? " current" : ""}">
+    <div class="queue-row${index === player.current_index ? " current" : ""}${index < player.current_index ? " played" : ""}">
       <span>${index === player.current_index && player.playing ? "▶" : index + 1}</span>
-      <div><strong>${esc(item.title)}</strong><small>${esc(item.artist || "Unbekannter Interpret")}</small></div>
+      <div><strong>${esc(item.title)}</strong><small>${index < player.current_index ? "Gespielt · " : index === player.current_index ? "Jetzt · " : index === player.current_index + 1 ? "Als Nächstes · " : ""}${esc(item.artist || "Unbekannter Interpret")} · ${queueSourceLabel(item.source)}</small></div>
     </div>`).join("") : '<div class="empty">Noch keine Songs geladen.</div>';
+  renderDjQueue();
+}
+
+async function loadActivity(silent = false) {
+  try {
+    const data = await api("/api/v1/music/activity?limit=8");
+    state.activity = data.leaders || [];
+    const root = $("#activityLeaderboard");
+    root.innerHTML = state.activity.length ? state.activity.map(member => `
+      <div class="activity-row${member.rank <= 3 ? ` top-${member.rank}` : ""}">
+        <span class="activity-rank">${member.rank}</span>
+        <div><strong>${esc(member.display_name)}</strong><small>${member.voted_songs} Songs bewertet · ${member.suggestions} Vorschläge · ${member.player_actions} Player-Aktionen</small></div>
+        <b>${member.activity_score}<small> Aktivität</small></b>
+      </div>`).join("") : '<div class="empty">In dieser Abstimmung gibt es noch keine Aktivität.</div>';
+    root.title = data.formula || "";
+  } catch (error) {
+    if (!silent) toast(error.message, true);
+  }
+}
+
+function renderDjQueue() {
+  const root = $("#djQueue");
+  if (!root || !state.adminPassword) return;
+  const player = state.player || {};
+  const queue = player.queue || [];
+  root.innerHTML = queue.length ? queue.map((item, index) => `
+    <div class="dj-queue-row${index === player.current_index ? " current" : ""}${index < player.current_index ? " played" : ""}">
+      <span class="queue-position">${index + 1}</span>
+      <div><strong>${esc(item.title)}</strong><small>${esc(item.artist || "Unbekannter Interpret")} · ${queueSourceLabel(item.source)}</small></div>
+      <div class="row-actions">
+        <button class="button ghost tiny" data-dj-play="${index}" type="button">Jetzt</button>
+        <button class="button ghost tiny" data-dj-move="${index}" data-target="${index - 1}" type="button" ${index === 0 ? "disabled" : ""} aria-label="Nach oben">↑</button>
+        <button class="button ghost tiny" data-dj-move="${index}" data-target="${index + 1}" type="button" ${index === queue.length - 1 ? "disabled" : ""} aria-label="Nach unten">↓</button>
+        <button class="button ghost tiny danger" data-dj-remove="${index}" type="button">Entfernen</button>
+      </div>
+    </div>`).join("") : '<div class="empty">Noch keine Songs geladen.</div>';
+  $$('[data-dj-play]', root).forEach(button => button.addEventListener("click", () => djQueueAction("play", Number(button.dataset.djPlay))));
+  $$('[data-dj-move]', root).forEach(button => button.addEventListener("click", () => djMoveSong(Number(button.dataset.djMove), Number(button.dataset.target))));
+  $$('[data-dj-remove]', root).forEach(button => button.addEventListener("click", () => djQueueAction("remove", Number(button.dataset.djRemove))));
+}
+
+async function searchDjSongs(event) {
+  event.preventDefault();
+  const query = $("#djSearchInput").value.trim();
+  const root = $("#djSearchResults");
+  root.innerHTML = '<div class="empty">Suche läuft …</div>';
+  try {
+    const data = await api(`/api/v1/music/admin/player/search?q=${encodeURIComponent(query)}`, {}, true);
+    root.innerHTML = (data.results || []).map(song => `
+      <div class="dj-result">
+        <img src="${esc(song.thumbnail_url || "/pics/logo.png")}" alt="" loading="lazy">
+        <div><strong>${esc(song.title)}</strong><small>${esc(song.channel_title || "Unbekannter Interpret")}</small></div>
+        <div class="row-actions">
+          <button class="button primary tiny" data-dj-add="${esc(song.external_id)}" data-position="next" data-title="${esc(song.title)}" data-channel="${esc(song.channel_title || "")}" type="button">Als Nächstes</button>
+          <button class="button ghost tiny" data-dj-add="${esc(song.external_id)}" data-position="end" data-title="${esc(song.title)}" data-channel="${esc(song.channel_title || "")}" type="button">Ans Ende</button>
+        </div>
+      </div>`).join("") || '<div class="empty">Keine Treffer gefunden.</div>';
+    $$('[data-dj-add]', root).forEach(button => button.addEventListener("click", () => djAddSong(button)));
+  } catch (error) { root.innerHTML = `<div class="empty">${esc(error.message)}</div>`; }
+}
+
+async function djAddSong(button) {
+  button.disabled = true;
+  try {
+    state.player = await api("/api/v1/music/admin/player/queue", {
+      method: "POST", body: JSON.stringify({
+        external_id: button.dataset.djAdd,
+        title: button.dataset.title,
+        channel_title: button.dataset.channel,
+        position: button.dataset.position,
+      }),
+    }, true);
+    renderPlayer();
+    toast(button.dataset.position === "next" ? "Song spielt als Nächstes." : "Song wurde ans Ende gesetzt.");
+  } catch (error) { toast(error.message, true); }
+  finally { button.disabled = false; }
+}
+
+async function djMoveSong(sourceIndex, targetIndex) {
+  try {
+    state.player = await api(`/api/v1/music/admin/player/queue/${sourceIndex}`, {
+      method: "PATCH", body: JSON.stringify({ target_index: targetIndex }),
+    }, true);
+    renderPlayer();
+  } catch (error) { toast(error.message, true); }
+}
+
+async function djQueueAction(action, index) {
+  if (action === "remove" && !window.confirm("Diesen Song aus der Warteschlange entfernen?")) return;
+  try {
+    state.player = await api(`/api/v1/music/admin/player/queue/${index}${action === "play" ? "/play" : ""}`, {
+      method: action === "play" ? "POST" : "DELETE",
+    }, true);
+    renderPlayer();
+    toast(action === "play" ? "Song wird jetzt abgespielt." : "Song wurde entfernt.");
+  } catch (error) { toast(error.message, true); }
 }
 
 async function loadPlayerState(silent = false) {
@@ -521,7 +624,10 @@ async function queueRanking() {
   try {
     state.player = await api("/api/v1/music/player/queue/current", { method: "POST" });
     renderPlayer();
-    toast(`${state.player.queue.length} Songs sind im Player bereit.`);
+    const build = state.player.playlist_build;
+    toast(build
+      ? `${build.total} Songs: ${build.sources.votes} Stimmen, ${build.sources.previous} vorherige, ${build.sources.genre} ${build.genre || "Genre"}.`
+      : `${state.player.queue.length} Songs sind im Player bereit.`);
   } catch (error) { toast(error.message, true); }
   finally { button.disabled = false; }
 }
@@ -669,6 +775,7 @@ async function showAdminArea() {
     loadAdminStats(), loadAdminCycles(), loadAdminMembers(), loadVoteHistory(),
     loadSpeakers(true), loadSoundboard(),
   ]);
+  await loadPlayerState(true);
 }
 
 function adminLogout() {
@@ -691,12 +798,24 @@ async function loadAdminCycles() {
   await loadCycles();
   const root = $("#cycleList");
   root.innerHTML = state.cycles.map(cycle => `
-    <div class="admin-row">
-      <div><strong>${esc(cycle.name)}</strong><span>${cyclePhase(cycle) === "active" ? "Aktiv" : cyclePhase(cycle) === "closed" ? "Beendet" : "Geplant"} · ${formatDate(cycle.starts_at)} bis ${formatDate(cycle.closes_at)} · ${cycle.max_budget} Punkte</span></div>
-      <div class="row-actions">
-        ${cyclePhase(cycle) === "planned" && !state.activeCycle ? `<button class="button ghost small" data-cycle-action="active" data-cycle-id="${cycle.id}">Jetzt starten</button>` : ""}
-        ${cycle.status === "active" ? `<button class="button ghost small" data-cycle-action="closed" data-cycle-id="${cycle.id}">Beenden</button>` : ""}
+    <div class="cycle-admin-card">
+      <div class="admin-row">
+        <div><strong>${esc(cycle.name)}</strong><span>${cyclePhase(cycle) === "active" ? "Aktiv" : cyclePhase(cycle) === "closed" ? "Beendet" : "Geplant"} · ${formatDate(cycle.starts_at)} bis ${formatDate(cycle.closes_at)} · ${cycle.max_budget} Punkte</span><span>Playlist: ${cycle.playlist_target_count} Songs · vorherige Liste ${cycle.reuse_previous_playlist ? "an" : "aus"} · ${cycle.genre_fallback_enabled ? `mit ${esc(cycle.fallback_genre)} auffüllen` : "Genre-Auffüllung aus"}</span></div>
+        <div class="row-actions">
+          ${cyclePhase(cycle) === "planned" && !state.activeCycle ? `<button class="button ghost small" data-cycle-action="active" data-cycle-id="${cycle.id}">Jetzt starten</button>` : ""}
+          ${cycle.status === "active" ? `<button class="button ghost small" data-cycle-action="closed" data-cycle-id="${cycle.id}">Beenden</button>` : ""}
+        </div>
       </div>
+      <details class="cycle-settings">
+        <summary>Playlist-Regeln bearbeiten</summary>
+        <form class="cycle-rule-form" data-cycle-settings="${cycle.id}">
+          <label>Zielgröße<input name="playlist_target_count" type="number" min="1" max="50" value="${cycle.playlist_target_count}" required></label>
+          <label>Auffüll-Genre<input name="fallback_genre" maxlength="80" value="${esc(cycle.fallback_genre || "Party")}"></label>
+          <label class="check-control"><input name="reuse_previous_playlist" type="checkbox" ${cycle.reuse_previous_playlist ? "checked" : ""}><span>Vorherige Playlist nutzen</span></label>
+          <label class="check-control"><input name="genre_fallback_enabled" type="checkbox" ${cycle.genre_fallback_enabled ? "checked" : ""}><span>Mit Genre-Hits auffüllen</span></label>
+          <button class="button primary small" type="submit">Regeln speichern</button>
+        </form>
+      </details>
     </div>`).join("") || '<div class="empty">Noch keine Abstimmung vorhanden.</div>';
   $$('[data-cycle-action]', root).forEach(button => button.addEventListener("click", async () => {
     try {
@@ -706,6 +825,22 @@ async function loadAdminCycles() {
       await loadAdminCycles();
       await refreshVotingState();
       toast("Abstimmung aktualisiert.");
+    } catch (error) { toast(error.message, true); }
+  }));
+  $$('[data-cycle-settings]', root).forEach(form => form.addEventListener("submit", async event => {
+    event.preventDefault();
+    const fields = new FormData(form);
+    try {
+      await api(`/api/v1/music/admin/cycles/${form.dataset.cycleSettings}`, {
+        method: "PATCH", ...adminHeadersBody({
+          playlist_target_count: Number(fields.get("playlist_target_count")),
+          fallback_genre: String(fields.get("fallback_genre") || "").trim(),
+          reuse_previous_playlist: fields.has("reuse_previous_playlist"),
+          genre_fallback_enabled: fields.has("genre_fallback_enabled"),
+        }),
+      }, true);
+      await loadAdminCycles();
+      toast("Playlist-Regeln gespeichert.");
     } catch (error) { toast(error.message, true); }
   }));
 }
@@ -724,10 +859,18 @@ async function createCycle(event) {
         starts_at: startsAt.toISOString(),
         closes_at: closesAt.toISOString(),
         max_budget: Number($("#cycleBudget").value),
+        playlist_target_count: Number($("#cyclePlaylistTarget").value),
+        fallback_genre: $("#cycleFallbackGenre").value.trim(),
+        reuse_previous_playlist: $("#cycleReusePrevious").checked,
+        genre_fallback_enabled: $("#cycleUseGenre").checked,
       }),
     }, true);
     event.target.reset();
     $("#cycleBudget").value = "10";
+    $("#cyclePlaylistTarget").value = "20";
+    $("#cycleFallbackGenre").value = "Party";
+    $("#cycleReusePrevious").checked = true;
+    $("#cycleUseGenre").checked = true;
     setCycleFormDefaults();
     await Promise.all([loadAdminCycles(), loadAdminStats()]);
     await refreshVotingState();
@@ -818,6 +961,9 @@ function bindEvents() {
   $("#playerVolume").addEventListener("change", event => playerCommand("volume", Number(event.target.value)));
   $("#scanSpeakers").addEventListener("click", scanSpeakers);
   $("#soundUploadForm").addEventListener("submit", uploadSound);
+  $("#djSearchForm").addEventListener("submit", searchDjSongs);
+  $("#refreshDjQueue").addEventListener("click", () => loadPlayerState());
+  $("#refreshActivity").addEventListener("click", () => loadActivity());
   window.addEventListener("online", () => { $("#connectionState").innerHTML = "<i></i> Lokal bereit"; });
   window.addEventListener("offline", () => { $("#connectionState").innerHTML = "<i></i> Offline im Kassen-WLAN"; });
 }
@@ -825,7 +971,7 @@ function bindEvents() {
 async function start() {
   bindEvents();
   try {
-    await Promise.all([loadCycles(), loadMembers(), loadPlayerState(true), loadSoundboard()]);
+    await Promise.all([loadCycles(), loadMembers(), loadPlayerState(true), loadSoundboard(), loadActivity(true)]);
     await restoreMember();
     renderSession();
     await loadPlaylist();
@@ -837,6 +983,7 @@ async function start() {
 start();
 setInterval(updateCountdown, 1000);
 setInterval(() => loadPlaylist().catch(() => {}), 30000);
+setInterval(() => loadActivity(true).catch(() => {}), 30000);
 setInterval(() => {
   if (!document.hidden) loadPlayerState(true).catch(() => {});
 }, 3000);

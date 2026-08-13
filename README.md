@@ -21,6 +21,11 @@ Bestehende Mitglieder ohne PIN können beim ersten Login nach dem Update einmali
 
 Lokales Music-Voting-System für den Raspberry Pi. Webanwendung und PostgreSQL laufen getrennt in Docker-Containern. Die Datenbank wird nicht nach außen veröffentlicht.
 
+Eine transparente Aktivitätsliste zeigt Beteiligung an Voting, Vorschlägen und
+Player-Bedienung. Im geschützten DJ-Modus kann die Verwaltung Songs suchen,
+direkt einreihen, verschieben, sofort abspielen und entfernen. Die genaue Bedienung
+steht in [DJ, Warteschlange und Aktivitätsliste](docs/DJ-UND-AKTIVITAET.md).
+
 ## Voraussetzungen
 
 - Docker Engine mit Compose-Plugin
