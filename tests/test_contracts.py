@@ -218,6 +218,8 @@ class OfflineFrontendContractTests(unittest.TestCase):
         self.assertIn("music_backups:/backups", compose)
         self.assertIn("pg_dump --clean", backup)
         self.assertIn(".clubiq-backup-target", backup)
+        self.assertNotIn("zgrep", backup)
+        self.assertIn('gzip -dc "$archive" | grep -q', backup)
 
     def test_main_page_links_companion_views_and_installation(self):
         html_source = (ROOT / "index.html").read_text(encoding="utf-8")

@@ -9,7 +9,7 @@ fi
 archive="$1"
 [ -f "$archive" ] || { echo "Sicherung nicht gefunden: $archive" >&2; exit 2; }
 gzip -t "$archive"
-zgrep -q 'CREATE TABLE' "$archive"
+gzip -dc "$archive" | grep -q 'CREATE TABLE'
 
 printf 'ACHTUNG: Die aktive Music-Voting-Datenbank wird ersetzt. RESTORE eingeben: '
 read -r confirmation

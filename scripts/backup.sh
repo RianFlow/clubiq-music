@@ -14,7 +14,7 @@ docker compose exec -T db sh -ec \
   | gzip -9 > "$target/database.sql.gz"
 
 gzip -t "$target/database.sql.gz"
-zgrep -q 'CREATE TABLE' "$target/database.sql.gz"
+gzip -dc "$target/database.sql.gz" | grep -q 'CREATE TABLE'
 sha256sum "$target/database.sql.gz" > "$target/SHA256SUMS"
 sha256sum -c "$target/SHA256SUMS"
 

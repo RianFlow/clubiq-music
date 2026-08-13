@@ -35,7 +35,7 @@ while true; do
       && gzip -9 -c "$sql_temp" > "$archive" \
       && rm -f "$sql_temp" \
       && gzip -t "$archive" \
-      && zgrep -q 'CREATE TABLE' "$archive"; then
+      && gzip -dc "$archive" | grep -q 'CREATE TABLE'; then
     sha256sum "$archive" > "${archive}.sha256"
     size="$(wc -c < "$archive" | tr -d ' ')"
     if [ -f /backups/usb/.clubiq-backup-target ]; then
