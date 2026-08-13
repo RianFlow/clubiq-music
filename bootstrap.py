@@ -84,11 +84,32 @@ CREATE TABLE IF NOT EXISTS music_provider_search_cache (
     hit_count INTEGER DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS music_soundboard_items (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(80) NOT NULL,
+    media_type VARCHAR(80) NOT NULL,
+    audio_data BYTEA NOT NULL,
+    color VARCHAR(20) NOT NULL DEFAULT 'green',
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS music_player_audit (
+    id BIGSERIAL PRIMARY KEY,
+    member_id VARCHAR(100),
+    action VARCHAR(40) NOT NULL,
+    detail_json JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_search_cache_lookup
 ON music_provider_search_cache (provider, normalized_query, market, expires_at);
 
 CREATE INDEX IF NOT EXISTS idx_music_member_sessions_token
 ON music_member_sessions (token_hash, expires_at);
+
+CREATE INDEX IF NOT EXISTS idx_music_player_audit_created
+ON music_player_audit (created_at DESC);
 
 ALTER TABLE club_members ADD COLUMN IF NOT EXISTS pin_hash TEXT;
 ALTER TABLE club_members ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;

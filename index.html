@@ -50,6 +50,7 @@
 
     <nav class="tabs" aria-label="Musikbereiche">
       <button class="tab active" data-tab="voting" type="button">Abstimmen</button>
+      <button class="tab" data-tab="player" type="button">Player <span id="playerIndicator">–</span></button>
       <button class="tab" data-tab="suggest" type="button">Song vorschlagen</button>
       <button class="tab" data-tab="mine" type="button">Meine Auswahl <span id="mineCount">0</span></button>
     </nav>
@@ -60,6 +61,52 @@
         <div class="list-actions"><span id="playlistSummary" class="muted"></span><button id="refreshPlaylist" class="button ghost small" type="button">Aktualisieren</button></div>
       </div>
       <div id="playlist" class="song-list" aria-live="polite"></div>
+    </section>
+
+    <section id="tab-player" class="tab-panel">
+      <div class="section-head">
+        <div><p class="eyebrow">Zentrale Wiedergabe</p><h2>ClubIQ Player</h2></div>
+        <span id="speakerBadge" class="speaker-badge offline">Keine Box verbunden</span>
+      </div>
+      <p class="muted player-network-hint">YouTube-Songs benötigen Internet. Soundboard-Clips laufen lokal vom Raspberry.</p>
+      <div class="player-layout">
+        <article class="player-console">
+          <div class="now-playing">
+            <img id="playerCover" class="player-cover" src="/pics/logo.png" alt="">
+            <div><p class="eyebrow">Jetzt läuft</p><h3 id="playerTitle">Noch kein Song gewählt</h3><p id="playerArtist" class="muted">Rangliste in die Warteschlange übernehmen</p></div>
+          </div>
+          <input id="playerProgress" class="player-progress" type="range" min="0" max="1" value="0" aria-label="Wiedergabeposition">
+          <div class="time-row"><span id="playerPosition">0:00</span><span id="playerDuration">0:00</span></div>
+          <div id="playerControls" class="player-controls" data-member-only hidden>
+            <button class="player-icon" data-player-action="shuffle" type="button" title="Zufällige Reihenfolge">⇄</button>
+            <button class="player-icon" data-player-action="previous" type="button" title="Vorheriger Song">‹</button>
+            <button id="playerPlay" class="player-icon primary" data-player-action="play" type="button" title="Wiedergabe">▶</button>
+            <button class="player-icon" data-player-action="next" type="button" title="Nächster Song">›</button>
+            <button id="playerRepeat" class="player-icon" data-player-action="repeat" type="button" title="Wiederholen">↻</button>
+          </div>
+          <div class="volume-row">
+            <button id="playerMute" class="player-icon compact" type="button" data-player-action="mute" title="Stumm">🔊</button>
+            <input id="playerVolume" type="range" min="0" max="100" value="70" aria-label="Lautstärke">
+            <strong id="playerVolumeValue">70 %</strong>
+          </div>
+          <div id="playerLoginGate" class="player-login" data-guest-only>
+            <span>Zum Steuern des Players bitte einmal anmelden.</span>
+            <button class="button primary small" data-open-member type="button">Anmelden</button>
+          </div>
+          <div class="player-actions" data-member-only hidden>
+            <button id="queueFromRanking" class="button primary" type="button">Rangliste abspielen</button>
+            <button id="refreshPlayer" class="button ghost" type="button">Status aktualisieren</button>
+          </div>
+        </article>
+        <aside class="queue-panel">
+          <div class="section-head compact"><div><p class="eyebrow">Als Nächstes</p><h3>Warteschlange</h3></div><span id="queueCount" class="muted">0 Songs</span></div>
+          <div id="playerQueue" class="player-queue"><div class="empty">Noch keine Songs geladen.</div></div>
+        </aside>
+      </div>
+      <section class="soundboard-panel">
+        <div class="section-head compact"><div><p class="eyebrow">Direkte Sounds</p><h3>Soundboard</h3></div></div>
+        <div id="soundboard" class="soundboard-grid"><div class="empty">Noch keine Sounds eingerichtet.</div></div>
+      </section>
     </section>
 
     <section id="tab-suggest" class="tab-panel">
@@ -139,6 +186,7 @@
           <button class="subtab active" data-admin-tab="cycles" type="button">Abstimmungen</button>
           <button class="subtab" data-admin-tab="members" type="button">Mitglieder</button>
           <button class="subtab" data-admin-tab="history" type="button">Aktuelle Stimmen</button>
+          <button class="subtab" data-admin-tab="player" type="button">Player &amp; Box</button>
         </nav>
 
         <section id="admin-cycles" class="admin-panel active">
@@ -165,6 +213,26 @@
 
         <section id="admin-history" class="admin-panel">
           <div id="voteHistory" class="admin-list"></div>
+        </section>
+
+        <section id="admin-player" class="admin-panel">
+          <div class="panel-box">
+            <div class="section-head compact">
+              <div><p class="eyebrow">Bluetooth-Ausgabe</p><h3>Musikbox verbinden</h3></div>
+              <button id="scanSpeakers" class="button primary" type="button">Boxen suchen</button>
+            </div>
+            <p class="muted">Box in den Kopplungsmodus setzen und anschließend suchen. ClubIQ merkt sich die Box und verbindet sie nach Neustarts automatisch wieder.</p>
+            <div id="speakerList" class="admin-list player-device-list"></div>
+          </div>
+          <form id="soundUploadForm" class="panel-box sound-upload">
+            <h3>Soundboard-Sound hinzufügen</h3>
+            <label>Name<input id="soundName" name="name" maxlength="80" required placeholder="z. B. Applaus"></label>
+            <label>Farbe<select id="soundColor" name="color"><option value="green">Grün</option><option value="gold">Gold</option><option value="blue">Blau</option><option value="red">Rot</option></select></label>
+            <label>Audiodatei<input id="soundFile" name="audio" type="file" accept="audio/mpeg,audio/ogg,audio/wav,audio/webm,audio/mp4" required></label>
+            <button class="button primary" type="submit">Sound speichern</button>
+            <small>MP3, WAV, OGG, M4A oder WebM · maximal 3 MB.</small>
+          </form>
+          <div id="adminSoundboard" class="admin-list"></div>
         </section>
       </div>
     </div>
