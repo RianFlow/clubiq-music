@@ -16,6 +16,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - name: Python-Syntax prüfen
         run: |
           python - <<'PY'
@@ -24,9 +27,13 @@ jobs:
           for path in Path('.').glob('*.py'):
               ast.parse(path.read_text(encoding='utf-8-sig'), filename=str(path))
           PY
+      - name: Browser-Code prüfen
+        run: node --check static/app.js
       - name: Compose-Konfiguration prüfen
         run: |
           cp .env.example .env
           docker compose config --quiet
       - name: Web-Image bauen
         run: docker compose build web
+      - name: Sicherheits- und UI-Verträge prüfen
+        run: docker compose run --rm --no-deps web python -m unittest discover -s tests

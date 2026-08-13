@@ -1,523 +1,148 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="de">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clubiq Music Voting</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        .glass { background: rgba(31, 41, 55, 0.8); backdrop-filter: blur(10px); }
-        .gradient-text { background: linear-gradient(to right, #818cf8, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#163c36">
+  <title>ClubIQ Music</title>
+  <link rel="icon" href="/pics/logo.png">
+  <link rel="stylesheet" href="/static/app.css">
+  <script defer src="/static/app.js"></script>
 </head>
-<body class="bg-slate-950 text-gray-200 min-h-screen">
-    <div class="max-w-4xl mx-auto p-4 md:p-8">
-        <header class="flex justify-between items-center mb-8 border-b border-gray-800 pb-6">
-            <div class="flex items-center gap-4">
-                <img src="/pics/logo.png" alt="Clubiq Logo" class="h-12 w-12 object-contain bg-white/5 rounded-lg border border-gray-700 p-1">
-                <div>
-                    <h1 class="text-3xl font-extrabold gradient-text">CLUBIQ</h1>
-                    <p class="text-sm text-gray-500 uppercase tracking-widest">Music Voting System</p>
-                </div>
-            </div>
-            <div id="user-info" class="hidden text-right">
-                <p class="text-indigo-400 font-bold" id="current-username"></p>
-                <div class="mt-1">
-                    <span class="text-xs bg-indigo-900/50 text-indigo-300 px-3 py-1 rounded-full border border-indigo-500/30">Budget: <span id="remaining-budget">10</span>/10</span>
-                    <button onclick="logout()" class="ml-2 text-xs text-red-400 hover:underline">Abmelden</button>
-                </div>
-            </div>
-        </header>
-
-        <div id="login-section" class="max-w-md mx-auto glass p-8 rounded-2xl shadow-2xl border border-gray-800">
-            <h2 class="text-xl font-bold mb-6 text-white text-center">Mitglieder-Anmeldung</h2>
-            <input type="text" id="login-name" placeholder="Dein Name..." class="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 mb-4 text-white focus:ring-2 focus:ring-indigo-500 outline-none">
-            <button onclick="login()" class="w-full bg-indigo-600 hover:bg-indigo-500 py-4 rounded-xl font-bold transition">Jetzt voten</button>
-        </div>
-
-        <div id="dashboard-section" class="hidden space-y-8">
-            <div id="playlist-container" class="grid gap-4"></div>
-
-            <div class="glass p-6 rounded-2xl border border-gray-800">
-                <h3 class="text-lg font-bold mb-4 text-gray-300">Song vorschlagen</h3>
-                <div class="flex gap-2">
-                    <input type="text" id="search-query" placeholder="YouTube Songname..." class="flex-1 bg-gray-900 border border-gray-700 rounded-xl p-3 text-white">
-                    <button onclick="searchTracks()" class="bg-emerald-600 hover:bg-emerald-500 px-6 rounded-xl font-bold">Suchen</button>
-                </div>
-                <div id="search-results" class="mt-4 space-y-2"></div>
-            </div>
-        </div>
-
-        <div class="mt-12 flex justify-center gap-6 text-center">
-            <button onclick="toggleMod()" class="text-xs text-emerald-500 hover:text-emerald-400 transition font-semibold">Moderator-Pult</button>
-            <button onclick="toggleAdmin()" class="text-xs text-gray-600 hover:text-gray-400 transition">Admin-Modus</button>
-        </div>
-        
-        <div id="mod-section" class="hidden mt-6 glass p-6 rounded-2xl border border-emerald-500/30 space-y-6">
-            <h2 class="text-2xl font-bold text-emerald-400 border-b border-emerald-500/20 pb-4">DJ & Moderator Pult</h2>
-            <div id="mod-locked" class="bg-gray-900 p-4 rounded-xl border border-gray-800 space-y-3">
-                <p class="text-sm text-gray-400">Das Moderator-Pult ist geschützt. Verwende das Verwaltungskennwort.</p>
-                <div class="flex gap-2">
-                    <input type="password" id="mod-pass" placeholder="Verwaltungskennwort" class="flex-1 bg-black border border-gray-700 rounded-xl p-2.5 text-white text-sm">
-                    <button onclick="unlockModerator()" class="bg-emerald-600 hover:bg-emerald-500 px-4 rounded-xl font-bold text-sm">Entsperren</button>
-                </div>
-            </div>
-
-            <div id="mod-content" class="hidden space-y-6">
-            <div class="bg-gray-900 p-4 rounded-xl border border-gray-800">
-                <h3 class="font-bold text-gray-300">Wiedergabe</h3>
-                <p class="mt-2 text-sm text-gray-500">Die Musik wird auf einem getrennt eingerichteten Abspielgerät wiedergegeben. Diese Voting-App steuert keine Bluetooth-Geräte des Raspberry.</p>
-            </div>
-
-            <div class="bg-gray-900 p-4 rounded-xl border border-gray-800 space-y-4">
-                <h3 class="font-bold text-gray-300">Soundboard (Live-Effekte)</h3>
-                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                    <button onclick="playSound('airhorn')" class="bg-purple-900/60 hover:bg-purple-700 p-3 rounded-xl font-bold text-xs border border-purple-500/30 transition active:scale-95">📢 Airhorn</button>
-                    <button onclick="playSound('rimshot')" class="bg-purple-900/60 hover:bg-purple-700 p-3 rounded-xl font-bold text-xs border border-purple-500/30 transition active:scale-95">🥁 Ba-Dum-Tss</button>
-                    <button onclick="playSound('applause')" class="bg-purple-900/60 hover:bg-purple-700 p-3 rounded-xl font-bold text-xs border border-purple-500/30 transition active:scale-95">👏 Applaus</button>
-                    <button onclick="playSound('bruh')" class="bg-purple-900/60 hover:bg-purple-700 p-3 rounded-xl font-bold text-xs border border-purple-500/30 transition active:scale-95">🗿 Bruh</button>
-                    <button onclick="playSound('fail')" class="bg-purple-900/60 hover:bg-purple-700 p-3 rounded-xl font-bold text-xs border border-purple-500/30 transition active:scale-95">🎺 Sad Trombone</button>
-                    <button onclick="playSound('laser')" class="bg-purple-900/60 hover:bg-purple-700 p-3 rounded-xl font-bold text-xs border border-purple-500/30 transition active:scale-95">⚡ Laser</button>
-                    <button onclick="playSound('tada')" class="bg-purple-900/60 hover:bg-purple-700 p-3 rounded-xl font-bold text-xs border border-purple-500/30 transition active:scale-95">🎉 Tadaa</button>
-                    <button onclick="playSound('gong')" class="bg-purple-900/60 hover:bg-purple-700 p-3 rounded-xl font-bold text-xs border border-purple-500/30 transition active:scale-95">🔔 Gong</button>
-                    <button onclick="playSound('whistle')" class="bg-purple-900/60 hover:bg-purple-700 p-3 rounded-xl font-bold text-xs border border-purple-500/30 transition active:scale-95">🗣️ Trillerpfeife</button>
-                    <button onclick="playSound('boo')" class="bg-purple-900/60 hover:bg-purple-700 p-3 rounded-xl font-bold text-xs border border-purple-500/30 transition active:scale-95">boo Boo!</button>
-                    <button onclick="playSound('wow')" class="bg-purple-900/60 hover:bg-purple-700 p-3 rounded-xl font-bold text-xs border border-purple-500/30 transition active:scale-95">✨ Wow</button>
-                    <button onclick="playSound('cash')" class="bg-purple-900/60 hover:bg-purple-700 p-3 rounded-xl font-bold text-xs border border-purple-500/30 transition active:scale-95">💰 Kasse</button>
-                </div>
-            </div>
-
-            <div class="bg-gray-900 p-4 rounded-xl border border-gray-800 space-y-4">
-                <h3 class="font-bold text-gray-300">Sofort-Suche (Song direkt einreihen)</h3>
-                <div class="flex gap-2">
-                    <input type="text" id="mod-search-query" placeholder="Songtitel eingeben..." class="flex-1 bg-black border border-gray-700 rounded-xl p-2.5 text-white text-sm">
-                    <button onclick="modSearchTracks()" class="bg-emerald-600 hover:bg-emerald-500 px-4 rounded-xl font-bold text-sm">Suchen</button>
-                </div>
-                <div id="mod-search-results" class="space-y-2 mt-2"></div>
-            </div>
-
-            <div class="bg-gray-900 p-4 rounded-xl border border-gray-800 space-y-4">
-                <div class="flex justify-between items-center">
-                    <h3 class="font-bold text-gray-300">Aktuelle Playlist / Queue</h3>
-                    <button onclick="loadModPlaylist()" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded">Aktualisieren</button>
-                </div>
-                <div id="mod-playlist-container" class="space-y-2 max-h-60 overflow-y-auto"></div>
-            </div>
-            </div>
-        </div>
-
-        <div id="admin-section" class="hidden mt-6 glass p-6 rounded-2xl border border-red-900/30">
-            <h2 class="text-2xl font-bold text-red-400 mb-6 border-b border-red-500/20 pb-4">Admin Kontrollzentrum</h2>
-            <input type="password" id="admin-pass" placeholder="Admin Passwort" class="bg-gray-900 p-2 rounded mb-4 w-full border border-gray-700 text-white">
-            <button onclick="loadAdminCycles()" class="bg-red-600 text-white px-4 py-2 rounded mb-6 font-bold">Admin-Bereich entsperren</button>
-            
-            <div id="admin-content-area" class="hidden space-y-6">
-                <div class="flex gap-2 border-b border-gray-800 pb-4">
-                    <button onclick="switchAdminTab('cycles')" class="bg-gray-800 hover:bg-gray-700 px-4 py-2 rounded text-sm font-semibold">Zyklen</button>
-                    <button onclick="switchAdminTab('songs')" class="bg-gray-800 hover:bg-gray-700 px-4 py-2 rounded text-sm font-semibold">Songs</button>
-                    <button onclick="switchAdminTab('logs')" class="bg-gray-800 hover:bg-gray-700 px-4 py-2 rounded text-sm font-semibold">Audit Log</button>
-                </div>
-
-                <div id="admin-view-cycles" class="admin-tab space-y-4">
-                    <div class="flex gap-2">
-                        <input type="text" id="new-cycle-name" placeholder="Name neuer Zyklus..." class="flex-1 bg-gray-900 border border-gray-700 p-2 rounded text-white">
-                        <button onclick="createCycle()" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded font-bold">Erstellen</button>
-                    </div>
-                    <div id="admin-cycles-list" class="space-y-2 mt-4"></div>
-                </div>
-
-                <div id="admin-view-songs" class="admin-tab hidden space-y-2">
-                    <div id="admin-songs-list" class="space-y-2"></div>
-                </div>
-
-                <div id="admin-view-logs" class="admin-tab hidden space-y-2">
-                    <div id="admin-logs-list" class="text-xs font-mono bg-black p-4 rounded max-h-60 overflow-y-auto space-y-1"></div>
-                </div>
-
-            </div>
-        </div>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="ClubIQ Music Startseite">
+      <img src="/pics/logo.png" alt="">
+      <span><strong>ClubIQ Music</strong><small>Gemeinsam die Playlist bestimmen.</small></span>
+    </a>
+    <div class="top-actions">
+      <span id="connectionState" class="status-pill"><i></i> Lokal bereit</span>
+      <button id="adminOpen" class="button ghost" type="button">Verwaltung</button>
+      <button id="memberOpen" class="button primary" type="button">Anmelden</button>
     </div>
+  </header>
 
-    <script>
-        const API_URL = "/api/v1/music";
-        let activeCycleId = null;
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Aktuelle Abstimmung</p>
+        <h1 id="cycleName">Musikwünsche</h1>
+        <p id="cycleMeta" class="muted">Abstimmung wird geladen …</p>
+      </div>
+      <div class="budget-card" aria-live="polite">
+        <span>Noch verfügbar</span>
+        <strong><b id="budgetRemaining">–</b> Punkte</strong>
+        <div class="budget-track"><i id="budgetBar"></i></div>
+        <small id="budgetMeta">Zum Abstimmen anmelden</small>
+      </div>
+    </section>
 
-        function adminHeaders(extra = {}) {
-            return {
-                ...extra,
-                "X-Admin-Password": document.getElementById("admin-pass").value
-            };
-        }
+    <section id="loginHint" class="notice">
+      <div><strong>Wer stimmt ab?</strong><span>Melde dich mit deinem Namen und deiner persönlichen PIN an.</span></div>
+      <button class="button primary" data-open-member type="button">Jetzt anmelden</button>
+    </section>
 
-        function moderatorHeaders(extra = {}) {
-            return {
-                ...extra,
-                "X-Admin-Password": document.getElementById("mod-pass").value
-            };
-        }
+    <nav class="tabs" aria-label="Musikbereiche">
+      <button class="tab active" data-tab="voting" type="button">Abstimmen</button>
+      <button class="tab" data-tab="suggest" type="button">Song vorschlagen</button>
+      <button class="tab" data-tab="mine" type="button">Meine Auswahl <span id="mineCount">0</span></button>
+    </nav>
 
-        function errorMessage(data, fallback = "Die Aktion ist fehlgeschlagen.") {
-            return data?.detail || data?.error || fallback;
-        }
+    <section id="tab-voting" class="tab-panel active">
+      <div class="section-head">
+        <div><p class="eyebrow">Rangliste</p><h2>Eure Favoriten</h2></div>
+        <button id="refreshPlaylist" class="button ghost small" type="button">Aktualisieren</button>
+      </div>
+      <div id="playlist" class="song-list" aria-live="polite"></div>
+    </section>
 
-        function escapeHtml(value) {
-            return String(value ?? "").replace(/[&<>'"]/g, char => ({
-                "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"
-            })[char]);
-        }
+    <section id="tab-suggest" class="tab-panel">
+      <div class="section-head">
+        <div><p class="eyebrow">Neuer Musikwunsch</p><h2>Song vorschlagen</h2></div>
+      </div>
+      <form id="searchForm" class="search-box">
+        <label for="searchInput">Titel oder Interpret</label>
+        <div><input id="searchInput" minlength="3" maxlength="100" placeholder="z. B. Queen Don't Stop Me Now" autocomplete="off"><button class="button primary" type="submit">Suchen</button></div>
+        <small>Die Suche benötigt Internet. Abstimmen und die vorhandene Liste funktionieren lokal.</small>
+      </form>
+      <div id="searchResults" class="song-list"></div>
+    </section>
 
-        function encodedArgument(value) {
-            return encodeURIComponent(String(value ?? "")).replace(/'/g, "%27");
-        }
+    <section id="tab-mine" class="tab-panel">
+      <div class="section-head">
+        <div><p class="eyebrow">Dein Überblick</p><h2>Meine vergebenen Punkte</h2></div>
+      </div>
+      <div id="myVotes" class="song-list"></div>
+    </section>
+  </main>
 
-        async function refreshActiveCycle() {
-            const response = await fetch(`${API_URL}/cycles`);
-            const data = await response.json();
-            activeCycleId = data.cycles?.find(cycle => cycle.status === "active")?.id || null;
-            return activeCycleId;
-        }
+  <dialog id="memberDialog" class="modal">
+    <form id="loginForm" class="modal-card">
+      <button class="icon-button close" type="button" data-close aria-label="Schließen">×</button>
+      <p class="eyebrow">Persönliche Abstimmung</p>
+      <h2>Mitglied anmelden</h2>
+      <p class="muted">Wähle deinen Namen und gib deine persönliche PIN ein.</p>
+      <label for="memberName">Name</label>
+      <input id="memberName" list="memberNames" autocomplete="name" placeholder="Name auswählen oder eingeben" required>
+      <datalist id="memberNames"></datalist>
+      <label for="memberPin">PIN</label>
+      <input id="memberPin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="current-password" placeholder="4 bis 8 Ziffern" required>
+      <p id="loginError" class="form-error" hidden></p>
+      <button class="button primary wide" type="submit">Anmelden</button>
+      <small>Beim ersten Login nach der Umstellung wird diese PIN einmalig für deinen bestehenden Namen gespeichert.</small>
+    </form>
+  </dialog>
 
-        window.onload = () => {
-            if (localStorage.getItem("club_member_id")) showDashboard();
-        };
+  <dialog id="adminDialog" class="modal wide-modal">
+    <div class="modal-card admin-card">
+      <button class="icon-button close" type="button" data-close aria-label="Schließen">×</button>
+      <div class="section-head admin-title">
+        <div><p class="eyebrow">Geschützter Bereich</p><h2>Verwaltung</h2></div>
+        <button id="adminLogout" class="button ghost small" type="button" hidden>Abmelden</button>
+      </div>
 
-        function showDashboard() {
-            document.getElementById("login-section").classList.add("hidden");
-            document.getElementById("dashboard-section").classList.remove("hidden");
-            document.getElementById("user-info").classList.remove("hidden");
-            document.getElementById("current-username").innerText = localStorage.getItem("club_member_name");
-            loadPlaylist();
-        }
+      <form id="adminLogin" class="compact-form">
+        <label for="adminPassword">Verwaltungskennwort</label>
+        <div><input id="adminPassword" type="password" autocomplete="current-password" required><button class="button primary" type="submit">Öffnen</button></div>
+        <p id="adminLoginError" class="form-error" hidden></p>
+      </form>
 
-        async function login() {
-            const name = document.getElementById("login-name").value.trim();
-            if (!name) return;
-            const res = await fetch(`${API_URL}/auth/login`, {
-                method: "POST", headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({ member_id: name, display_name: name })
-            });
-            const data = await res.json();
-            if(data.status === "success") {
-                localStorage.setItem("club_member_id", data.member.member_id);
-                localStorage.setItem("club_member_name", data.member.display_name);
-                document.getElementById("remaining-budget").innerText = data.budget.remaining;
-                activeCycleId = data.active_cycle_id;
-                showDashboard();
-            } else alert(errorMessage(data, "Anmeldung fehlgeschlagen."));
-        }
+      <div id="adminArea" hidden>
+        <div id="adminStats" class="stats"></div>
+        <nav class="subtabs">
+          <button class="subtab active" data-admin-tab="cycles" type="button">Abstimmungen</button>
+          <button class="subtab" data-admin-tab="members" type="button">Mitglieder</button>
+          <button class="subtab" data-admin-tab="history" type="button">Aktuelle Stimmen</button>
+        </nav>
 
-        function logout() {
-            localStorage.clear();
-            location.reload();
-        }
+        <section id="admin-cycles" class="admin-panel active">
+          <form id="cycleForm" class="form-grid panel-box">
+            <h3>Neue Abstimmung</h3>
+            <label>Name<input id="cycleTitle" required maxlength="100" placeholder="Musik für Vereinsabend"></label>
+            <label>Laufzeit in Tagen<input id="cycleDays" type="number" min="1" max="90" value="7" required></label>
+            <label>Punkte je Mitglied<input id="cycleBudget" type="number" min="1" max="100" value="10" required></label>
+            <button class="button primary" type="submit">Abstimmung starten</button>
+          </form>
+          <div id="cycleList" class="admin-list"></div>
+        </section>
 
-        async function loadPlaylist() {
-            if (!activeCycleId) {
-                await refreshActiveCycle();
-            }
-            const container = document.getElementById("playlist-container");
-            if (!activeCycleId) {
-                container.innerHTML = '<p class="text-gray-500 text-center py-4">Aktuell ist kein Voting geöffnet.</p>';
-                return;
-            }
-            const res = await fetch(`${API_URL}/cycles/${activeCycleId}/playlist`);
-            const data = await res.json();
-            if (!data.playlist || data.playlist.length === 0) {
-                container.innerHTML = '<p class="text-gray-500 text-center py-4">Noch keine Songs vorhanden. Schlage jetzt einen vor!</p>';
-                return;
-            }
-            container.innerHTML = data.playlist.map(s => `
-                <div class="glass p-4 rounded-xl flex items-center justify-between border border-gray-800">
-                    <div>
-                        <span class="text-xl font-black text-indigo-500">#${s.rank}</span>
-                        <span class="ml-3 font-semibold">${escapeHtml(s.title)}</span>
-                        <p class="text-xs text-gray-500 ml-9">${escapeHtml(s.channel_title)}</p>
-                    </div>
-                    <div class="flex items-center gap-4">
-                        <span class="text-emerald-400 font-bold">${s.total_points} Pkt</span>
-                        <div class="flex gap-1">
-                            <input type="number" id="pts-${s.suggestion_id}" value="1" min="1" max="10" class="w-12 bg-gray-900 border border-gray-700 rounded p-1 text-center text-white">
-                            <button onclick="vote(${s.suggestion_id})" class="bg-indigo-600 hover:bg-indigo-500 px-3 py-1 rounded text-xs font-bold">+</button>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
-        }
+        <section id="admin-members" class="admin-panel">
+          <form id="memberCreateForm" class="form-grid panel-box">
+            <h3>Mitglied anlegen</h3>
+            <label>Name<input id="newMemberName" required maxlength="100"></label>
+            <label>Start-PIN<input id="newMemberPin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" required></label>
+            <button class="button primary" type="submit">Mitglied speichern</button>
+          </form>
+          <div id="memberList" class="admin-list"></div>
+        </section>
 
-        async function vote(id) {
-            const pts = document.getElementById(`pts-${id}`).value;
-            const res = await fetch(`${API_URL}/cycles/${activeCycleId}/votes`, {
-                method: "POST", headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({ member_id: localStorage.getItem("club_member_id"), suggestion_id: id, points: parseInt(pts) })
-            });
-            const data = await res.json();
-            if(!res.ok) alert(errorMessage(data));
-            else {
-                document.getElementById("remaining-budget").innerText = data.budget_remaining;
-                loadPlaylist();
-            }
-        }
+        <section id="admin-history" class="admin-panel">
+          <div id="voteHistory" class="admin-list"></div>
+        </section>
+      </div>
+    </div>
+  </dialog>
 
-        async function searchTracks() {
-            const query = document.getElementById("search-query").value.trim();
-            if (query.length < 3) return alert("Suchbegriff muss mindestens 3 Zeichen lang sein.");
-            
-            const res = await fetch(`${API_URL}/provider/search?q=${encodeURIComponent(query)}`);
-            const data = await res.json();
-            const container = document.getElementById("search-results");
-            
-            if(!res.ok) {
-                container.textContent = errorMessage(data);
-                return;
-            }
-
-            container.innerHTML = data.results.map(r => `
-                <div class="bg-gray-900 p-3 rounded-xl flex items-center justify-between border border-gray-800">
-                    <div>
-                        <p class="font-semibold text-sm text-white">${escapeHtml(r.title)}</p>
-                        <p class="text-xs text-gray-400">${escapeHtml(r.channel_title)}</p>
-                    </div>
-                    <button onclick="suggestTrack(decodeURIComponent('${encodedArgument(r.external_id)}'), decodeURIComponent('${encodedArgument(r.title)}'), decodeURIComponent('${encodedArgument(r.channel_title)}'), ${Number(r.duration_ms) || 0})" class="bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded-lg text-xs font-bold text-white">Vorschlagen</button>
-                </div>
-            `).join('');
-        }
-
-        async function suggestTrack(externalId, title, channelTitle, durationMs) {
-            const res = await fetch(`${API_URL}/cycles/${activeCycleId}/suggestions`, {
-                method: "POST", headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({
-                    member_id: localStorage.getItem("club_member_id"),
-                    provider: "youtube",
-                    external_id: externalId,
-                    title: title,
-                    channel_title: channelTitle,
-                    duration_ms: durationMs
-                })
-            });
-            const data = await res.json();
-            if(!res.ok) alert(errorMessage(data));
-            else {
-                alert("Song erfolgreich vorgeschlagen!");
-                document.getElementById("search-results").innerHTML = "";
-                document.getElementById("search-query").value = "";
-                loadPlaylist();
-            }
-        }
-
-        function playSound(type) {
-            const soundUrls = {
-                'airhorn': 'https://www.myinstants.com/media/sounds/mlg-airhorn.mp3',
-                'rimshot': 'https://www.myinstants.com/media/sounds/rimshot.mp3',
-                'applause': 'https://www.myinstants.com/media/sounds/applause.mp3',
-                'bruh': 'https://www.myinstants.com/media/sounds/bruh_1.mp3',
-                'fail': 'https://www.myinstants.com/media/sounds/sadtrombone.mp3',
-                'laser': 'https://www.myinstants.com/media/sounds/laser_1.mp3',
-                'tada': 'https://www.myinstants.com/media/sounds/ta-da_Y0K1t6m.mp3',
-                'gong': 'https://www.myinstants.com/media/sounds/gong.mp3',
-                'whistle': 'https://www.myinstants.com/media/sounds/referee-whistle_1.mp3',
-                'boo': 'https://www.myinstants.com/media/sounds/boo_3.mp3',
-                'wow': 'https://www.myinstants.com/media/sounds/anime-wow-sound-effect.mp3',
-                'cash': 'https://www.myinstants.com/media/sounds/cash-register-kaching.mp3'
-            };
-
-            const url = soundUrls[type];
-            if(url) {
-                const audio = new Audio(url);
-                audio.volume = 0.6;
-                audio.play().catch(e => console.log("Audio Wiedergabe blockiert:", e));
-            }
-        }
-
-        function toggleMod() {
-            const modSec = document.getElementById("mod-section");
-            modSec.classList.toggle("hidden");
-        }
-
-        async function unlockModerator() {
-            const verification = await fetch(`${API_URL}/admin/verify`, {headers: moderatorHeaders()});
-            if (!verification.ok) return alert("Verwaltungskennwort falsch.");
-            if (!activeCycleId && !(await refreshActiveCycle())) {
-                return alert("Aktuell ist kein Voting geöffnet.");
-            }
-            document.getElementById("mod-locked").classList.add("hidden");
-            document.getElementById("mod-content").classList.remove("hidden");
-            loadModPlaylist();
-        }
-
-        async function modSearchTracks() {
-            const query = document.getElementById("mod-search-query").value.trim();
-            if (query.length < 3) return alert("Suchbegriff zu kurz.");
-            
-            const res = await fetch(`${API_URL}/provider/search?q=${encodeURIComponent(query)}`);
-            const data = await res.json();
-            const container = document.getElementById("mod-search-results");
-            
-            if(!res.ok) {
-                container.textContent = errorMessage(data);
-                return;
-            }
-
-            container.innerHTML = data.results.map(r => `
-                <div class="bg-black p-2 rounded flex justify-between items-center border border-gray-800">
-                    <div>
-                        <p class="text-xs font-semibold text-white">${escapeHtml(r.title)}</p>
-                        <p class="text-[10px] text-gray-400">${escapeHtml(r.channel_title)}</p>
-                    </div>
-                    <button onclick="modSuggestTrack(decodeURIComponent('${encodedArgument(r.external_id)}'), decodeURIComponent('${encodedArgument(r.title)}'), decodeURIComponent('${encodedArgument(r.channel_title)}'), ${Number(r.duration_ms) || 0})" class="bg-emerald-600 hover:bg-emerald-500 px-2.5 py-1 rounded text-[10px] font-bold text-white">Hinzufügen</button>
-                </div>
-            `).join('');
-        }
-
-        async function modSuggestTrack(externalId, title, channelTitle, durationMs) {
-            const res = await fetch(`${API_URL}/admin/cycles/${activeCycleId}/suggestions`, {
-                method: "POST", headers: moderatorHeaders({"Content-Type": "application/json"}),
-                body: JSON.stringify({
-                    member_id: "mod_dj",
-                    provider: "youtube",
-                    external_id: externalId,
-                    title: title,
-                    channel_title: channelTitle,
-                    duration_ms: durationMs
-                })
-            });
-            const data = await res.json();
-            if(!res.ok) alert(errorMessage(data));
-            else {
-                alert("Song direkt eingereiht!");
-                document.getElementById("mod-search-results").innerHTML = "";
-                document.getElementById("mod-search-query").value = "";
-                loadModPlaylist();
-                loadPlaylist();
-            }
-        }
-
-        async function loadModPlaylist() {
-            const res = await fetch(`${API_URL}/cycles/${activeCycleId}/playlist`);
-            const data = await res.json();
-            const container = document.getElementById("mod-playlist-container");
-            if (!data.playlist || data.playlist.length === 0) {
-                container.innerHTML = '<p class="text-gray-500 text-xs">Keine Songs in der Queue.</p>';
-                return;
-            }
-            container.innerHTML = data.playlist.map(s => `
-                <div class="bg-black p-2.5 rounded flex items-center justify-between border border-gray-800 text-xs">
-                    <div>
-                        <span class="font-bold text-indigo-400">#${s.rank}</span>
-                        <span class="ml-2 text-white font-medium">${escapeHtml(s.title)}</span>
-                    </div>
-                    <div class="flex items-center gap-3">
-                        <span class="text-emerald-400 font-bold">${s.total_points} Pkt</span>
-                        <button onclick="modDeleteSong(${s.suggestion_id})" class="text-red-400 hover:text-red-300 font-bold px-1">✕</button>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        async function modDeleteSong(id) {
-            if(!confirm("Song aus Playlist entfernen?")) return;
-            await fetch(`${API_URL}/admin/suggestions/${id}`, {
-                method: 'DELETE', headers: moderatorHeaders()
-            });
-            loadModPlaylist();
-            loadPlaylist();
-        }
-
-        function toggleAdmin() { document.getElementById("admin-section").classList.toggle("hidden"); }
-
-        function switchAdminTab(tab) {
-            document.querySelectorAll('.admin-tab').forEach(t => t.classList.add('hidden'));
-            document.getElementById('admin-view-' + tab).classList.remove('hidden');
-        }
-        
-        async function loadAdminCycles() {
-            const verification = await fetch(`${API_URL}/admin/verify`, {headers: adminHeaders()});
-            if (!verification.ok) {
-                return alert("Verwaltungskennwort falsch oder serverseitig noch nicht eingerichtet.");
-            }
-            document.getElementById("admin-content-area").classList.remove("hidden");
-            const res = await fetch(`${API_URL}/cycles`);
-            const data = await res.json();
-            activeCycleId = data.cycles?.find(cycle => cycle.status === "active")?.id || null;
-            const container = document.getElementById("admin-cycles-list");
-            container.innerHTML = data.cycles.map(c => `
-                <div class="bg-gray-900 p-3 rounded flex justify-between items-center border border-gray-800">
-                    <span>${escapeHtml(c.name)} (Status: <strong>${escapeHtml(c.status)}</strong>)</span>
-                    <div>
-                        ${c.status === 'active' ? `<button onclick="closeCycle(${c.id})" class="bg-red-600 hover:bg-red-500 px-3 py-1 text-xs rounded font-bold">Schließen</button>` : '<span class="text-xs text-gray-500">Geschlossen</span>'}
-                    </div>
-                </div>
-            `).join('');
-            
-            loadAdminSongs();
-            loadLogs();
-        }
-
-        async function closeCycle(id) {
-            const response = await fetch(`${API_URL}/admin/cycles/${id}`, {
-                method: "PATCH", headers: adminHeaders({"Content-Type": "application/json"}),
-                body: JSON.stringify({ status: "closed" })
-            });
-            if (!response.ok) return alert("Voting konnte nicht geschlossen werden.");
-            if (activeCycleId === id) activeCycleId = null;
-            loadAdminCycles();
-        }
-
-        async function createCycle() {
-            const name = document.getElementById('new-cycle-name').value.trim();
-            if(!name) return alert("Bitte Namen eingeben");
-            const response = await fetch(`${API_URL}/admin/cycles?name=${encodeURIComponent(name)}`, {
-                method: 'POST', headers: adminHeaders()
-            });
-            const data = await response.json();
-            if (!response.ok) return alert(errorMessage(data));
-            activeCycleId = data.cycle_id;
-            document.getElementById('new-cycle-name').value = '';
-            loadAdminCycles();
-        }
-
-        async function loadAdminSongs() {
-            const res = await fetch(`${API_URL}/cycles/${activeCycleId}/suggestions`, {headers: adminHeaders()});
-            const data = await res.json();
-            const container = document.getElementById('admin-songs-list');
-            if(!data.suggestions || data.suggestions.length === 0) {
-                container.innerHTML = '<p class="text-gray-500 text-sm">Keine Songs vorhanden.</p>';
-                return;
-            }
-            container.innerHTML = data.suggestions.map(s => `
-                <div class="flex justify-between items-center bg-gray-900 p-3 rounded border border-gray-800">
-                    <div>
-                        <span class="font-semibold text-white">${escapeHtml(s.title)}</span>
-                        <p class="text-xs text-gray-500">Vorgeschlagen von: ${escapeHtml(s.member_id)} | ${Number(s.total_points) || 0} Pkt</p>
-                    </div>
-                    <button onclick="deleteSong(${s.suggestion_id})" class="bg-red-900/40 hover:bg-red-900 text-red-300 px-3 py-1 text-xs rounded border border-red-500/30">Löschen</button>
-                </div>
-            `).join('');
-        }
-
-        async function deleteSong(id) {
-            if(!confirm("Wirklich löschen?")) return;
-            await fetch(`${API_URL}/admin/suggestions/${id}`, {
-                method: 'DELETE', headers: adminHeaders()
-            });
-            loadAdminSongs();
-            loadPlaylist();
-        }
-
-        async function loadLogs() {
-            const res = await fetch(`${API_URL}/admin/all-votes`, {headers: adminHeaders()});
-            const data = await res.json();
-            const container = document.getElementById('admin-logs-list');
-            if(!data.votes || data.votes.length === 0) {
-                container.innerHTML = '<p class="text-gray-500 text-sm">Keine Votes vorhanden.</p>';
-                return;
-            }
-            container.innerHTML = data.votes.map(v => `
-                <div class="border-b border-gray-800/60 py-1 text-gray-300">
-                    <span class="text-gray-500">[${escapeHtml(v[3])}]</span> <span class="text-indigo-400 font-bold">${escapeHtml(v[0])}</span> gab <span class="text-emerald-400">${Number(v[2]) || 0} Pkt</span> für "<span class="text-white">${escapeHtml(v[1])}</span>"
-                </div>
-            `).join('');
-        }
-
-    </script>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>
 </html>
