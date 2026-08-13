@@ -1,0 +1,5 @@
+CREATE TABLE club_members (id SERIAL PRIMARY KEY, member_id TEXT UNIQUE NOT NULL, display_name TEXT);
+CREATE TABLE music_cycles (id SERIAL PRIMARY KEY, name TEXT, status TEXT DEFAULT 'active', closes_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP + INTERVAL '24 hours'));
+CREATE TABLE music_suggestions (id SERIAL PRIMARY KEY, cycle_id INTEGER REFERENCES music_cycles(id), member_id TEXT, external_id TEXT, title TEXT, channel_title TEXT);
+CREATE TABLE music_votes (id SERIAL PRIMARY KEY, cycle_id INTEGER REFERENCES music_cycles(id), suggestion_id INTEGER REFERENCES music_suggestions(id), member_id TEXT, points INTEGER, UNIQUE(cycle_id, suggestion_id, member_id));
+CREATE TABLE music_provider_search_cache (provider TEXT, normalized_query TEXT, market TEXT, result_json JSONB, expires_at TIMESTAMP, PRIMARY KEY(provider, normalized_query, market));
