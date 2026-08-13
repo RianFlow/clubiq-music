@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import http.client
 import html
+import json
 import os
 import re
 import secrets
+import socket
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
@@ -12,7 +15,7 @@ import psycopg
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -25,8 +28,49 @@ DEFAULT_MAX_BUDGET = int(os.getenv("MAX_BUDGET", "10"))
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 SESSION_DAYS = max(1, int(os.getenv("SESSION_DAYS", "30")))
+PLAYER_AGENT_SOCKET = os.getenv("PLAYER_AGENT_SOCKET", "/run/clubiq-music/player.sock")
+PLAYER_AGENT_TOKEN = os.getenv("PLAYER_AGENT_TOKEN", "")
+PLAYER_PUBLIC_BASE_URL = os.getenv("PLAYER_PUBLIC_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 PIN_ITERATIONS = 210_000
 YOUTUBE_VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{6,20}$")
+SOUNDBOARD_MEDIA_TYPES = {"audio/mpeg", "audio/ogg", "audio/wav", "audio/x-wav", "audio/webm", "audio/mp4"}
+MAX_SOUNDBOARD_BYTES = 3 * 1024 * 1024
+
+
+class UnixHTTPConnection(http.client.HTTPConnection):
+    def __init__(self, socket_path: str, timeout: float = 5):
+        super().__init__("localhost", timeout=timeout)
+        self.socket_path = socket_path
+
+    def connect(self) -> None:
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.settimeout(self.timeout)
+        self.sock.connect(self.socket_path)
+
+
+def player_agent(method: str, path: str, payload: dict | None = None, timeout: float = 12) -> dict:
+    if not PLAYER_AGENT_TOKEN:
+        raise HTTPException(status_code=503, detail="Der Raspberry-Player ist noch nicht eingerichtet.")
+    encoded = json.dumps(payload or {}).encode()
+    connection = UnixHTTPConnection(PLAYER_AGENT_SOCKET, timeout=timeout)
+    try:
+        connection.request(
+            method,
+            path,
+            body=encoded if method != "GET" else None,
+            headers={"Content-Type": "application/json", "X-Player-Token": PLAYER_AGENT_TOKEN},
+        )
+        response = connection.getresponse()
+        result = json.loads(response.read() or b"{}")
+        if response.status >= 400:
+            raise HTTPException(status_code=503, detail=result.get("error", "Player antwortet nicht."))
+        return result
+    except HTTPException:
+        raise
+    except (OSError, ValueError, http.client.HTTPException) as exc:
+        raise HTTPException(status_code=503, detail="Der Raspberry-Player ist nicht erreichbar.") from exc
+    finally:
+        connection.close()
 
 
 def db_connect():
@@ -241,6 +285,15 @@ class CycleUpdate(BaseModel):
     starts_at: datetime | None = None
     closes_at: datetime | None = None
     max_budget: int | None = Field(default=None, ge=1, le=100)
+
+
+class PlayerCommand(BaseModel):
+    action: str = Field(pattern=r"^(play|pause|next|previous|seek|volume|mute|shuffle|repeat)$")
+    value: float | int | bool | str | None = None
+
+
+class BluetoothDeviceAction(BaseModel):
+    address: str = Field(pattern=r"^[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}$")
 
 
 @app.get("/")
@@ -508,6 +561,152 @@ def get_playlist(cycle_id: int, member: dict | None = Depends(optional_member)):
             "total_points": total_points, "my_points": int(row[7]),
         })
     return {"playlist": playlist}
+
+
+@app.get("/api/v1/music/player/state")
+def get_player_state():
+    state = player_agent("GET", "/state")
+    if state.get("speaker"):
+        state["speaker"].pop("address", None)
+    return state
+
+
+@app.post("/api/v1/music/player/queue/current")
+def use_current_ranking(member: dict = Depends(require_member)):
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT s.id, s.title, s.channel_title, s.provider, s.external_id
+            FROM music_suggestions s
+            LEFT JOIN music_votes v ON v.suggestion_id = s.id
+            JOIN music_cycles c ON c.id = s.cycle_id
+            WHERE c.status = 'active' AND c.starts_at <= CURRENT_TIMESTAMP
+              AND c.closes_at > CURRENT_TIMESTAMP AND s.status = 'approved'
+            GROUP BY s.id
+            ORDER BY COALESCE(SUM(v.points), 0) DESC, s.created_at ASC;
+            """
+        )
+        items = []
+        for row in cur.fetchall():
+            if row[3] != "youtube" or not YOUTUBE_VIDEO_ID.fullmatch(row[4] or ""):
+                continue
+            items.append({
+                "id": row[0], "title": row[1], "artist": row[2] or "",
+                "thumbnail": f"/api/v1/music/thumbnails/youtube/{row[4]}",
+                "url": f"https://www.youtube.com/watch?v={row[4]}",
+            })
+        cur.execute(
+            "INSERT INTO music_player_audit (member_id, action, detail_json) VALUES (%s, 'queue_from_ranking', %s);",
+            (member["member_id"], json.dumps({"songs": len(items)})),
+        )
+        conn.commit()
+    return player_agent("POST", "/queue", {"items": items})
+
+
+@app.post("/api/v1/music/player/command")
+def control_player(command: PlayerCommand, member: dict = Depends(require_member)):
+    allowed_values = {
+        "seek": lambda value: isinstance(value, (int, float)) and 0 <= float(value) <= 86400,
+        "volume": lambda value: isinstance(value, (int, float)) and 0 <= float(value) <= 100,
+        "mute": lambda value: isinstance(value, bool),
+        "shuffle": lambda value: isinstance(value, bool),
+        "repeat": lambda value: value in {"off", "one", "all"},
+    }
+    if command.action in allowed_values and not allowed_values[command.action](command.value):
+        raise HTTPException(status_code=422, detail="Ungültiger Wert für den Player-Befehl.")
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO music_player_audit (member_id, action, detail_json) VALUES (%s, %s, %s);",
+            (member["member_id"], command.action, json.dumps({"value": command.value})),
+        )
+        conn.commit()
+    return player_agent("POST", "/command", command.model_dump())
+
+
+@app.get("/api/v1/music/player/bluetooth/devices", dependencies=[Depends(require_admin)])
+def bluetooth_devices():
+    return player_agent("GET", "/bluetooth/devices")
+
+
+@app.post("/api/v1/music/player/bluetooth/scan", dependencies=[Depends(require_admin)])
+def bluetooth_scan():
+    return player_agent("POST", "/bluetooth/scan", {}, timeout=20)
+
+
+@app.post("/api/v1/music/player/bluetooth/{operation}", dependencies=[Depends(require_admin)])
+def bluetooth_action(operation: str, device: BluetoothDeviceAction):
+    if operation not in {"connect", "disconnect", "forget"}:
+        raise HTTPException(status_code=404, detail="Bluetooth-Aktion nicht gefunden.")
+    return player_agent("POST", f"/bluetooth/{operation}", device.model_dump(), timeout=40)
+
+
+@app.get("/api/v1/music/player/soundboard")
+def list_soundboard():
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, name, color FROM music_soundboard_items WHERE active = TRUE ORDER BY lower(name);"
+        )
+        return {"items": [{"id": row[0], "name": row[1], "color": row[2]} for row in cur.fetchall()]}
+
+
+@app.get("/api/v1/music/player/soundboard/{item_id}/audio")
+def soundboard_audio(item_id: int):
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT media_type, audio_data FROM music_soundboard_items WHERE id = %s AND active = TRUE;",
+            (item_id,),
+        )
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Sound nicht gefunden.")
+    return Response(content=bytes(row[1]), media_type=row[0], headers={"Cache-Control": "private, max-age=3600"})
+
+
+@app.post("/api/v1/music/player/soundboard/{item_id}/play")
+def play_soundboard(item_id: int, member: dict = Depends(require_member)):
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT id FROM music_soundboard_items WHERE id = %s AND active = TRUE;", (item_id,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Sound nicht gefunden.")
+        cur.execute(
+            "INSERT INTO music_player_audit (member_id, action, detail_json) VALUES (%s, 'soundboard', %s);",
+            (member["member_id"], json.dumps({"sound_id": item_id})),
+        )
+        conn.commit()
+    url = f"{PLAYER_PUBLIC_BASE_URL}/api/v1/music/player/soundboard/{item_id}/audio"
+    return player_agent("POST", "/command", {"action": "sound", "value": url})
+
+
+@app.post("/api/v1/music/admin/soundboard", dependencies=[Depends(require_admin)], status_code=201)
+async def upload_soundboard(
+    name: str = Form(min_length=1, max_length=80),
+    color: str = Form(default="green", pattern=r"^(green|gold|red|blue)$"),
+    audio: UploadFile = File(...),
+):
+    media_type = (audio.content_type or "").lower()
+    if media_type not in SOUNDBOARD_MEDIA_TYPES:
+        raise HTTPException(status_code=415, detail="Bitte MP3, WAV, OGG, M4A oder WebM verwenden.")
+    content = await audio.read(MAX_SOUNDBOARD_BYTES + 1)
+    if not content or len(content) > MAX_SOUNDBOARD_BYTES:
+        raise HTTPException(status_code=413, detail="Der Sound darf höchstens 3 MB groß sein.")
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO music_soundboard_items (name, media_type, audio_data, color) VALUES (%s, %s, %s, %s) RETURNING id;",
+            (name.strip(), media_type, content, color),
+        )
+        item_id = cur.fetchone()[0]
+        conn.commit()
+    return {"status": "success", "id": item_id}
+
+
+@app.delete("/api/v1/music/admin/soundboard/{item_id}", dependencies=[Depends(require_admin)])
+def delete_soundboard(item_id: int):
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM music_soundboard_items WHERE id = %s;", (item_id,))
+        if cur.rowcount != 1:
+            raise HTTPException(status_code=404, detail="Sound nicht gefunden.")
+        conn.commit()
+    return {"status": "success"}
 
 
 @app.get("/api/v1/music/thumbnails/youtube/{video_id}")

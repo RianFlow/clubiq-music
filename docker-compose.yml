@@ -28,6 +28,8 @@ services:
     ports:
       - "${MUSIC_BIND_ADDRESS:-0.0.0.0}:${MUSIC_PORT:-8000}:8000"
     env_file: .env
+    volumes:
+      - /run/clubiq-music:/run/clubiq-music
     depends_on:
       db:
         condition: service_healthy

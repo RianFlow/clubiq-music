@@ -32,6 +32,11 @@ class SecurityContractTests(unittest.TestCase):
         self.assertNotIn("member_id", vote_schema)
         self.assertNotIn("member_id", suggestion_schema)
 
+    def test_player_commands_are_strictly_limited(self):
+        self.assertEqual(main.PlayerCommand(action="play").action, "play")
+        with self.assertRaises(ValidationError):
+            main.PlayerCommand(action="shell", value="reboot")
+
     def test_pin_format_and_vote_bounds_are_validated(self):
         with self.assertRaises(ValidationError):
             main.MemberLogin(display_name="Florian", pin="abcd")
@@ -88,6 +93,26 @@ class OfflineFrontendContractTests(unittest.TestCase):
         script_source = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
         self.assertIn('id="registerPinRepeat"', html_source)
         self.assertIn('/api/v1/music/auth/register', script_source)
+
+    def test_logged_in_view_hides_all_guest_prompts(self):
+        html_source = (ROOT / "index.html").read_text(encoding="utf-8")
+        css_source = (ROOT / "static" / "app.css").read_text(encoding="utf-8")
+        script_source = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+        self.assertIn("data-guest-only", html_source)
+        self.assertIn("[hidden] { display: none !important; }", css_source)
+        self.assertIn("node.hidden = loggedIn", script_source)
+
+    def test_player_and_bluetooth_ui_are_local_and_admin_controlled(self):
+        html_source = (ROOT / "index.html").read_text(encoding="utf-8")
+        script_source = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+        compose_source = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+        agent_source = (ROOT / "player_agent.py").read_text(encoding="utf-8")
+        self.assertIn('id="tab-player"', html_source)
+        self.assertIn('id="scanSpeakers"', html_source)
+        self.assertIn('/api/v1/music/player/bluetooth/scan', script_source)
+        self.assertIn('/run/clubiq-music:/run/clubiq-music', compose_source)
+        self.assertIn("UnixStreamServer", agent_source)
+        self.assertNotIn("0.0.0.0", agent_source)
 
     def test_cycle_form_and_countdown_are_present(self):
         html_source = (ROOT / "index.html").read_text(encoding="utf-8")

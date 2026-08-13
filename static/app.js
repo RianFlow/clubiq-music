@@ -10,6 +10,9 @@ const state = {
   displayedCycle: null,
   budget: { remaining: 0, maximum: 0 },
   playlist: [],
+  player: { available: false, queue: [], current_index: -1, volume: 70, repeat: "off", shuffle: false },
+  soundboard: [],
+  speakers: [],
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -30,7 +33,9 @@ function toast(message, error = false) {
 
 async function api(path, options = {}, admin = false) {
   const headers = new Headers(options.headers || {});
-  if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (options.body && !(options.body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
   if (admin && state.adminPassword) headers.set("X-Admin-Password", state.adminPassword);
   if (!admin && state.token) headers.set("Authorization", `Bearer ${state.token}`);
   let response;
@@ -124,6 +129,7 @@ function setTab(name) {
   $$(".tab").forEach(button => button.classList.toggle("active", button.dataset.tab === name));
   $$(".tab-panel").forEach(panel => panel.classList.toggle("active", panel.id === `tab-${name}`));
   if (name === "mine") renderMyVotes();
+  if (name === "player") Promise.all([loadPlayerState(), loadSoundboard()]).catch(error => toast(error.message, true));
 }
 
 function setAdminTab(name) {
@@ -134,6 +140,8 @@ function setAdminTab(name) {
 function renderSession() {
   const loggedIn = Boolean(state.member);
   $("#loginHint").hidden = loggedIn;
+  $$('[data-member-only]').forEach(node => { node.hidden = !loggedIn; });
+  $$('[data-guest-only]').forEach(node => { node.hidden = loggedIn; });
   $("#memberOpen").textContent = loggedIn ? `${state.member.display_name} · Abmelden` : "Anmelden";
   $("#budgetRemaining").textContent = loggedIn ? state.budget.remaining : "–";
   $("#budgetMeta").textContent = loggedIn
@@ -432,6 +440,194 @@ async function suggestSong(button) {
   }
 }
 
+function mediaTime(value) {
+  const seconds = Math.max(0, Math.floor(Number(value) || 0));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function renderPlayer() {
+  const player = state.player || {};
+  const current = player.current;
+  const speaker = player.speaker;
+  const connected = Boolean(speaker?.connected);
+  $("#speakerBadge").textContent = connected ? `🔊 ${speaker.name}` : "Keine Box verbunden";
+  $("#speakerBadge").classList.toggle("offline", !connected);
+  $("#playerIndicator").textContent = connected ? (player.playing ? "▶" : "✓") : "–";
+  $("#playerTitle").textContent = player.sound_active ? "Soundboard läuft" : current?.title || "Noch kein Song gewählt";
+  $("#playerArtist").textContent = player.sound_active ? "Danach wird der Song automatisch fortgesetzt" : current?.artist || (connected
+    ? "Rangliste in die Warteschlange übernehmen"
+    : "Die Verwaltung verbindet zuerst eine Bluetooth-Box");
+  $("#playerCover").src = current?.thumbnail || "/pics/logo.png";
+  $("#playerCover").onerror = () => { $("#playerCover").src = "/pics/logo.png"; };
+  $("#playerProgress").max = Math.max(1, Number(player.duration) || 1);
+  if (!$("#playerProgress").matches(":active")) $("#playerProgress").value = Number(player.position) || 0;
+  $("#playerPosition").textContent = mediaTime(player.position);
+  $("#playerDuration").textContent = mediaTime(player.duration);
+  $("#playerPlay").textContent = player.playing ? "❚❚" : "▶";
+  $("#playerPlay").title = player.playing ? "Pause" : "Wiedergabe";
+  $("#playerVolume").value = Number(player.volume ?? 70);
+  $("#playerVolumeValue").textContent = `${Number(player.volume ?? 70)} %`;
+  $("#playerMute").textContent = player.muted ? "🔇" : "🔊";
+  $('[data-player-action="shuffle"]').classList.toggle("active", Boolean(player.shuffle));
+  $("#playerRepeat").classList.toggle("active", player.repeat !== "off");
+  $("#playerRepeat").textContent = player.repeat === "one" ? "↻¹" : "↻";
+
+  const queue = player.queue || [];
+  $("#queueCount").textContent = `${queue.length} Song${queue.length === 1 ? "" : "s"}`;
+  $("#playerQueue").innerHTML = queue.length ? queue.map((item, index) => `
+    <div class="queue-row${index === player.current_index ? " current" : ""}">
+      <span>${index === player.current_index && player.playing ? "▶" : index + 1}</span>
+      <div><strong>${esc(item.title)}</strong><small>${esc(item.artist || "Unbekannter Interpret")}</small></div>
+    </div>`).join("") : '<div class="empty">Noch keine Songs geladen.</div>';
+}
+
+async function loadPlayerState(silent = false) {
+  try {
+    state.player = await api("/api/v1/music/player/state");
+    renderPlayer();
+  } catch (error) {
+    state.player = { available: false, queue: [], current_index: -1, volume: 70, repeat: "off", shuffle: false };
+    renderPlayer();
+    if (!silent) toast(error.message, true);
+  }
+}
+
+async function playerCommand(action, value = null) {
+  if (!state.member) return openMemberDialog();
+  try {
+    state.player = await api("/api/v1/music/player/command", {
+      method: "POST", body: JSON.stringify({ action, value }),
+    });
+    renderPlayer();
+  } catch (error) { toast(error.message, true); }
+}
+
+async function handlePlayerAction(button) {
+  let action = button.dataset.playerAction;
+  let value = null;
+  if (action === "play" && state.player.playing) action = "pause";
+  if (action === "shuffle") value = !state.player.shuffle;
+  if (action === "repeat") {
+    value = state.player.repeat === "off" ? "all" : state.player.repeat === "all" ? "one" : "off";
+  }
+  if (action === "mute") value = !state.player.muted;
+  await playerCommand(action, value);
+}
+
+async function queueRanking() {
+  if (!state.member) return openMemberDialog();
+  const button = $("#queueFromRanking");
+  button.disabled = true;
+  try {
+    state.player = await api("/api/v1/music/player/queue/current", { method: "POST" });
+    renderPlayer();
+    toast(`${state.player.queue.length} Songs sind im Player bereit.`);
+  } catch (error) { toast(error.message, true); }
+  finally { button.disabled = false; }
+}
+
+async function loadSoundboard() {
+  const data = await api("/api/v1/music/player/soundboard");
+  state.soundboard = data.items || [];
+  $("#soundboard").innerHTML = state.soundboard.length ? state.soundboard.map(item => `
+    <button class="sound-button ${esc(item.color)}" data-play-sound="${item.id}" type="button">${esc(item.name)}</button>
+  `).join("") : '<div class="empty">Noch keine Sounds eingerichtet.</div>';
+  $$('[data-play-sound]').forEach(button => button.addEventListener("click", async () => {
+    if (!state.member) return openMemberDialog();
+    button.disabled = true;
+    try {
+      state.player = await api(`/api/v1/music/player/soundboard/${button.dataset.playSound}/play`, { method: "POST" });
+      renderPlayer();
+    } catch (error) { toast(error.message, true); }
+    finally { button.disabled = false; }
+  }));
+  renderAdminSoundboard();
+}
+
+function renderAdminSoundboard() {
+  const root = $("#adminSoundboard");
+  if (!root) return;
+  root.innerHTML = state.soundboard.length ? state.soundboard.map(item => `
+    <div class="admin-row"><div><strong>${esc(item.name)}</strong><span>Soundboard · ${esc(item.color)}</span></div>
+      <button class="button ghost small" data-delete-sound="${item.id}" type="button">Löschen</button></div>
+  `).join("") : '<div class="empty">Noch keine Soundboard-Sounds gespeichert.</div>';
+  $$('[data-delete-sound]', root).forEach(button => button.addEventListener("click", async () => {
+    if (!window.confirm("Diesen Sound wirklich löschen?")) return;
+    try {
+      await api(`/api/v1/music/admin/soundboard/${button.dataset.deleteSound}`, { method: "DELETE" }, true);
+      await loadSoundboard();
+      toast("Sound wurde gelöscht.");
+    } catch (error) { toast(error.message, true); }
+  }));
+}
+
+async function loadSpeakers(silent = false) {
+  try {
+    const data = await api("/api/v1/music/player/bluetooth/devices", {}, true);
+    state.speakers = data.devices || [];
+    renderSpeakers();
+  } catch (error) {
+    state.speakers = [];
+    $("#speakerList").innerHTML = `<div class="empty">${esc(error.message)} Starte auf dem Raspberry einmal das Player-Installationsskript.</div>`;
+    if (!silent) toast(error.message, true);
+  }
+}
+
+function renderSpeakers() {
+  const root = $("#speakerList");
+  root.innerHTML = state.speakers.length ? state.speakers.map(device => `
+    <div class="admin-row">
+      <div><strong>${esc(device.name)}</strong><span>${device.connected ? "Verbunden" : device.paired ? "Gekoppelt" : "Gefunden"}<i class="device-address">${esc(device.address)}</i></span></div>
+      <div class="row-actions">
+        ${device.connected
+          ? `<button class="button ghost small" data-speaker-action="disconnect" data-address="${device.address}" type="button">Trennen</button>`
+          : `<button class="button primary small" data-speaker-action="connect" data-address="${device.address}" type="button">Verbinden</button>`}
+        ${device.paired ? `<button class="button ghost small" data-speaker-action="forget" data-address="${device.address}" type="button">Vergessen</button>` : ""}
+      </div>
+    </div>`).join("") : '<div class="empty">Noch keine Box gefunden. Box in den Kopplungsmodus setzen und „Boxen suchen“ wählen.</div>';
+  $$('[data-speaker-action]', root).forEach(button => button.addEventListener("click", () => speakerAction(button)));
+}
+
+async function scanSpeakers() {
+  const button = $("#scanSpeakers");
+  button.disabled = true;
+  button.textContent = "Suche läuft …";
+  try {
+    const data = await api("/api/v1/music/player/bluetooth/scan", { method: "POST" }, true);
+    state.speakers = data.devices || [];
+    renderSpeakers();
+    toast(`${state.speakers.length} Bluetooth-Gerät${state.speakers.length === 1 ? "" : "e"} gefunden.`);
+  } catch (error) { toast(error.message, true); }
+  finally { button.disabled = false; button.textContent = "Boxen suchen"; }
+}
+
+async function speakerAction(button) {
+  const operation = button.dataset.speakerAction;
+  button.disabled = true;
+  try {
+    await api(`/api/v1/music/player/bluetooth/${operation}`, {
+      method: "POST", body: JSON.stringify({ address: button.dataset.address }),
+    }, true);
+    await Promise.all([loadSpeakers(), loadPlayerState(true)]);
+    toast(operation === "connect" ? "Bluetooth-Box ist verbunden." : "Bluetooth-Box wurde aktualisiert.");
+  } catch (error) { toast(error.message, true); }
+  finally { button.disabled = false; }
+}
+
+async function uploadSound(event) {
+  event.preventDefault();
+  const form = event.target;
+  const button = $("button[type=submit]", form);
+  button.disabled = true;
+  try {
+    await api("/api/v1/music/admin/soundboard", { method: "POST", body: new FormData(form) }, true);
+    form.reset();
+    await loadSoundboard();
+    toast("Soundboard-Sound wurde gespeichert.");
+  } catch (error) { toast(error.message, true); }
+  finally { button.disabled = false; }
+}
+
 function adminHeadersBody(payload) {
   return { body: JSON.stringify(payload) };
 }
@@ -469,7 +665,10 @@ async function showAdminArea() {
   $("#adminArea").hidden = false;
   $("#adminLogout").hidden = false;
   setCycleFormDefaults();
-  await Promise.all([loadAdminStats(), loadAdminCycles(), loadAdminMembers(), loadVoteHistory()]);
+  await Promise.all([
+    loadAdminStats(), loadAdminCycles(), loadAdminMembers(), loadVoteHistory(),
+    loadSpeakers(true), loadSoundboard(),
+  ]);
 }
 
 function adminLogout() {
@@ -612,6 +811,13 @@ function bindEvents() {
   $("#adminLogout").addEventListener("click", adminLogout);
   $("#cycleForm").addEventListener("submit", createCycle);
   $("#memberCreateForm").addEventListener("submit", createMember);
+  $$('[data-player-action]').forEach(button => button.addEventListener("click", () => handlePlayerAction(button)));
+  $("#queueFromRanking").addEventListener("click", queueRanking);
+  $("#refreshPlayer").addEventListener("click", () => loadPlayerState());
+  $("#playerProgress").addEventListener("change", event => playerCommand("seek", Number(event.target.value)));
+  $("#playerVolume").addEventListener("change", event => playerCommand("volume", Number(event.target.value)));
+  $("#scanSpeakers").addEventListener("click", scanSpeakers);
+  $("#soundUploadForm").addEventListener("submit", uploadSound);
   window.addEventListener("online", () => { $("#connectionState").innerHTML = "<i></i> Lokal bereit"; });
   window.addEventListener("offline", () => { $("#connectionState").innerHTML = "<i></i> Offline im Kassen-WLAN"; });
 }
@@ -619,7 +825,7 @@ function bindEvents() {
 async function start() {
   bindEvents();
   try {
-    await Promise.all([loadCycles(), loadMembers()]);
+    await Promise.all([loadCycles(), loadMembers(), loadPlayerState(true), loadSoundboard()]);
     await restoreMember();
     renderSession();
     await loadPlaylist();
@@ -631,3 +837,6 @@ async function start() {
 start();
 setInterval(updateCountdown, 1000);
 setInterval(() => loadPlaylist().catch(() => {}), 30000);
+setInterval(() => {
+  if (!document.hidden) loadPlayerState(true).catch(() => {});
+}, 3000);

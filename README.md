@@ -1,6 +1,6 @@
 # ClubIQ Music Voting
 
-ClubIQ Music ist die lokale Musikwunsch- und Abstimmungs-App für den Vereinsbetrieb. Die Bedienoberfläche läuft vollständig vom Raspberry und benötigt für Anmeldung, vorhandene Songs und Abstimmungen keine externen UI-Dienste. Nur die optionale YouTube-Suche benötigt Internet.
+ClubIQ Music ist die lokale Musikwunsch- und Abstimmungs-App für den Vereinsbetrieb. Die Bedienoberfläche, Anmeldung, Abstimmungen und lokale Soundboard-Clips laufen vollständig vom Raspberry. Die YouTube-Suche und das Abspielen von YouTube-Songs benötigen Internet.
 
 ## Bedienung
 
@@ -13,6 +13,9 @@ ClubIQ Music ist die lokale Musikwunsch- und Abstimmungs-App für den Vereinsbet
 - Die öffentliche Rangliste bleibt ohne Anmeldung sichtbar; zum Vergeben eigener Punkte ist weiterhin eine Anmeldung nötig.
 - YouTube-Suchergebnisse und gespeicherte YouTube-Songs erhalten Vorschaubilder, wenn Internet verfügbar ist.
 - Die Verwaltung trennt Abstimmungen, Mitglieder und den aktuellen Stimmenstand.
+- Der zentrale Raspberry-Player spielt die Rangliste über eine verbundene Bluetooth-Box ab.
+- Angemeldete Mitglieder können Wiedergabe, Lautstärke, Warteschlange und Soundboard bedienen.
+- Bluetooth-Boxen werden ausschließlich in der geschützten ClubIQ-Oberfläche gesucht, gekoppelt und getrennt.
 
 Bestehende Mitglieder ohne PIN können beim ersten Login nach dem Update einmalig ihre PIN festlegen. Bei einer neuen Registrierung muss die PIN zur Kontrolle zweimal eingegeben werden. Danach wird nur noch der gesalzene PBKDF2-Hash gespeichert. Anmeldesitzungen laufen standardmäßig nach 30 Tagen ab und werden serverseitig validiert.
 
@@ -49,6 +52,34 @@ docker compose logs --tail=100 web db
 ```
 
 Beide Container besitzen Healthchecks und starten nach einem Neustart automatisch wieder.
+
+## Zentralen Bluetooth-Player einrichten
+
+Die Box wird nicht mit dem Tablet gekoppelt. Der Raspberry ist der einzige Audioplayer;
+alle Tablets sind lediglich sichere Fernbedienungen. Dadurch bleibt die Musik auch bei
+einem geschlossenen Tablet-Browser aktiv.
+
+Nach dem normalen Docker-Start einmal ausführen:
+
+```bash
+cd ~/clubiq_music_release
+sudo ./scripts/install-player.sh
+sudo systemctl status clubiq-music-player --no-pager
+```
+
+Danach in **Verwaltung → Player & Box**:
+
+1. Bluetooth-Box in den Kopplungsmodus setzen.
+2. „Boxen suchen“ wählen.
+3. Bei der gewünschten Box „Verbinden“ wählen.
+
+ClubIQ vertraut der Box anschließend und versucht nach Abbrüchen oder Neustarts alle
+15 Sekunden automatisch, die Verbindung wiederherzustellen. Diagnose:
+
+```bash
+sudo journalctl -u clubiq-music-player -n 100 --no-pager
+sudo bluetoothctl paired-devices
+```
 
 ## Aktualisieren
 
