@@ -29,10 +29,13 @@ button:disabled { cursor: not-allowed; opacity: .48; }
   background: rgba(255, 254, 249, .94); border-bottom: 1px solid var(--line); backdrop-filter: blur(14px);
 }
 .brand { color: inherit; text-decoration: none; display: flex; align-items: center; gap: 12px; min-width: 0; }
-.brand img { width: 46px; height: 46px; border-radius: 12px; object-fit: cover; }
-.brand span { display: grid; min-width: 0; }
+.brand .app-logo { width: 46px; height: 46px; border-radius: 12px; object-fit: cover; }
+.brand-copy { display: grid; min-width: 0; }
 .brand strong { font-size: 1.05rem; }
 .brand small { color: var(--muted); margin-top: 2px; }
+.club-signature { display: flex; align-items: center; gap: 7px; min-width: 0; margin-left: 5px; padding-left: 13px; border-left: 1px solid var(--line); }
+.club-logo { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 10px; background: #10201e url('/pics/sv-barver-darts.png') center / 320% auto no-repeat; }
+.club-signature small { max-width: 68px; color: var(--green); font-weight: 750; line-height: 1.15; }
 .top-actions { display: flex; align-items: center; gap: 10px; }
 .status-pill { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: .86rem; white-space: nowrap; }
 .status-pill i { width: 9px; height: 9px; border-radius: 50%; background: #3f9b74; box-shadow: 0 0 0 4px #dcece4; }
@@ -45,6 +48,10 @@ h1 { margin: 0 0 8px; font-family: Georgia, serif; font-size: clamp(2.5rem, 7vw,
 h2 { margin: 0; font-family: Georgia, serif; font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 500; }
 h3 { margin: 0; font-size: 1.05rem; }
 .muted { color: var(--muted); margin: 0; }
+.countdown { display: inline-flex; align-items: baseline; gap: 10px; margin-top: 15px; padding: 9px 13px; border: 1px solid #c9d9d4; border-radius: 11px; color: var(--green); background: var(--mint); }
+.countdown span { font-size: .78rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.countdown strong { font-variant-numeric: tabular-nums; font-size: 1.15rem; }
+.countdown[data-phase="active"] { border-color: #dbc986; background: #f7efd0; }
 
 .budget-card { padding: 20px; border-radius: 18px; color: white; background: var(--green); box-shadow: var(--shadow); }
 .budget-card > span, .budget-card small { display: block; color: #c9d9d4; font-size: .82rem; }
@@ -72,10 +79,14 @@ h3 { margin: 0; font-size: 1.05rem; }
 .tab-panel.active, .admin-panel.active { display: block; }
 .tab-panel { min-height: 320px; padding-top: 28px; }
 .section-head { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.list-actions { display: flex; align-items: center; gap: 12px; }
 
 .song-list { display: grid; gap: 10px; }
-.song-card { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto auto; gap: 16px; align-items: center; min-height: 82px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 15px; background: var(--card); box-shadow: 0 4px 18px rgba(19,33,31,.035); }
-.song-rank { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; color: var(--green); background: var(--mint); font-weight: 850; }
+.song-card { display: grid; grid-template-columns: 112px minmax(0, 1fr) auto auto; gap: 16px; align-items: center; min-height: 92px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 15px; background: var(--card); box-shadow: 0 4px 18px rgba(19,33,31,.035); }
+.song-visual { position: relative; width: 112px; height: 64px; }
+.song-cover { display: block; width: 112px; height: 64px; border-radius: 11px; object-fit: cover; background: var(--mint); }
+.song-fallback { display: grid; place-items: center; color: var(--green); font-size: 1.7rem; }
+.song-rank { position: absolute; left: -7px; bottom: -7px; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; color: var(--green); background: var(--mint); border: 2px solid var(--card); font-weight: 850; }
 .song-copy { min-width: 0; }
 .song-copy strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .song-copy span { display: block; margin-top: 4px; color: var(--muted); font-size: .86rem; }
@@ -83,6 +94,7 @@ h3 { margin: 0; font-size: 1.05rem; }
 .points { display: flex; align-items: center; gap: 8px; }
 .points button { width: 42px; height: 42px; border: 1px solid var(--line); border-radius: 11px; color: var(--green); background: #fff; font-size: 1.3rem; font-weight: 800; }
 .points strong { min-width: 34px; text-align: center; font-size: 1.1rem; }
+.login-to-vote { white-space: nowrap; }
 .total { min-width: 66px; text-align: right; }
 .total strong { display: block; font-size: 1.2rem; }
 .total small { color: var(--muted); }
@@ -99,6 +111,10 @@ input:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px rgba(36,92,81,
 .modal::backdrop { background: rgba(8,19,17,.64); backdrop-filter: blur(4px); }
 .modal-card { position: relative; width: min(440px, 100%); margin: max(3vh, 20px) auto; padding: 28px; border: 1px solid var(--line); border-radius: 22px; background: var(--card); box-shadow: var(--shadow); }
 .modal-card > label { margin-top: 18px; }
+.auth-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 22px 0 18px; padding: 4px; border-radius: 12px; background: #eceee9; }
+.auth-switch button { min-height: 42px; border: 0; border-radius: 9px; color: var(--muted); background: transparent; font-weight: 750; }
+.auth-switch button.active { color: white; background: var(--green); }
+.auth-form > label { margin-top: 16px; }
 .close { position: absolute; top: 14px; right: 14px; }
 .icon-button { width: 40px; height: 40px; border: 0; border-radius: 50%; background: #eceee9; font-size: 1.5rem; }
 .wide-modal { overflow: auto; }
@@ -112,7 +128,7 @@ input:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px rgba(36,92,81,
 .stat strong { display: block; margin-top: 4px; font-size: 1.45rem; }
 .subtabs { display: flex; gap: 5px; margin-bottom: 18px; border-bottom: 1px solid var(--line); padding-bottom: 9px; }
 .subtab { min-height: 40px; padding: 8px 13px; }
-.form-grid { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px; align-items: end; }
+.form-grid { display: grid; grid-template-columns: 1.5fr 1.2fr 1.2fr .7fr auto; gap: 10px; align-items: end; }
 .form-grid h3 { grid-column: 1 / -1; }
 .panel-box { padding: 18px; border: 1px solid var(--line); border-radius: 15px; background: #f6f6f1; margin-bottom: 16px; }
 .admin-list { display: grid; gap: 8px; }
@@ -126,7 +142,9 @@ input:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px rgba(36,92,81,
 
 @media (max-width: 720px) {
   .topbar { align-items: flex-start; }
-  .brand small, .status-pill { display: none; }
+  .brand-copy small, .status-pill, .club-signature small { display: none; }
+  .club-signature { margin-left: 0; padding-left: 8px; }
+  .club-logo { width: 39px; height: 39px; }
   .top-actions .button { min-height: 40px; padding: 8px 10px; }
   .shell { width: min(100% - 22px, 1040px); margin-top: 12px; }
   .hero { grid-template-columns: 1fr; gap: 18px; padding-top: 24px; }
@@ -136,9 +154,11 @@ input:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px rgba(36,92,81,
   .notice { align-items: stretch; flex-direction: column; }
   .tabs { top: 71px; overflow-x: auto; }
   .tab { white-space: nowrap; flex: 1; padding-inline: 12px; }
-  .song-card { grid-template-columns: 42px minmax(0, 1fr); gap: 10px; }
-  .song-rank { width: 38px; height: 38px; }
-  .points, .total { grid-column: 2; justify-self: start; text-align: left; }
+  .section-head { align-items: flex-start; }
+  .list-actions { align-items: flex-end; flex-direction: column; }
+  .song-card { grid-template-columns: 92px minmax(0, 1fr); gap: 12px; }
+  .song-visual, .song-cover { width: 92px; height: 54px; }
+  .points, .total, .login-to-vote { grid-column: 2; justify-self: start; text-align: left; }
   .search-box > div, .compact-form > div { grid-template-columns: 1fr; }
   .modal { padding: 8px; }
   .modal-card { margin: 8px auto; padding: 23px 18px; border-radius: 18px; }

@@ -12,8 +12,11 @@
 <body>
   <header class="topbar">
     <a class="brand" href="#" aria-label="ClubIQ Music Startseite">
-      <img src="/pics/logo.png" alt="">
-      <span><strong>ClubIQ Music</strong><small>Gemeinsam die Playlist bestimmen.</small></span>
+      <img class="app-logo" src="/pics/logo.png" alt="">
+      <span class="brand-copy"><strong>ClubIQ Music</strong><small>Gemeinsam die Playlist bestimmen.</small></span>
+      <span class="club-signature" aria-label="SV Barver Darts">
+        <span class="club-logo" aria-hidden="true"></span><small>SV Barver Darts</small>
+      </span>
     </a>
     <div class="top-actions">
       <span id="connectionState" class="status-pill"><i></i> Lokal bereit</span>
@@ -28,6 +31,9 @@
         <p class="eyebrow">Aktuelle Abstimmung</p>
         <h1 id="cycleName">Musikwünsche</h1>
         <p id="cycleMeta" class="muted">Abstimmung wird geladen …</p>
+        <div id="cycleCountdown" class="countdown" hidden>
+          <span id="countdownLabel">Endet in</span><strong id="countdownValue">–</strong>
+        </div>
       </div>
       <div class="budget-card" aria-live="polite">
         <span>Noch verfügbar</span>
@@ -51,7 +57,7 @@
     <section id="tab-voting" class="tab-panel active">
       <div class="section-head">
         <div><p class="eyebrow">Rangliste</p><h2>Eure Favoriten</h2></div>
-        <button id="refreshPlaylist" class="button ghost small" type="button">Aktualisieren</button>
+        <div class="list-actions"><span id="playlistSummary" class="muted"></span><button id="refreshPlaylist" class="button ghost small" type="button">Aktualisieren</button></div>
       </div>
       <div id="playlist" class="song-list" aria-live="polite"></div>
     </section>
@@ -77,20 +83,40 @@
   </main>
 
   <dialog id="memberDialog" class="modal">
-    <form id="loginForm" class="modal-card">
+    <div class="modal-card">
       <button class="icon-button close" type="button" data-close aria-label="Schließen">×</button>
       <p class="eyebrow">Persönliche Abstimmung</p>
-      <h2>Mitglied anmelden</h2>
-      <p class="muted">Wähle deinen Namen und gib deine persönliche PIN ein.</p>
-      <label for="memberName">Name</label>
-      <input id="memberName" list="memberNames" autocomplete="name" placeholder="Name auswählen oder eingeben" required>
-      <datalist id="memberNames"></datalist>
-      <label for="memberPin">PIN</label>
-      <input id="memberPin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="current-password" placeholder="4 bis 8 Ziffern" required>
-      <p id="loginError" class="form-error" hidden></p>
-      <button class="button primary wide" type="submit">Anmelden</button>
-      <small>Beim ersten Login nach der Umstellung wird diese PIN einmalig für deinen bestehenden Namen gespeichert.</small>
-    </form>
+      <h2 id="memberDialogTitle">Mitglied anmelden</h2>
+      <div class="auth-switch" role="tablist" aria-label="Anmeldung auswählen">
+        <button class="active" id="loginMode" type="button" role="tab" aria-selected="true">Anmelden</button>
+        <button id="registerMode" type="button" role="tab" aria-selected="false">Neu registrieren</button>
+      </div>
+
+      <form id="loginForm" class="auth-form">
+        <p class="muted">Wähle deinen Namen und gib deine persönliche PIN ein.</p>
+        <label for="memberName">Name</label>
+        <input id="memberName" list="memberNames" autocomplete="name" placeholder="Name auswählen" required>
+        <datalist id="memberNames"></datalist>
+        <label for="memberPin">PIN</label>
+        <input id="memberPin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="current-password" placeholder="4 bis 8 Ziffern" required>
+        <p id="loginError" class="form-error" hidden></p>
+        <button class="button primary wide" type="submit">Anmelden</button>
+        <small>PIN vergessen? Die Verwaltung kann sie zurücksetzen.</small>
+      </form>
+
+      <form id="registerForm" class="auth-form" hidden>
+        <p class="muted">Gib deinen Namen ein und denke dir deine persönliche PIN aus.</p>
+        <label for="registerName">Vor- und Nachname</label>
+        <input id="registerName" autocomplete="name" minlength="2" maxlength="100" placeholder="Vorname Nachname" required>
+        <label for="registerPin">Eigene PIN</label>
+        <input id="registerPin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="new-password" placeholder="4 bis 8 Ziffern" required>
+        <label for="registerPinRepeat">PIN wiederholen</label>
+        <input id="registerPinRepeat" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="new-password" placeholder="PIN erneut eingeben" required>
+        <p id="registerError" class="form-error" hidden></p>
+        <button class="button primary wide" type="submit">Registrieren und anmelden</button>
+        <small>Dein Name darf nur einmal registriert werden. Merke dir deine PIN gut.</small>
+      </form>
+    </div>
   </dialog>
 
   <dialog id="adminDialog" class="modal wide-modal">
@@ -119,9 +145,10 @@
           <form id="cycleForm" class="form-grid panel-box">
             <h3>Neue Abstimmung</h3>
             <label>Name<input id="cycleTitle" required maxlength="100" placeholder="Musik für Vereinsabend"></label>
-            <label>Laufzeit in Tagen<input id="cycleDays" type="number" min="1" max="90" value="7" required></label>
+            <label>Voting startet<input id="cycleStartsAt" type="datetime-local" required></label>
+            <label>Voting endet<input id="cycleClosesAt" type="datetime-local" required></label>
             <label>Punkte je Mitglied<input id="cycleBudget" type="number" min="1" max="100" value="10" required></label>
-            <button class="button primary" type="submit">Abstimmung starten</button>
+            <button class="button primary" type="submit">Abstimmung planen</button>
           </form>
           <div id="cycleList" class="admin-list"></div>
         </section>

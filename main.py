@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import html
 import os
+import re
 import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
@@ -12,7 +13,7 @@ import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -25,6 +26,7 @@ YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 SESSION_DAYS = max(1, int(os.getenv("SESSION_DAYS", "30")))
 PIN_ITERATIONS = 210_000
+YOUTUBE_VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{6,20}$")
 
 
 def db_connect():
@@ -89,6 +91,32 @@ def require_member(authorization: str | None = Header(default=None)) -> dict:
     return {"member_id": row[0], "display_name": row[1], "token_hash": token_hash(token)}
 
 
+def optional_member(authorization: str | None = Header(default=None)) -> dict | None:
+    if not authorization:
+        return None
+    return require_member(authorization)
+
+
+def utc_datetime(value: datetime, field_name: str) -> datetime:
+    """Require an unambiguous timestamp and normalize it for PostgreSQL."""
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{field_name} muss eine Zeitzone enthalten.",
+        )
+    return value.astimezone(timezone.utc)
+
+
+def validate_cycle_window(starts_at: datetime, closes_at: datetime) -> tuple[datetime, datetime]:
+    starts_at = utc_datetime(starts_at, "Startzeit")
+    closes_at = utc_datetime(closes_at, "Endzeit")
+    if closes_at <= starts_at:
+        raise HTTPException(status_code=422, detail="Die Endzeit muss nach der Startzeit liegen.")
+    if closes_at <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=422, detail="Die Endzeit muss in der Zukunft liegen.")
+    return starts_at, closes_at
+
+
 def require_admin(x_admin_password: str | None = Header(default=None)) -> None:
     if not ADMIN_PASSWORD:
         raise HTTPException(status_code=503, detail="Das Verwaltungskennwort ist nicht eingerichtet.")
@@ -101,7 +129,38 @@ def close_expired_cycles() -> None:
         with db_connect() as conn, conn.cursor() as cur:
             cur.execute(
                 "UPDATE music_cycles SET status = 'closed', updated_at = CURRENT_TIMESTAMP "
-                "WHERE status = 'active' AND closes_at <= CURRENT_TIMESTAMP;"
+                "WHERE status IN ('active', 'planned') AND closes_at <= CURRENT_TIMESTAMP;"
+            )
+            cur.execute(
+                """
+                WITH due AS (
+                    SELECT id FROM music_cycles
+                    WHERE status = 'planned'
+                      AND starts_at <= CURRENT_TIMESTAMP
+                      AND closes_at > CURRENT_TIMESTAMP
+                    ORDER BY starts_at DESC, id DESC
+                    LIMIT 1
+                )
+                UPDATE music_cycles
+                SET status = 'closed', updated_at = CURRENT_TIMESTAMP
+                WHERE status = 'active'
+                  AND EXISTS (SELECT 1 FROM due)
+                  AND id <> (SELECT id FROM due);
+                """
+            )
+            cur.execute(
+                """
+                UPDATE music_cycles
+                SET status = 'active', updated_at = CURRENT_TIMESTAMP
+                WHERE id = (
+                    SELECT id FROM music_cycles
+                    WHERE status = 'planned'
+                      AND starts_at <= CURRENT_TIMESTAMP
+                      AND closes_at > CURRENT_TIMESTAMP
+                    ORDER BY starts_at DESC, id DESC
+                    LIMIT 1
+                );
+                """
             )
             cur.execute("DELETE FROM music_member_sessions WHERE expires_at <= CURRENT_TIMESTAMP;")
             conn.commit()
@@ -141,6 +200,11 @@ class MemberLogin(BaseModel):
     pin: str = Field(pattern=r"^\d{4,8}$")
 
 
+class MemberRegister(BaseModel):
+    display_name: str = Field(min_length=2, max_length=100)
+    pin: str = Field(pattern=r"^\d{4,8}$")
+
+
 class MemberAdminCreate(BaseModel):
     display_name: str = Field(min_length=2, max_length=100)
     pin: str = Field(pattern=r"^\d{4,8}$")
@@ -166,13 +230,15 @@ class VoteCreate(BaseModel):
 
 class CycleCreate(BaseModel):
     name: str = Field(min_length=2, max_length=100)
-    duration_days: int = Field(default=7, ge=1, le=90)
+    starts_at: datetime
+    closes_at: datetime
     max_budget: int = Field(default=DEFAULT_MAX_BUDGET, ge=1, le=100)
 
 
 class CycleUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=100)
     status: str | None = None
+    starts_at: datetime | None = None
     closes_at: datetime | None = None
     max_budget: int | None = Field(default=None, ge=1, le=100)
 
@@ -241,7 +307,9 @@ def member_login(login: MemberLogin):
             (member_id, token_hash(token), expires_at),
         )
         cur.execute(
-            "SELECT id, name, max_budget FROM music_cycles WHERE status = 'active' ORDER BY id DESC LIMIT 1;"
+            """SELECT id, name, max_budget FROM music_cycles
+               WHERE status = 'active' AND starts_at <= CURRENT_TIMESTAMP
+                 AND closes_at > CURRENT_TIMESTAMP ORDER BY id DESC LIMIT 1;"""
         )
         cycle = cur.fetchone()
         used = 0
@@ -265,6 +333,66 @@ def member_login(login: MemberLogin):
     }
 
 
+@app.post("/api/v1/music/auth/register", status_code=201)
+def member_register(registration: MemberRegister):
+    display_name = " ".join(registration.display_name.strip().split())
+    if len(display_name) < 2:
+        raise HTTPException(status_code=422, detail="Bitte einen vollständigen Namen eingeben.")
+    member_id = normalize_member_id(display_name)
+    if not member_id:
+        raise HTTPException(status_code=422, detail="Bitte einen gültigen Namen eingeben.")
+
+    with db_connect() as conn, conn.cursor() as cur:
+        # Serialisiert identische Namen, damit auch zwei gleichzeitige Anfragen
+        # nicht versehentlich doppelte Konten anlegen können.
+        cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s));", (member_id,))
+        cur.execute(
+            """
+            SELECT 1
+            FROM club_members
+            WHERE lower(display_name) = lower(%s) OR member_id = %s
+            LIMIT 1;
+            """,
+            (display_name, member_id),
+        )
+        if cur.fetchone():
+            raise HTTPException(
+                status_code=409,
+                detail="Dieser Name ist bereits registriert. Bitte normal anmelden oder die PIN zurücksetzen lassen.",
+            )
+
+        cur.execute(
+            """
+            INSERT INTO club_members (member_id, display_name, pin_hash, active)
+            VALUES (%s, %s, %s, TRUE);
+            """,
+            (member_id, display_name, hash_pin(registration.pin)),
+        )
+        token = secrets.token_urlsafe(32)
+        expires_at = datetime.now(timezone.utc) + timedelta(days=SESSION_DAYS)
+        cur.execute(
+            "INSERT INTO music_member_sessions (member_id, token_hash, expires_at) VALUES (%s, %s, %s);",
+            (member_id, token_hash(token), expires_at),
+        )
+        cur.execute(
+            """SELECT id, max_budget FROM music_cycles
+               WHERE status = 'active' AND starts_at <= CURRENT_TIMESTAMP
+                 AND closes_at > CURRENT_TIMESTAMP ORDER BY id DESC LIMIT 1;"""
+        )
+        cycle = cur.fetchone()
+        conn.commit()
+
+    maximum = int(cycle[1]) if cycle else DEFAULT_MAX_BUDGET
+    return {
+        "status": "success",
+        "token": token,
+        "expires_at": expires_at,
+        "member": {"member_id": member_id, "display_name": display_name},
+        "budget": {"remaining": maximum, "maximum": maximum},
+        "active_cycle_id": cycle[0] if cycle else None,
+    }
+
+
 @app.post("/api/v1/music/auth/logout")
 def member_logout(member: dict = Depends(require_member)):
     with db_connect() as conn, conn.cursor() as cur:
@@ -277,7 +405,9 @@ def member_logout(member: dict = Depends(require_member)):
 def member_me(member: dict = Depends(require_member)):
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute(
-            "SELECT id, name, max_budget FROM music_cycles WHERE status = 'active' ORDER BY id DESC LIMIT 1;"
+            """SELECT id, name, max_budget FROM music_cycles
+               WHERE status = 'active' AND starts_at <= CURRENT_TIMESTAMP
+                 AND closes_at > CURRENT_TIMESTAMP ORDER BY id DESC LIMIT 1;"""
         )
         cycle = cur.fetchone()
         used = 0
@@ -316,6 +446,7 @@ def search_tracks(
                     "external_id": item["id"]["videoId"],
                     "title": html.unescape(item["snippet"]["title"]),
                     "channel_title": html.unescape(item["snippet"]["channelTitle"]),
+                    "thumbnail_url": f"/api/v1/music/thumbnails/youtube/{item['id']['videoId']}",
                 }
                 for item in items
             ]
@@ -326,6 +457,7 @@ def search_tracks(
 
 @app.get("/api/v1/music/cycles")
 def get_cycles():
+    close_expired_cycles()
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute(
             "SELECT id, name, status, starts_at, closes_at, max_budget FROM music_cycles ORDER BY id DESC;"
@@ -342,11 +474,12 @@ def get_cycles():
 
 
 @app.get("/api/v1/music/cycles/{cycle_id}/playlist")
-def get_playlist(cycle_id: int, member: dict = Depends(require_member)):
+def get_playlist(cycle_id: int, member: dict | None = Depends(optional_member)):
+    member_id = member["member_id"] if member else ""
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute(
             """
-            SELECT s.id, s.title, s.channel_title, s.member_id,
+            SELECT s.id, s.title, s.channel_title, s.member_id, s.provider, s.external_id,
                    COALESCE(SUM(v.points), 0),
                    COALESCE(MAX(v.points) FILTER (WHERE v.member_id = %s), 0)
             FROM music_suggestions s
@@ -355,19 +488,42 @@ def get_playlist(cycle_id: int, member: dict = Depends(require_member)):
             GROUP BY s.id
             ORDER BY COALESCE(SUM(v.points), 0) DESC, s.created_at ASC;
             """,
-            (member["member_id"], cycle_id),
+            (member_id, cycle_id),
         )
         rows = cur.fetchall()
-    return {
-        "playlist": [
-            {
-                "rank": rank, "suggestion_id": row[0], "title": row[1],
-                "channel_title": row[2], "suggested_by_me": row[3] == member["member_id"],
-                "total_points": int(row[4]), "my_points": int(row[5]),
-            }
-            for rank, row in enumerate(rows, start=1)
-        ]
-    }
+    playlist = []
+    previous_points = None
+    visible_rank = 0
+    for position, row in enumerate(rows, start=1):
+        total_points = int(row[6])
+        if total_points != previous_points:
+            visible_rank = position
+            previous_points = total_points
+        playlist.append({
+            "rank": visible_rank, "suggestion_id": row[0], "title": row[1],
+            "channel_title": row[2], "suggested_by_me": bool(member) and row[3] == member_id,
+            "provider": row[4], "external_id": row[5],
+            "thumbnail_url": f"/api/v1/music/thumbnails/youtube/{row[5]}"
+            if row[4] == "youtube" and YOUTUBE_VIDEO_ID.fullmatch(row[5] or "") else None,
+            "total_points": total_points, "my_points": int(row[7]),
+        })
+    return {"playlist": playlist}
+
+
+@app.get("/api/v1/music/thumbnails/youtube/{video_id}")
+def youtube_thumbnail(video_id: str):
+    if not YOUTUBE_VIDEO_ID.fullmatch(video_id):
+        raise HTTPException(status_code=404, detail="Vorschaubild nicht gefunden.")
+    try:
+        image = requests.get(f"https://i.ytimg.com/vi/{video_id}/mqdefault.jpg", timeout=6)
+        image.raise_for_status()
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=404, detail="Vorschaubild nicht erreichbar.") from exc
+    return Response(
+        content=image.content,
+        media_type=image.headers.get("content-type", "image/jpeg"),
+        headers={"Cache-Control": "public, max-age=86400, stale-if-error=604800"},
+    )
 
 
 @app.post("/api/v1/music/cycles/{cycle_id}/suggestions")
@@ -384,6 +540,7 @@ def create_suggestion(cycle_id: int, suggestion: SuggestionCreate, member: dict 
             SELECT id, %s, %s, %s, %s, %s, %s
             FROM music_cycles
             WHERE id = %s AND status = 'active'
+              AND starts_at <= CURRENT_TIMESTAMP AND closes_at > CURRENT_TIMESTAMP
               AND NOT EXISTS (
                   SELECT 1 FROM music_suggestions
                   WHERE cycle_id = %s AND provider = %s AND external_id = %s
@@ -412,7 +569,9 @@ def cast_vote(cycle_id: int, vote: VoteCreate, member: dict = Depends(require_me
             SELECT c.max_budget
             FROM music_suggestions s
             JOIN music_cycles c ON c.id = s.cycle_id
-            WHERE s.id = %s AND s.cycle_id = %s AND c.status = 'active' AND s.status = 'approved';
+            WHERE s.id = %s AND s.cycle_id = %s AND c.status = 'active'
+              AND c.starts_at <= CURRENT_TIMESTAMP AND c.closes_at > CURRENT_TIMESTAMP
+              AND s.status = 'approved';
             """,
             (vote.suggestion_id, cycle_id),
         )
@@ -535,17 +694,31 @@ def update_member(member_id: str, update: MemberAdminUpdate):
 
 @app.post("/api/v1/music/admin/cycles", dependencies=[Depends(require_admin)])
 def create_cycle(cycle: CycleCreate):
+    starts_at, closes_at = validate_cycle_window(cycle.starts_at, cycle.closes_at)
+    status = "active" if starts_at <= datetime.now(timezone.utc) else "planned"
     with db_connect() as conn, conn.cursor() as cur:
-        cur.execute("UPDATE music_cycles SET status = 'closed' WHERE status = 'active';")
+        cur.execute(
+            """
+            SELECT id FROM music_cycles
+            WHERE status IN ('planned', 'active')
+              AND starts_at < %s AND closes_at > %s
+            LIMIT 1;
+            """,
+            (closes_at, starts_at),
+        )
+        if cur.fetchone():
+            raise HTTPException(
+                status_code=409,
+                detail="In diesem Zeitraum ist bereits eine Abstimmung geplant.",
+            )
         cur.execute(
             """
             INSERT INTO music_cycles
                 (name, type, profile_id, starts_at, closes_at, status, max_budget)
-            VALUES (%s, 'custom', 1, CURRENT_TIMESTAMP,
-                    CURRENT_TIMESTAMP + (%s * INTERVAL '1 day'), 'active', %s)
+            VALUES (%s, 'custom', 1, %s, %s, %s, %s)
             RETURNING id;
             """,
-            (cycle.name.strip(), cycle.duration_days, cycle.max_budget),
+            (cycle.name.strip(), starts_at, closes_at, status, cycle.max_budget),
         )
         cycle_id = cur.fetchone()[0]
         conn.commit()
@@ -557,17 +730,44 @@ def update_cycle(cycle_id: int, update: CycleUpdate):
     if update.status not in {None, "planned", "active", "closed"}:
         raise HTTPException(status_code=400, detail="Ungültiger Status.")
     with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT starts_at, closes_at, status FROM music_cycles WHERE id = %s;", (cycle_id,))
+        existing = cur.fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Abstimmung nicht gefunden.")
+        starts_at = utc_datetime(update.starts_at, "Startzeit") if update.starts_at else existing[0]
+        closes_at = utc_datetime(update.closes_at, "Endzeit") if update.closes_at else existing[1]
+        if update.status == "active":
+            starts_at = datetime.now(timezone.utc)
+        if closes_at <= starts_at:
+            raise HTTPException(status_code=422, detail="Die Endzeit muss nach der Startzeit liegen.")
+        target_status = update.status or existing[2]
+        if target_status in {"planned", "active"}:
+            cur.execute(
+                """
+                SELECT id FROM music_cycles
+                WHERE id <> %s
+                  AND status IN ('planned', 'active')
+                  AND starts_at < %s AND closes_at > %s
+                LIMIT 1;
+                """,
+                (cycle_id, closes_at, starts_at),
+            )
+            if cur.fetchone():
+                raise HTTPException(
+                    status_code=409,
+                    detail="In diesem Zeitraum ist bereits eine Abstimmung geplant.",
+                )
         if update.status == "active":
             cur.execute("UPDATE music_cycles SET status = 'closed' WHERE status = 'active' AND id <> %s;", (cycle_id,))
         cur.execute(
             """
             UPDATE music_cycles
             SET name = COALESCE(%s, name), status = COALESCE(%s, status),
-                closes_at = COALESCE(%s, closes_at), max_budget = COALESCE(%s, max_budget),
+                starts_at = %s, closes_at = %s, max_budget = COALESCE(%s, max_budget),
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = %s;
             """,
-            (update.name, update.status, update.closes_at, update.max_budget, cycle_id),
+            (update.name, update.status, starts_at, closes_at, update.max_budget, cycle_id),
         )
         if cur.rowcount != 1:
             raise HTTPException(status_code=404, detail="Abstimmung nicht gefunden.")
@@ -599,7 +799,9 @@ def create_moderator_suggestion(cycle_id: int, suggestion: SuggestionCreate):
             """
             INSERT INTO music_suggestions (cycle_id, member_id, provider, external_id, title, channel_title, duration_ms)
             SELECT id, 'moderation', %s, %s, %s, %s, %s FROM music_cycles
-            WHERE id = %s AND status = 'active' RETURNING id;
+            WHERE id = %s AND status = 'active'
+              AND starts_at <= CURRENT_TIMESTAMP AND closes_at > CURRENT_TIMESTAMP
+            RETURNING id;
             """,
             (suggestion.provider, suggestion.external_id, suggestion.title, suggestion.channel_title, suggestion.duration_ms, cycle_id),
         )

@@ -4,15 +4,17 @@ ClubIQ Music ist die lokale Musikwunsch- und Abstimmungs-App für den Vereinsbet
 
 ## Bedienung
 
-- Mitglieder werden in der geschützten Verwaltung mit einer persönlichen PIN angelegt.
+- Neue Mitglieder registrieren sich mit ihrem Namen und einer selbst gewählten PIN. Bereits vorhandene Namen können nicht erneut registriert werden.
+- Die geschützte Verwaltung kann Mitglieder weiterhin anlegen, sperren und vergessene PINs zurücksetzen.
 - Nach der Anmeldung zeigt die App das verbleibende Punktebudget an.
 - Punkte können je Song erhöht, reduziert oder vollständig entfernt werden.
 - „Meine Auswahl“ fasst die eigenen Stimmen nachvollziehbar zusammen.
+- Abstimmungen werden mit genauer Start- und Endzeit geplant und durch einen Live-Countdown begleitet.
+- Die öffentliche Rangliste bleibt ohne Anmeldung sichtbar; zum Vergeben eigener Punkte ist weiterhin eine Anmeldung nötig.
+- YouTube-Suchergebnisse und gespeicherte YouTube-Songs erhalten Vorschaubilder, wenn Internet verfügbar ist.
 - Die Verwaltung trennt Abstimmungen, Mitglieder und den aktuellen Stimmenstand.
 
-Bestehende Mitglieder ohne PIN können beim ersten Login nach dem Update einmalig ihre PIN festlegen. Danach wird nur noch der gesalzene PBKDF2-Hash gespeichert. Anmeldesitzungen laufen standardmäßig nach 30 Tagen ab und werden serverseitig validiert.
-
-Vorschaubilder für Suchergebnisse sind bewusst für eine spätere Ausbaustufe vorgesehen.
+Bestehende Mitglieder ohne PIN können beim ersten Login nach dem Update einmalig ihre PIN festlegen. Bei einer neuen Registrierung muss die PIN zur Kontrolle zweimal eingegeben werden. Danach wird nur noch der gesalzene PBKDF2-Hash gespeichert. Anmeldesitzungen laufen standardmäßig nach 30 Tagen ab und werden serverseitig validiert.
 
 Lokales Music-Voting-System für den Raspberry Pi. Webanwendung und PostgreSQL laufen getrennt in Docker-Containern. Die Datenbank wird nicht nach außen veröffentlicht.
 

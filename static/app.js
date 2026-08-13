@@ -6,6 +6,8 @@ const state = {
   member: null,
   cycles: [],
   activeCycle: null,
+  upcomingCycle: null,
+  displayedCycle: null,
   budget: { remaining: 0, maximum: 0 },
   playlist: [],
 };
@@ -17,6 +19,7 @@ const esc = (value = "") => String(value).replace(/[&<>'"]/g, char => ({
 })[char]);
 
 let toastTimer;
+let countdownTransition = "";
 function toast(message, error = false) {
   const node = $("#toast");
   node.textContent = message;
@@ -50,6 +53,73 @@ function formatDate(value) {
   return new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
+function cyclePhase(cycle, now = Date.now()) {
+  if (!cycle || cycle.status === "closed" || new Date(cycle.closes_at).getTime() <= now) return "closed";
+  if (new Date(cycle.starts_at).getTime() > now) return "planned";
+  return "active";
+}
+
+function durationParts(milliseconds) {
+  const total = Math.max(0, Math.ceil(milliseconds / 1000));
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  return [days ? `${days} T` : "", `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`]
+    .filter(Boolean).join(" ");
+}
+
+async function refreshVotingState() {
+  await loadCycles();
+  await restoreMember();
+  renderSession();
+  await loadPlaylist();
+}
+
+function updateCountdown() {
+  const cycle = state.displayedCycle;
+  const root = $("#cycleCountdown");
+  if (!cycle) { root.hidden = true; return; }
+  const phase = cyclePhase(cycle);
+  const transition = `${cycle.id}:${phase}`;
+
+  if (phase === "closed") {
+    root.hidden = true;
+    if (countdownTransition && countdownTransition !== transition) {
+      countdownTransition = transition;
+      refreshVotingState().catch(error => toast(error.message, true));
+    }
+    return;
+  }
+
+  const target = phase === "planned" ? new Date(cycle.starts_at) : new Date(cycle.closes_at);
+  $("#countdownLabel").textContent = phase === "planned" ? "Startet in" : "Endet in";
+  $("#countdownValue").textContent = durationParts(target.getTime() - Date.now());
+  root.dataset.phase = phase;
+  root.hidden = false;
+
+  if (countdownTransition && countdownTransition !== transition) {
+    countdownTransition = transition;
+    refreshVotingState().catch(error => toast(error.message, true));
+    return;
+  }
+  countdownTransition = transition;
+}
+
+function localDateTimeValue(date) {
+  const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return shifted.toISOString().slice(0, 16);
+}
+
+function setCycleFormDefaults() {
+  if ($("#cycleStartsAt").value && $("#cycleClosesAt").value) return;
+  const start = new Date(Date.now() + 5 * 60 * 1000);
+  start.setSeconds(0, 0);
+  const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
+  $("#cycleStartsAt").value = localDateTimeValue(start);
+  $("#cycleClosesAt").value = localDateTimeValue(end);
+}
+
 function setTab(name) {
   $$(".tab").forEach(button => button.classList.toggle("active", button.dataset.tab === name));
   $$(".tab-panel").forEach(panel => panel.classList.toggle("active", panel.id === `tab-${name}`));
@@ -79,8 +149,8 @@ function clearMemberSession(showMessage = true) {
   localStorage.removeItem("clubiq_music_token");
   state.token = "";
   state.member = null;
-  state.playlist = [];
   state.budget = { remaining: 0, maximum: 0 };
+  state.playlist = state.playlist.map(song => ({ ...song, my_points: 0, suggested_by_me: false }));
   renderSession();
   renderPlaylist();
   if (showMessage) toast("Du bist abgemeldet.");
@@ -98,11 +168,18 @@ async function loadMembers() {
 async function loadCycles() {
   const data = await api("/api/v1/music/cycles");
   state.cycles = data.cycles || [];
-  state.activeCycle = state.cycles.find(cycle => cycle.status === "active") || null;
-  $("#cycleName").textContent = state.activeCycle?.name || "Keine aktive Abstimmung";
+  state.activeCycle = state.cycles.find(cycle => cyclePhase(cycle) === "active") || null;
+  state.upcomingCycle = state.cycles
+    .filter(cycle => cyclePhase(cycle) === "planned")
+    .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at))[0] || null;
+  state.displayedCycle = state.activeCycle || state.upcomingCycle;
+  $("#cycleName").textContent = state.displayedCycle?.name || "Keine Abstimmung geplant";
   $("#cycleMeta").textContent = state.activeCycle
     ? `Geöffnet bis ${formatDate(state.activeCycle.closes_at)} · ${state.activeCycle.max_budget} Punkte pro Mitglied`
-    : "Die Verwaltung kann eine neue Abstimmung starten.";
+    : state.upcomingCycle
+      ? `Voting von ${formatDate(state.upcomingCycle.starts_at)} bis ${formatDate(state.upcomingCycle.closes_at)}`
+      : "Die Verwaltung kann eine neue Abstimmung planen.";
+  updateCountdown();
 }
 
 async function restoreMember() {
@@ -120,7 +197,7 @@ async function restoreMember() {
 }
 
 async function loadPlaylist() {
-  if (!state.member || !state.activeCycle) {
+  if (!state.activeCycle) {
     state.playlist = [];
     renderPlaylist();
     return;
@@ -135,29 +212,27 @@ async function loadPlaylist() {
 }
 
 function songCard(song, mine = false) {
+  const controls = state.member ? `
+    <div class="points">
+      <button type="button" data-vote="-1" aria-label="Einen Punkt entfernen">−</button>
+      <strong>${song.my_points}</strong>
+      <button type="button" data-vote="1" aria-label="Einen Punkt hinzufügen">+</button>
+    </div>` : '<button class="button ghost small login-to-vote" type="button" data-login-to-vote>Zum Abstimmen anmelden</button>';
   return `
     <article class="song-card" data-song-id="${song.suggestion_id}">
-      <span class="song-rank">${mine ? "♪" : song.rank}</span>
+      <div class="song-visual">${song.thumbnail_url ? `<img class="song-cover" src="${esc(song.thumbnail_url)}" alt="" loading="lazy">` : '<span class="song-cover song-fallback">♪</span>'}<span class="song-rank">${mine ? "♪" : song.rank}</span></div>
       <div class="song-copy">
         <strong>${esc(song.title)}</strong>
         <span>${esc(song.channel_title || "Unbekannter Interpret")}${song.suggested_by_me ? " · <em>von dir vorgeschlagen</em>" : ""}</span>
       </div>
-      ${mine ? `
-        <div class="points">
-          <button type="button" data-vote="-1" aria-label="Einen Punkt entfernen">−</button>
-          <strong>${song.my_points}</strong>
-          <button type="button" data-vote="1" aria-label="Einen Punkt hinzufügen">+</button>
-        </div>` : `
-        <div class="points">
-          <button type="button" data-vote="-1" aria-label="Einen Punkt entfernen">−</button>
-          <strong>${song.my_points}</strong>
-          <button type="button" data-vote="1" aria-label="Einen Punkt hinzufügen">+</button>
-        </div>
+      ${controls}
+      ${mine ? "" : `
         <div class="total"><strong>${song.total_points}</strong><small>gesamt</small></div>`}
     </article>`;
 }
 
 function wireVoteButtons(root) {
+  $$('[data-login-to-vote]', root).forEach(button => button.addEventListener("click", () => openMemberDialog()));
   $$('[data-vote]', root).forEach(button => button.addEventListener("click", async () => {
     const card = button.closest("[data-song-id]");
     const song = state.playlist.find(item => item.suggestion_id === Number(card.dataset.songId));
@@ -187,10 +262,10 @@ function wireVoteButtons(root) {
 
 function renderPlaylist() {
   const root = $("#playlist");
-  if (!state.member) {
-    root.innerHTML = '<div class="empty">Melde dich an, um die Rangliste zu sehen und Punkte zu vergeben.</div>';
-  } else if (!state.activeCycle) {
-    root.innerHTML = '<div class="empty">Derzeit ist keine Abstimmung geöffnet.</div>';
+  if (!state.activeCycle) {
+    root.innerHTML = state.upcomingCycle
+      ? `<div class="empty">Die Rangliste öffnet am ${formatDate(state.upcomingCycle.starts_at)}.</div>`
+      : '<div class="empty">Derzeit ist keine Abstimmung geöffnet.</div>';
   } else if (!state.playlist.length) {
     root.innerHTML = '<div class="empty">Noch keine Songs vorhanden. Mach den ersten Vorschlag.</div>';
   } else {
@@ -198,6 +273,9 @@ function renderPlaylist() {
     wireVoteButtons(root);
   }
   $("#mineCount").textContent = state.playlist.filter(song => song.my_points > 0).length;
+  $("#playlistSummary").textContent = state.activeCycle
+    ? `${state.playlist.length} Song${state.playlist.length === 1 ? "" : "s"} · ${state.playlist.reduce((sum, song) => sum + song.total_points, 0)} Punkte`
+    : "";
   renderMyVotes();
 }
 
@@ -241,16 +319,75 @@ async function login(event) {
   }
 }
 
+function setAuthMode(mode) {
+  const registering = mode === "register";
+  $("#loginForm").hidden = registering;
+  $("#registerForm").hidden = !registering;
+  $("#memberDialogTitle").textContent = registering ? "Neu registrieren" : "Mitglied anmelden";
+  $("#loginMode").classList.toggle("active", !registering);
+  $("#registerMode").classList.toggle("active", registering);
+  $("#loginMode").setAttribute("aria-selected", String(!registering));
+  $("#registerMode").setAttribute("aria-selected", String(registering));
+  $("#loginError").hidden = true;
+  $("#registerError").hidden = true;
+}
+
+function openMemberDialog(mode = "login") {
+  setAuthMode(mode);
+  $("#memberDialog").showModal();
+}
+
+async function register(event) {
+  event.preventDefault();
+  const errorNode = $("#registerError");
+  errorNode.hidden = true;
+  const pin = $("#registerPin").value;
+  if (pin !== $("#registerPinRepeat").value) {
+    errorNode.textContent = "Die beiden PIN-Eingaben stimmen nicht überein.";
+    errorNode.hidden = false;
+    return;
+  }
+  try {
+    const data = await api("/api/v1/music/auth/register", {
+      method: "POST",
+      body: JSON.stringify({
+        display_name: $("#registerName").value.trim(),
+        pin,
+      }),
+    });
+    state.token = data.token;
+    localStorage.setItem("clubiq_music_token", data.token);
+    state.member = data.member;
+    state.budget = data.budget;
+    event.target.reset();
+    $("#memberDialog").close();
+    await loadMembers();
+    renderSession();
+    await loadPlaylist();
+    toast(`Willkommen ${data.member.display_name}! Dein Konto ist bereit.`);
+  } catch (error) {
+    errorNode.textContent = error.message;
+    errorNode.hidden = false;
+  }
+}
+
 async function logout() {
   if (!state.member) return;
   try { await api("/api/v1/music/auth/logout", { method: "POST" }); } catch (_) { /* local logout still works */ }
   clearMemberSession();
+  await loadPlaylist();
 }
 
 async function searchSongs(event) {
   event.preventDefault();
   if (!state.member) {
-    $("#memberDialog").showModal();
+    openMemberDialog();
+    return;
+  }
+  if (!state.activeCycle) {
+    toast(state.upcomingCycle
+      ? `Das Voting startet am ${formatDate(state.upcomingCycle.starts_at)}.`
+      : "Derzeit ist keine Abstimmung geöffnet.", true);
     return;
   }
   const query = $("#searchInput").value.trim();
@@ -261,7 +398,7 @@ async function searchSongs(event) {
     const results = data.results || [];
     root.innerHTML = results.length ? results.map((song, index) => `
       <article class="song-card">
-        <span class="song-rank">${index + 1}</span>
+        <div class="song-visual">${song.thumbnail_url ? `<img class="song-cover" src="${esc(song.thumbnail_url)}" alt="" loading="lazy">` : '<span class="song-cover song-fallback">♪</span>'}<span class="song-rank">${index + 1}</span></div>
         <div class="song-copy"><strong>${esc(song.title)}</strong><span>${esc(song.channel_title || "")}</span></div>
         <button class="button primary small" type="button" data-suggest="${esc(song.external_id)}"
           data-title="${esc(song.title)}" data-channel="${esc(song.channel_title || "")}">Vorschlagen</button>
@@ -331,6 +468,7 @@ async function showAdminArea() {
   $("#adminLogin").hidden = true;
   $("#adminArea").hidden = false;
   $("#adminLogout").hidden = false;
+  setCycleFormDefaults();
   await Promise.all([loadAdminStats(), loadAdminCycles(), loadAdminMembers(), loadVoteHistory()]);
 }
 
@@ -355,9 +493,9 @@ async function loadAdminCycles() {
   const root = $("#cycleList");
   root.innerHTML = state.cycles.map(cycle => `
     <div class="admin-row">
-      <div><strong>${esc(cycle.name)}</strong><span>${cycle.status === "active" ? "Aktiv" : cycle.status === "closed" ? "Beendet" : "Geplant"} · bis ${formatDate(cycle.closes_at)} · ${cycle.max_budget} Punkte</span></div>
+      <div><strong>${esc(cycle.name)}</strong><span>${cyclePhase(cycle) === "active" ? "Aktiv" : cyclePhase(cycle) === "closed" ? "Beendet" : "Geplant"} · ${formatDate(cycle.starts_at)} bis ${formatDate(cycle.closes_at)} · ${cycle.max_budget} Punkte</span></div>
       <div class="row-actions">
-        ${cycle.status !== "active" ? `<button class="button ghost small" data-cycle-action="active" data-cycle-id="${cycle.id}">Aktivieren</button>` : ""}
+        ${cyclePhase(cycle) === "planned" && !state.activeCycle ? `<button class="button ghost small" data-cycle-action="active" data-cycle-id="${cycle.id}">Jetzt starten</button>` : ""}
         ${cycle.status === "active" ? `<button class="button ghost small" data-cycle-action="closed" data-cycle-id="${cycle.id}">Beenden</button>` : ""}
       </div>
     </div>`).join("") || '<div class="empty">Noch keine Abstimmung vorhanden.</div>';
@@ -367,7 +505,7 @@ async function loadAdminCycles() {
         method: "PATCH", ...adminHeadersBody({ status: button.dataset.cycleAction }),
       }, true);
       await loadAdminCycles();
-      await loadPlaylist();
+      await refreshVotingState();
       toast("Abstimmung aktualisiert.");
     } catch (error) { toast(error.message, true); }
   }));
@@ -375,20 +513,26 @@ async function loadAdminCycles() {
 
 async function createCycle(event) {
   event.preventDefault();
+  const startsAt = new Date($("#cycleStartsAt").value);
+  const closesAt = new Date($("#cycleClosesAt").value);
+  if (!Number.isFinite(startsAt.getTime()) || !Number.isFinite(closesAt.getTime()) || closesAt <= startsAt) {
+    return toast("Bitte eine gültige Start- und Endzeit wählen.", true);
+  }
   try {
     await api("/api/v1/music/admin/cycles", {
       method: "POST", ...adminHeadersBody({
         name: $("#cycleTitle").value.trim(),
-        duration_days: Number($("#cycleDays").value),
+        starts_at: startsAt.toISOString(),
+        closes_at: closesAt.toISOString(),
         max_budget: Number($("#cycleBudget").value),
       }),
     }, true);
     event.target.reset();
-    $("#cycleDays").value = "7";
     $("#cycleBudget").value = "10";
+    setCycleFormDefaults();
     await Promise.all([loadAdminCycles(), loadAdminStats()]);
-    await loadPlaylist();
-    toast("Neue Abstimmung gestartet.");
+    await refreshVotingState();
+    toast(startsAt <= new Date() ? "Abstimmung gestartet." : "Abstimmung wurde geplant.");
   } catch (error) { toast(error.message, true); }
 }
 
@@ -451,14 +595,17 @@ async function loadVoteHistory() {
 function bindEvents() {
   $$(".tab").forEach(button => button.addEventListener("click", () => setTab(button.dataset.tab)));
   $$(".subtab").forEach(button => button.addEventListener("click", () => setAdminTab(button.dataset.adminTab)));
-  $$('[data-open-member]').forEach(button => button.addEventListener("click", () => $("#memberDialog").showModal()));
-  $("#memberOpen").addEventListener("click", () => state.member ? logout() : $("#memberDialog").showModal());
+  $$('[data-open-member]').forEach(button => button.addEventListener("click", () => openMemberDialog()));
+  $("#memberOpen").addEventListener("click", () => state.member ? logout() : openMemberDialog());
   $("#adminOpen").addEventListener("click", openAdmin);
   $$('[data-close]').forEach(button => button.addEventListener("click", () => button.closest("dialog").close()));
   $$("dialog").forEach(dialog => dialog.addEventListener("click", event => {
     if (event.target === dialog) dialog.close();
   }));
   $("#loginForm").addEventListener("submit", login);
+  $("#registerForm").addEventListener("submit", register);
+  $("#loginMode").addEventListener("click", () => setAuthMode("login"));
+  $("#registerMode").addEventListener("click", () => setAuthMode("register"));
   $("#searchForm").addEventListener("submit", searchSongs);
   $("#refreshPlaylist").addEventListener("click", loadPlaylist);
   $("#adminLogin").addEventListener("submit", adminLogin);
@@ -482,3 +629,5 @@ async function start() {
 }
 
 start();
+setInterval(updateCountdown, 1000);
+setInterval(() => loadPlaylist().catch(() => {}), 30000);

@@ -1,5 +1,6 @@
 import asyncio
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -23,9 +24,11 @@ class SecurityContractTests(unittest.TestCase):
 
     def test_login_and_vote_models_do_not_accept_client_member_id(self):
         login_schema = main.MemberLogin.model_json_schema()["properties"]
+        register_schema = main.MemberRegister.model_json_schema()["properties"]
         vote_schema = main.VoteCreate.model_json_schema()["properties"]
         suggestion_schema = main.SuggestionCreate.model_json_schema()["properties"]
         self.assertEqual(set(login_schema), {"display_name", "pin"})
+        self.assertEqual(set(register_schema), {"display_name", "pin"})
         self.assertNotIn("member_id", vote_schema)
         self.assertNotIn("member_id", suggestion_schema)
 
@@ -33,8 +36,23 @@ class SecurityContractTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             main.MemberLogin(display_name="Florian", pin="abcd")
         with self.assertRaises(ValidationError):
+            main.MemberRegister(display_name="Florian", pin="123")
+        with self.assertRaises(ValidationError):
             main.VoteCreate(suggestion_id=1, points=101)
         self.assertEqual(main.VoteCreate(suggestion_id=1, points=0).points, 0)
+
+    def test_cycle_uses_exact_time_window(self):
+        starts_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+        closes_at = starts_at + timedelta(hours=3)
+        cycle = main.CycleCreate(
+            name="Vereinsabend", starts_at=starts_at, closes_at=closes_at, max_budget=10
+        )
+        normalized = main.validate_cycle_window(cycle.starts_at, cycle.closes_at)
+        self.assertEqual(normalized, (starts_at, closes_at))
+        with self.assertRaises(HTTPException):
+            main.validate_cycle_window(closes_at, starts_at)
+        with self.assertRaises(HTTPException):
+            main.validate_cycle_window(starts_at.replace(tzinfo=None), closes_at)
 
     def test_admin_password_uses_server_configuration(self):
         with patch.object(main, "ADMIN_PASSWORD", "test-secret"):
@@ -61,6 +79,25 @@ class OfflineFrontendContractTests(unittest.TestCase):
         self.assertNotIn("https://", html_source)
         self.assertIn('/static/app.css', html_source)
         self.assertIn('/static/app.js', html_source)
+        css_source = (ROOT / "static" / "app.css").read_text(encoding="utf-8")
+        self.assertIn('/pics/sv-barver-darts.png', css_source)
+        self.assertTrue((ROOT / "pics" / "sv-barver-darts.png").is_file())
+
+    def test_self_registration_has_pin_confirmation(self):
+        html_source = (ROOT / "index.html").read_text(encoding="utf-8")
+        script_source = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+        self.assertIn('id="registerPinRepeat"', html_source)
+        self.assertIn('/api/v1/music/auth/register', script_source)
+
+    def test_cycle_form_and_countdown_are_present(self):
+        html_source = (ROOT / "index.html").read_text(encoding="utf-8")
+        script_source = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+        self.assertIn('id="cycleStartsAt" type="datetime-local"', html_source)
+        self.assertIn('id="cycleClosesAt" type="datetime-local"', html_source)
+        self.assertIn('id="cycleCountdown"', html_source)
+        self.assertIn("function updateCountdown()", script_source)
+        self.assertIn("refreshVotingState()", script_source)
+        self.assertNotIn("duration_days", script_source)
 
     def test_database_migration_contains_sessions_and_budget(self):
         schema = (ROOT / "bootstrap.py").read_text(encoding="utf-8")
