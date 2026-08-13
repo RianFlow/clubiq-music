@@ -37,6 +37,16 @@ CREATE TABLE IF NOT EXISTS club_members (
     id SERIAL PRIMARY KEY,
     member_id VARCHAR(100) UNIQUE NOT NULL,
     display_name VARCHAR(255) NOT NULL,
+    pin_hash TEXT,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS music_member_sessions (
+    id BIGSERIAL PRIMARY KEY,
+    member_id VARCHAR(100) NOT NULL REFERENCES club_members(member_id) ON DELETE CASCADE,
+    token_hash CHAR(64) UNIQUE NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -76,6 +86,16 @@ CREATE TABLE IF NOT EXISTS music_provider_search_cache (
 
 CREATE INDEX IF NOT EXISTS idx_search_cache_lookup
 ON music_provider_search_cache (provider, normalized_query, market, expires_at);
+
+CREATE INDEX IF NOT EXISTS idx_music_member_sessions_token
+ON music_member_sessions (token_hash, expires_at);
+
+ALTER TABLE club_members ADD COLUMN IF NOT EXISTS pin_hash TEXT;
+ALTER TABLE club_members ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE music_cycles ADD COLUMN IF NOT EXISTS max_budget INTEGER;
+UPDATE music_cycles SET max_budget = 10 WHERE max_budget IS NULL;
+ALTER TABLE music_cycles ALTER COLUMN max_budget SET DEFAULT 10;
+ALTER TABLE music_cycles ALTER COLUMN max_budget SET NOT NULL;
 """
 
 DEFAULTS_SQL = """
