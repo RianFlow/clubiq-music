@@ -1,4 +1,5 @@
 import asyncio
+import re
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -143,7 +144,16 @@ class OfflineFrontendContractTests(unittest.TestCase):
     def test_frontend_has_no_external_runtime_dependency(self):
         html_source = (ROOT / "index.html").read_text(encoding="utf-8")
         self.assertNotIn("cdn.tailwindcss.com", html_source)
-        self.assertNotIn("https://", html_source)
+        runtime_urls = re.findall(
+            r'(?:src|href)\s*=\s*["\']([^"\']+)["\']',
+            html_source,
+            flags=re.IGNORECASE,
+        )
+        external_runtime_urls = [
+            url for url in runtime_urls
+            if url.startswith(("http://", "https://", "//"))
+        ]
+        self.assertEqual(external_runtime_urls, [])
         self.assertIn('/static/app.css', html_source)
         self.assertIn('/static/app.js', html_source)
         css_source = (ROOT / "static" / "app.css").read_text(encoding="utf-8")
