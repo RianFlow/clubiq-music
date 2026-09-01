@@ -22,11 +22,13 @@ function render() {
   setMediaImage($("#remoteCover"),current.thumbnail,player.source_mode==="radio");
   $("#remoteTitle").textContent=current.title||"Noch kein Song";
   $("#remoteArtist").textContent=current.artist||"–";
+  $("#remotePlaybackStatus").textContent=player.last_error||(player.loading?"Titel wird geladen …":player.buffering?"Audio wird gepuffert …":player.next_prepared?"Nächster Titel ist vorbereitet.":"");
+  $("#remotePlaybackStatus").hidden=!$("#remotePlaybackStatus").textContent;
   $("#remoteProgress").max=Math.max(1,Number(player.duration)||1);
   $("#remoteProgress").value=Number(player.position)||0;
   $("#remotePosition").textContent=time(player.position);
   $("#remoteDuration").textContent=time(player.duration);
-  $("#remotePlay").textContent=player.playing?"Pause":"Start";
+  $("#remotePlay").textContent=player.playing||player.loading?"Pause":"Start";
   $("#remoteVolume").value=Number(player.volume??70);
   $("#remoteVolumeValue").textContent=`${Number(player.volume??70)} %`;
   $("#remoteMute").textContent=player.muted?"Ton an":"Stumm";
@@ -39,7 +41,7 @@ async function command(action,value=null){player=await api("/api/v1/music/admin/
 async function playIndex(index){player=await api(`/api/v1/music/admin/player/queue/${index}/play`,{method:"POST"});render();}
 async function login(event){event.preventDefault();password=$("#remotePassword").value;try{await api("/api/v1/music/admin/verify");sessionStorage.setItem("clubiq_music_admin",password);$("#remoteLogin").hidden=true;$("#remoteArea").hidden=false;await refresh();}catch(error){$("#remoteError").textContent=error.message;$("#remoteError").hidden=false;}}
 $("#remoteLoginForm").addEventListener("submit",login);
-document.querySelectorAll("[data-action]").forEach(button=>button.addEventListener("click",()=>{let action=button.dataset.action;let value=null;if(action==="play"&&player.playing)action="pause";if(action==="mute")value=!player.muted;command(action,value).catch(error=>setConnection(false,error.message));}));
+document.querySelectorAll("[data-action]").forEach(button=>button.addEventListener("click",()=>{let action=button.dataset.action;let value=null;if(action==="play"&&(player.playing||player.loading))action="pause";if(action==="mute")value=!player.muted;command(action,value).catch(error=>setConnection(false,error.message));}));
 $("#remoteProgress").addEventListener("change",event=>command("seek",Number(event.target.value)));
 $("#remoteVolume").addEventListener("change",event=>command("volume",Number(event.target.value)));
 $("#remoteRefresh").addEventListener("click",()=>refresh());

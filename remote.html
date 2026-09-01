@@ -8,9 +8,9 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/pics/logo.png">
   <link rel="apple-touch-icon" href="/pics/logo.png">
-  <link rel="stylesheet" href="/static/companion.css?v=20260901-4">
-  <script defer src="/static/images.js?v=20260901-4"></script>
-  <script defer src="/static/remote.js?v=20260901-4"></script>
+  <link rel="stylesheet" href="/static/companion.css?v=20260901-5">
+  <script defer src="/static/images.js?v=20260901-5"></script>
+  <script defer src="/static/remote.js?v=20260901-5"></script>
 </head>
 <body class="remote-body">
   <header class="companion-header">
@@ -29,6 +29,7 @@
         <div><p class="eyebrow">Jetzt läuft</p><h1 id="remoteTitle">Noch kein Song</h1><p id="remoteArtist">–</p></div>
       </section>
       <section class="remote-card">
+        <p id="remotePlaybackStatus" role="status" aria-live="polite" hidden></p>
         <input id="remoteProgress" class="range" type="range" min="0" max="1" value="0" aria-label="Wiedergabeposition">
         <div class="time"><span id="remotePosition">0:00</span><span id="remoteDuration">0:00</span></div>
         <div class="transport">
