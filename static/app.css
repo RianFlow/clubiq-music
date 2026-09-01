@@ -211,6 +211,13 @@ input:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px rgba(36,92,81,
 .player-device-list { margin-top: 16px; }
 .speaker-status { margin: 14px 0 0; padding: 12px 14px; border-radius: 10px; color: var(--green); background: var(--mint); white-space: pre-wrap; overflow-wrap: anywhere; }
 .speaker-status.error { color: #7e2e28; background: #fae7e3; border: 1px solid #ddb2aa; }
+.radio-search-results { display: grid; gap: 8px; max-height: 440px; overflow: auto; }
+.radio-result { padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.radio-result > div { min-width: 0; overflow-wrap: anywhere; }
+.radio-result span { white-space: normal; }
+.radio-manual summary { cursor: pointer; font-weight: 750; }
+.radio-manual form { margin-top: 18px; }
+.radio-playback-status { white-space: pre-wrap; overflow-wrap: anywhere; }
 .activity-panel { margin-top: 24px; padding: 20px; }
 .activity-explanation { margin: -5px 0 14px; font-size: .84rem; }
 .activity-list { display: grid; gap: 7px; }

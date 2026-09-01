@@ -13,6 +13,7 @@ const state = {
   player: { available: false, queue: [], current_index: -1, volume: 70, repeat: "off", shuffle: false },
   soundboard: [],
   radioStations: [],
+  savedRadioStations: [],
   speakers: [],
   activity: [],
 };
@@ -501,6 +502,18 @@ function renderPlayer() {
     </div>`).join("") : '<div class="empty">Noch keine Songs geladen.</div>';
   renderDjQueue();
   $("#stopRadio").hidden = player.source_mode !== "radio" || !state.member?.can_control_player;
+  const radioMode = player.source_mode === "radio";
+  const canControl = Boolean(state.member?.can_control_player);
+  $("#playerProgress").disabled = radioMode || !canControl;
+  $$('[data-player-action="next"], [data-player-action="previous"]').forEach(button => {
+    button.disabled = radioMode || !canControl;
+  });
+  $$(".radio-playback-status").forEach(node => {
+    node.hidden = !radioMode;
+    node.textContent = player.last_error || (player.playing
+      ? `Live: ${player.radio_station?.name || "Internetradio"}`
+      : player.paused ? "Internetradio pausiert." : "Sender wird verbunden …");
+  });
   if (state.radioStations.length) renderRadioStations();
 }
 
@@ -523,7 +536,7 @@ function renderRadioStations() {
     button.disabled = true;
     try {
       state.player = await api(`/api/v1/music/player/radio/${button.dataset.radioPlay}/play`, { method: "POST" });
-      renderPlayer(); renderRadioStations(); toast("Internetradio läuft.");
+      renderPlayer(); renderRadioStations(); toast(state.player.playing ? "Internetradio läuft." : "Sender wird verbunden …");
     } catch (error) { toast(error.message, true); }
     finally { button.disabled = false; }
   }));
@@ -538,6 +551,7 @@ async function stopRadio() {
 
 async function loadAdminRadioStations() {
   const data = await api("/api/v1/music/admin/radio/stations", {}, true);
+  state.savedRadioStations = data.stations || [];
   state.radioStations = (data.stations || []).filter(station => station.active);
   renderRadioStations();
   $("#adminRadioStations").innerHTML = (data.stations || []).map(station => `
@@ -546,7 +560,7 @@ async function loadAdminRadioStations() {
   $$('[data-admin-radio-play]').forEach(button => button.addEventListener("click", async () => {
     try {
       state.player = await api(`/api/v1/music/admin/radio/stations/${button.dataset.adminRadioPlay}/play`, { method: "POST" }, true);
-      renderPlayer(); toast("Internetradio läuft.");
+      renderPlayer(); toast(state.player.playing ? "Internetradio läuft." : "Sender wird verbunden …");
     } catch (error) { toast(error.message, true); }
   }));
   $$('[data-radio-toggle]').forEach(button => button.addEventListener("click", async () => {
@@ -558,6 +572,55 @@ async function loadAdminRadioStations() {
     await api(`/api/v1/music/admin/radio/stations/${button.dataset.radioDelete}`, { method: "DELETE" }, true);
     await loadAdminRadioStations();
   }));
+}
+
+async function searchRadioStations(event) {
+  event.preventDefault();
+  const query = $("#radioSearchInput").value.trim();
+  if (query.length < 2) return;
+  const button = $("#radioSearchButton");
+  const status = $("#radioSearchStatus");
+  const root = $("#radioSearchResults");
+  button.disabled = true;
+  button.textContent = "Suche läuft …";
+  root.replaceChildren();
+  status.textContent = `Suche nach „${query}“ …`;
+  try {
+    const data = await api(`/api/v1/music/admin/radio/search?q=${encodeURIComponent(query)}`, {}, true);
+    const stations = data.stations || [];
+    status.textContent = stations.length
+      ? `${stations.length} Treffer · „Hinzufügen“ speichert den Sender in deiner Liste.`
+      : "Keine passenden Sender gefunden. Versuche einen anderen Namen oder eine Musikrichtung.";
+    root.innerHTML = stations.map((station, index) => {
+      const saved = state.savedRadioStations.some(item => item.stream_url === station.stream_url);
+      return `<div class="admin-row radio-result"><div><strong>${esc(station.name)}</strong><span>${esc([station.country, station.genre, station.codec].filter(Boolean).join(" · "))}</span></div>
+        <div class="row-actions"><button class="button primary small" type="button" data-radio-import="${index}" ${saved ? "disabled" : ""}>${saved ? "Gespeichert" : "Hinzufügen"}</button></div></div>`;
+    }).join("");
+    $$('[data-radio-import]', root).forEach(addButton => addButton.addEventListener("click", async () => {
+      const station = stations[Number(addButton.dataset.radioImport)];
+      addButton.disabled = true;
+      addButton.textContent = "Wird gespeichert …";
+      try {
+        const result = await api("/api/v1/music/admin/radio/import", {
+          method: "POST", ...adminHeadersBody({ station_uuid: station.station_uuid }),
+        }, true);
+        addButton.textContent = "Gespeichert";
+        status.textContent = result.status === "existing"
+          ? `${station.name} ist bereits in deiner Senderliste. Du kannst den Sender unten aktivieren und abspielen.`
+          : `${station.name} wurde hinzugefügt. Unten in der Senderliste auf „Abspielen“ tippen.`;
+        await loadAdminRadioStations();
+      } catch (error) {
+        status.textContent = error.message;
+        addButton.disabled = false;
+        addButton.textContent = "Erneut hinzufügen";
+      }
+    }));
+  } catch (error) {
+    status.textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Sender suchen";
+  }
 }
 
 async function createRadioStation(event) {
@@ -1104,6 +1167,7 @@ function bindEvents() {
   $("#cycleForm").addEventListener("submit", createCycle);
   $("#memberCreateForm").addEventListener("submit", createMember);
   $("#radioStationForm").addEventListener("submit", createRadioStation);
+  $("#radioSearchForm").addEventListener("submit", searchRadioStations);
   $("#adminStopRadio").addEventListener("click", async () => {
     try {
       state.player = await api("/api/v1/music/admin/radio/stop", { method: "POST" }, true);
