@@ -195,7 +195,7 @@ class MpvController:
     def restore_session(self) -> None:
         """Reconnect mpv to the saved track without losing queue or position."""
         if self.source_mode == "radio" and self.radio_station:
-            self.play_radio(self.radio_station)
+            self.play_radio(self.radio_station, play=not self.resume_paused)
             return
         if not (0 <= self.current_index < len(self.queue)):
             return
@@ -252,21 +252,36 @@ class MpvController:
             self.ensure_mpv()
         elif not (self.process and self.process.poll() is None and MPV_SOCKET.exists()):
             raise RuntimeError("Player ist noch nicht gestartet.")
-        payload = json.dumps({"command": list(args)}).encode() + b"\n"
+        # Each command has its own connection. Events and replies share the
+        # newline-delimited stream, so only accept our matching command reply.
+        payload = json.dumps({"command": list(args), "request_id": 1}).encode() + b"\n"
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
             client.settimeout(3)
             client.connect(str(MPV_SOCKET))
             client.sendall(payload)
             response = b""
-            while not response.endswith(b"\n"):
+            deadline = time.monotonic() + 3
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise RuntimeError("Player-Antwort hat zu lange gedauert.")
+                client.settimeout(remaining)
                 chunk = client.recv(65536)
                 if not chunk:
-                    break
+                    raise RuntimeError("Player-Verbindung ohne Antwort beendet.")
                 response += chunk
-        result = json.loads(response or b"{}")
-        if result.get("error") not in (None, "success"):
-            raise RuntimeError(result["error"])
-        return result.get("data")
+                if len(response) > 1_048_576:
+                    raise RuntimeError("Player-Antwort ist zu groß.")
+                while b"\n" in response:
+                    line, response = response.split(b"\n", 1)
+                    if not line.strip():
+                        continue
+                    result = json.loads(line)
+                    if not isinstance(result, dict) or result.get("request_id") != 1:
+                        continue
+                    if result.get("error") != "success":
+                        raise RuntimeError(result.get("error") or "Ungültige Player-Antwort.")
+                    return result.get("data")
 
     def property(self, name: str, default=None):
         try:
@@ -446,7 +461,7 @@ class MpvController:
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def play_radio(self, station: dict) -> None:
+    def play_radio(self, station: dict, play: bool = True) -> None:
         stream_url = str(station.get("stream_url", ""))
         if not stream_url.startswith(("http://", "https://")):
             raise ValueError("Nicht erlaubte Radio-Adresse.")
@@ -463,8 +478,8 @@ class MpvController:
             "genre": str(station.get("genre") or "")[:80],
         }
         self.command("loadfile", stream_url, "replace", start=False)
-        self.command("set_property", "pause", False, start=False)
-        self.resume_paused = False
+        self.command("set_property", "pause", not play, start=False)
+        self.resume_paused = not play
         self.track_was_active = False
         self.radio_retry_count = 0
         self.radio_last_load_at = time.monotonic()
@@ -472,7 +487,7 @@ class MpvController:
         self.save_state()
 
     def retry_radio(self) -> None:
-        if self.source_mode != "radio" or not self.radio_station:
+        if self.source_mode != "radio" or not self.radio_station or self.resume_paused:
             return
         fallback_url = str(self.radio_station.get("fallback_url") or "")
         use_fallback = self.radio_retry_count >= 2 and fallback_url.startswith(("http://", "https://"))
