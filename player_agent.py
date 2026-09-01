@@ -157,8 +157,12 @@ def connect_bluetooth_device(address: str, allow_pair: bool = True) -> dict:
         # Never re-pair a known device: this can invalidate its existing bond.
         if not info["paired"]:
             if not allow_pair:
-                raise ValueError("Diese Box ist nicht mehr gekoppelt. Bitte einmal unter Verwaltung → Player & Box koppeln.")
-            bluetoothctl(f"pair {address}", timeout=25)
+                # A previously approved speaker can be trusted without a bond.
+                # Reconnect it directly; only the admin pairing flow may pair.
+                if not info["trusted"]:
+                    raise ValueError("Diese Box ist nicht mehr gekoppelt oder freigegeben. Bitte einmal unter Verwaltung → Player & Box koppeln.")
+            else:
+                bluetoothctl(f"pair {address}", timeout=25)
         bluetoothctl(f"trust {address}")
         info = device_info(address)
         if not info["connected"]:
@@ -197,6 +201,13 @@ def device_info(address: str) -> dict:
         "trusted": "Trusted: yes" in output,
         "connected": "Connected: yes" in output,
     }
+
+
+def saved_bluetooth_devices() -> list[dict]:
+    # Both lists come from BlueZ's local database, without starting discovery.
+    saved = parse_devices("\n".join((bluetoothctl("devices Paired"), bluetoothctl("devices Trusted"))))
+    devices = [device_info(item["address"]) for item in saved]
+    return [device for device in devices if device["paired"] or device["trusted"]]
 
 
 class MpvController:
@@ -841,8 +852,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/state":
                 return self.reply(200, PLAYER.state())
             if self.path in {"/bluetooth/devices", "/bluetooth/saved"}:
-                paired = parse_devices(bluetoothctl("devices Paired"))
-                return self.reply(200, {"devices": [device_info(item["address"]) for item in paired],
+                return self.reply(200, {"devices": saved_bluetooth_devices(),
                                         "selected_address": PLAYER.connected_speaker or PLAYER.last_speaker})
             self.reply(404, {"error": "Nicht gefunden."})
         except Exception as exc:

@@ -29,6 +29,24 @@ class BluetoothTests(unittest.TestCase):
             agent.connect_bluetooth_device(ADDRESS, allow_pair=False)
         self.assertEqual(command.call_args_list, [call("power on")])
 
+    @patch.object(agent, "device_info", side_effect=[
+        {**info(), "trusted": True}, {**info(), "trusted": True},
+        {**info(connected=True), "trusted": True},
+    ])
+    @patch.object(agent, "bluetoothctl")
+    def test_quick_reconnect_of_previously_trusted_box_never_pairs(self, command, _info):
+        self.assertTrue(agent.connect_bluetooth_device(ADDRESS, allow_pair=False)["connected"])
+        self.assertEqual(command.call_args_list, [call("power on"), call(f"trust {ADDRESS}"),
+                                                call(f"connect {ADDRESS}", timeout=15)])
+
+    @patch.object(agent, "device_info", return_value={**info(), "trusted": True})
+    @patch.object(agent, "bluetoothctl", return_value=f"Device {ADDRESS} Testbox")
+    def test_saved_list_includes_trusted_boxes_once_without_scanning(self, command, _info):
+        devices = agent.saved_bluetooth_devices()
+        self.assertEqual(len(devices), 1)
+        self.assertEqual(devices[0]["address"], ADDRESS)
+        self.assertEqual(command.call_args_list, [call("devices Paired"), call("devices Trusted")])
+
     @patch.object(agent, "device_info", return_value=info(True, True))
     @patch.object(agent, "connect_bluetooth_device", return_value=info(True, True))
     def test_reconnect_of_running_speaker_does_not_restart_music(self, connect, _info):
