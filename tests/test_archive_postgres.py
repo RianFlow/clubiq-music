@@ -35,6 +35,8 @@ class ArchivePostgresTests(unittest.TestCase):
             cur.execute("SELECT count(*) FROM music_cycle_playlists WHERE cycle_id=1 AND finalized_at IS NULL;")
             self.assertEqual(cur.fetchone()[0], 1)
             cur.execute("INSERT INTO music_suggestions (id, cycle_id, member_id, provider, external_id, title) VALUES (1, 1, 'dj', 'youtube', 'aaaaaaaaaaa', 'Titel A'), (2, 1, 'dj', 'youtube', 'bbbbbbbbbbb', 'Titel B');")
+            # Explicit fixture IDs do not advance PostgreSQL's serial sequence.
+            cur.execute("SELECT setval(pg_get_serial_sequence('music_suggestions', 'id'), (SELECT max(id) FROM music_suggestions));")
             cur.execute("INSERT INTO music_votes (cycle_id, suggestion_id, member_id, points) VALUES (1, 1, 'dj', 5), (1, 2, 'dj', 1);")
 
         # App commit calls intentionally remain inside this test's rollback boundary.
