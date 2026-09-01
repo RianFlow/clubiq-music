@@ -28,7 +28,7 @@ jobs:
               ast.parse(path.read_text(encoding='utf-8-sig'), filename=str(path))
           PY
       - name: Browser-Code prüfen
-        run: node --check static/app.js
+        run: for file in static/*.js sw.js; do node --check "$file"; done
       - name: Compose-Konfiguration prüfen
         run: |
           cp .env.example .env

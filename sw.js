@@ -1,11 +1,12 @@
 "use strict";
 
-const CACHE = "clubiq-music-shell-20260901-2";
+const CACHE = "clubiq-music-shell-20260901-3";
 const SHELL = [
   "/", "/remote", "/party", "/manifest.webmanifest",
-  "/static/app.css?v=20260901-2", "/static/app.js?v=20260901-2",
-  "/static/companion.css?v=20260813-5", "/static/remote.js?v=20260813-5",
-  "/static/party.js?v=20260813-5", "/pics/logo.png", "/pics/pwa-512.png",
+  "/static/app.css?v=20260901-3", "/static/app.js?v=20260901-3",
+  "/static/images.js?v=20260901-3", "/static/radio-placeholder.svg",
+  "/static/companion.css?v=20260901-3", "/static/remote.js?v=20260901-3",
+  "/static/party.js?v=20260901-3", "/pics/logo.png", "/pics/pwa-512.png",
   "/pics/clubiq-symbol-gold.png", "/pics/sv-barver-darts.png"
 ];
 

@@ -477,8 +477,7 @@ function renderPlayer() {
   $("#playerArtist").textContent = player.sound_active ? "Danach wird der Song automatisch fortgesetzt" : current?.artist || (connected
     ? "Playlist aus Abstimmung und Fallback-Regeln erstellen"
     : "Die Verwaltung verbindet zuerst eine Bluetooth-Box");
-  $("#playerCover").src = current?.thumbnail || "/pics/logo.png";
-  $("#playerCover").onerror = () => { $("#playerCover").src = "/pics/logo.png"; };
+  setMediaImage($("#playerCover"), current?.thumbnail, player.source_mode === "radio");
   $("#playerProgress").max = Math.max(1, Number(player.duration) || 1);
   if (!$("#playerProgress").matches(":active")) $("#playerProgress").value = Number(player.position) || 0;
   $("#playerPosition").textContent = mediaTime(player.position);
@@ -527,7 +526,7 @@ function renderRadioStations() {
   const root = $("#radioStations");
   root.innerHTML = state.radioStations.length ? state.radioStations.map(station => `
     <button class="radio-card${state.player.radio_station?.id === station.id ? " active" : ""}" data-radio-play="${station.id}" type="button">
-      ${station.logo_url ? `<img src="${esc(station.logo_url)}" alt="">` : '<span class="radio-icon">♪</span>'}
+      <img data-radio-logo src="${esc(station.logo_image_url || '/static/radio-placeholder.svg')}" alt="" loading="lazy">
       <span><strong>${esc(station.name)}</strong><small>${esc(station.genre || "Internetradio")}</small></span>
     </button>`).join("") : '<div class="empty">Noch keine Radiosender eingerichtet.</div>';
   $$('[data-radio-play]', root).forEach(button => button.addEventListener("click", async () => {
@@ -555,7 +554,7 @@ async function loadAdminRadioStations() {
   state.radioStations = (data.stations || []).filter(station => station.active);
   renderRadioStations();
   $("#adminRadioStations").innerHTML = (data.stations || []).map(station => `
-    <div class="admin-row"><div><strong>${esc(station.name)}</strong><span>${esc(station.genre || "Ohne Genre")} · ${station.active ? "Aktiv" : "Deaktiviert"}</span></div>
+    <div class="admin-row"><div class="radio-row-identity"><img class="radio-logo" data-radio-logo src="${esc(station.logo_image_url || '/static/radio-placeholder.svg')}" alt="" loading="lazy"><div><strong>${esc(station.name)}</strong><span>${esc(station.genre || "Ohne Genre")} · ${station.active ? "Aktiv" : "Deaktiviert"}</span></div></div>
       <div class="row-actions"><button class="button primary small" data-admin-radio-play="${station.id}" ${station.active ? "" : "disabled"}>Abspielen</button><button class="button ghost small" data-radio-toggle="${station.id}" data-active="${station.active}">${station.active ? "Deaktivieren" : "Aktivieren"}</button><button class="button ghost small" data-radio-delete="${station.id}">Löschen</button></div></div>`).join("") || '<div class="empty">Noch keine Sender gespeichert.</div>';
   $$('[data-admin-radio-play]').forEach(button => button.addEventListener("click", async () => {
     try {

@@ -48,6 +48,7 @@ h1,h2,p { margin-top:0; }
 .party-shell { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(290px,.7fr); gap:24px; width:min(1500px,calc(100% - 48px)); margin:4vh auto; }
 .party-now { display:grid; grid-template-columns:minmax(230px,38%) 1fr; align-items:center; gap:clamp(24px,5vw,70px); }
 .party-now > img { width:100%; aspect-ratio:1; border-radius:30px; object-fit:cover; box-shadow:0 25px 80px #0009; }
+.now-card img.radio-cover, .party-now > img.radio-cover { object-fit:contain; padding:12px; background:#fff; }
 .party-now p { margin:0 0 10px; color:var(--gold); font-weight:900; letter-spacing:.15em; text-transform:uppercase; }
 .party-now h1 { margin:0; font-size:clamp(2.2rem,6vw,6.5rem); line-height:.98; }
 .party-now h2 { color:#b7c7c2; font-size:clamp(1.2rem,2.5vw,2.5rem); }
