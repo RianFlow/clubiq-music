@@ -8,9 +8,9 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/pics/logo.png">
   <link rel="apple-touch-icon" href="/pics/logo.png">
-  <link rel="stylesheet" href="/static/app.css?v=20260901-5">
-  <script defer src="/static/images.js?v=20260901-5"></script>
-  <script defer src="/static/app.js?v=20260901-5"></script>
+  <link rel="stylesheet" href="/static/app.css?v=20260901-6">
+  <script defer src="/static/images.js?v=20260901-6"></script>
+  <script defer src="/static/app.js?v=20260901-6"></script>
 </head>
 <body>
   <header class="topbar">
@@ -32,14 +32,17 @@
   <main class="shell">
     <section class="hero">
       <div>
-        <p class="eyebrow">Aktuelle Abstimmung</p>
+        <p class="eyebrow">Abstimmungen &amp; Playlists</p>
         <h1 id="cycleName">Musikwünsche</h1>
         <p id="cycleMeta" class="muted">Abstimmung wird geladen …</p>
+        <label class="cycle-picker" for="cycleSelect">Abstimmung / Playlist auswählen
+          <select id="cycleSelect" aria-label="Abstimmung oder archivierte Playlist auswählen"><option>Wird geladen …</option></select>
+        </label>
         <div id="cycleCountdown" class="countdown" hidden>
           <span id="countdownLabel">Endet in</span><strong id="countdownValue">–</strong>
         </div>
       </div>
-      <div class="budget-card" aria-live="polite">
+      <div id="budgetCard" class="budget-card" aria-live="polite">
         <span>Noch verfügbar</span>
         <strong><b id="budgetRemaining">–</b> Punkte</strong>
         <div class="budget-track"><i id="budgetBar"></i></div>
@@ -53,7 +56,7 @@
     </section>
 
     <nav class="tabs" aria-label="Musikbereiche">
-      <button class="tab active" data-tab="voting" type="button">Abstimmen</button>
+      <button class="tab active" data-tab="voting" type="button">Abstimmung &amp; Playlists</button>
       <button class="tab" data-tab="player" type="button">Player <span id="playerIndicator">–</span></button>
       <button class="tab" data-tab="suggest" type="button">Song vorschlagen</button>
       <button class="tab" data-tab="mine" type="button">Meine Auswahl <span id="mineCount">0</span></button>
@@ -64,6 +67,10 @@
         <div><p class="eyebrow">Rangliste</p><h2>Eure Favoriten</h2></div>
         <img class="section-brand-mark" src="/pics/clubiq-symbol-gold.png" alt="" aria-hidden="true">
         <div class="list-actions"><span id="playlistSummary" class="muted"></span><button id="refreshPlaylist" class="button ghost small" type="button">Aktualisieren</button></div>
+      </div>
+      <div class="archive-player-actions" data-player-control hidden>
+        <button id="queueSelectedPlaylist" class="button primary" type="button">Diese Playlist in den Player laden</button>
+        <span class="muted">Ersetzt die aktuelle Warteschlange. Danach im Player mit ▶ starten.</span>
       </div>
       <div id="playlist" class="song-list" aria-live="polite"></div>
       <section class="activity-panel">
@@ -118,7 +125,8 @@
             <button class="button primary small" data-open-member type="button">Anmelden</button>
           </div>
           <div class="player-actions" data-player-control hidden>
-            <button id="queueFromRanking" class="button primary" type="button">Playlist erstellen &amp; abspielen</button>
+            <p id="queueCycleName" class="muted">Oben eine Abstimmung auswählen.</p>
+            <button id="queueFromRanking" class="button primary" type="button">Ausgewählte Playlist laden</button>
             <button id="refreshPlayer" class="button ghost" type="button">Status aktualisieren</button>
           </div>
         </article>

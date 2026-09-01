@@ -16,6 +16,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class SecurityContractTests(unittest.TestCase):
+    def test_archive_queue_requires_player_permission(self):
+        for path in ("/api/v1/music/player/queue/current", "/api/v1/music/player/queue/cycles/{cycle_id}"):
+            route = next(route for route in main.app.routes if getattr(route, "path", None) == path)
+            self.assertIn(main.require_player_operator, [dependency.call for dependency in route.dependant.dependencies])
+
     def test_pin_hash_is_salted_and_verifiable(self):
         first = main.hash_pin("1234")
         second = main.hash_pin("1234")

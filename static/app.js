@@ -8,6 +8,7 @@ const state = {
   activeCycle: null,
   upcomingCycle: null,
   displayedCycle: null,
+  selectedCycleId: null,
   budget: { remaining: 0, maximum: 0 },
   playlist: [],
   player: { available: false, queue: [], current_index: -1, volume: 70, repeat: "off", shuffle: false },
@@ -28,6 +29,7 @@ const esc = (value = "") => String(value).replace(/[&<>'"]/g, char => ({
 let toastTimer;
 let countdownTransition = "";
 let deferredInstallPrompt = null;
+let queueRankingPending = false;
 function toast(message, error = false) {
   const node = $("#toast");
   // A modal dialog lives in the browser's top layer, above every body z-index.
@@ -70,6 +72,47 @@ function cyclePhase(cycle, now = Date.now()) {
   if (!cycle || cycle.status === "closed" || new Date(cycle.closes_at).getTime() <= now) return "closed";
   if (new Date(cycle.starts_at).getTime() > now) return "planned";
   return "active";
+}
+
+function canVoteInDisplayedCycle() {
+  return Boolean(state.displayedCycle && state.displayedCycle.id === state.activeCycle?.id
+    && cyclePhase(state.displayedCycle) === "active");
+}
+
+function renderCycleSelection() {
+  const cycle = state.displayedCycle;
+  const phase = cyclePhase(cycle);
+  $("#cycleName").textContent = cycle?.name || "Keine Abstimmung vorhanden";
+  $("#cycleMeta").textContent = !cycle ? "Die Verwaltung kann eine neue Abstimmung planen."
+    : phase === "active" ? `Geöffnet bis ${formatDate(cycle.closes_at)} · ${cycle.max_budget} Punkte pro Mitglied`
+    : phase === "planned" ? `Voting von ${formatDate(cycle.starts_at)} bis ${formatDate(cycle.closes_at)}`
+    : "Abstimmung beendet · Ergebnis bleibt sichtbar und die Playlist kann weiter abgespielt werden.";
+  const groups = [["active", "Laufende Abstimmung"], ["closed", "Abgeschlossene Abstimmungen"], ["planned", "Geplante Abstimmungen"]];
+  $("#cycleSelect").innerHTML = groups.map(([value, label]) => {
+    const cycles = state.cycles.filter(item => cyclePhase(item) === value);
+    return cycles.length ? `<optgroup label="${label}">${cycles.map(item =>
+      `<option value="${item.id}"${item.id === cycle?.id ? " selected" : ""}>${esc(item.name)} · ${esc(formatDate(item.closes_at))}</option>`
+    ).join("")}</optgroup>` : "";
+  }).join("") || '<option value="">Keine Abstimmung vorhanden</option>';
+  $("#cycleSelect").disabled = !state.cycles.length;
+  $("#budgetCard").hidden = !canVoteInDisplayedCycle();
+  $("#loginHint").hidden = Boolean(state.member) || !canVoteInDisplayedCycle();
+  $("#queueCycleName").textContent = cycle ? `Ausgewählte Abstimmung: ${cycle.name}` : "Oben eine Abstimmung auswählen.";
+  [$("#queueFromRanking"), $("#queueSelectedPlaylist")].forEach(button => {
+    button.disabled = queueRankingPending || !cycle || phase === "planned";
+  });
+  // Selecting a different archive is not a countdown transition.
+  countdownTransition = cycle ? `${cycle.id}:${phase}` : "";
+  updateCountdown();
+}
+
+async function selectCycle(cycleId) {
+  state.displayedCycle = state.cycles.find(cycle => cycle.id === cycleId) || null;
+  state.selectedCycleId = state.displayedCycle?.id ?? null;
+  state.playlist = [];
+  renderCycleSelection();
+  renderPlaylist();
+  await loadPlaylist();
 }
 
 function durationParts(milliseconds) {
@@ -168,6 +211,7 @@ function renderSession() {
     ? ((state.budget.maximum - state.budget.remaining) / state.budget.maximum) * 100
     : 0;
   $("#budgetBar").style.width = `${Math.min(100, percent)}%`;
+  $("#loginHint").hidden = loggedIn || !canVoteInDisplayedCycle();
 }
 
 function clearMemberSession(showMessage = true) {
@@ -197,14 +241,12 @@ async function loadCycles() {
   state.upcomingCycle = state.cycles
     .filter(cycle => cyclePhase(cycle) === "planned")
     .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at))[0] || null;
-  state.displayedCycle = state.activeCycle || state.upcomingCycle;
-  $("#cycleName").textContent = state.displayedCycle?.name || "Keine Abstimmung geplant";
-  $("#cycleMeta").textContent = state.activeCycle
-    ? `Geöffnet bis ${formatDate(state.activeCycle.closes_at)} · ${state.activeCycle.max_budget} Punkte pro Mitglied`
-    : state.upcomingCycle
-      ? `Voting von ${formatDate(state.upcomingCycle.starts_at)} bis ${formatDate(state.upcomingCycle.closes_at)}`
-      : "Die Verwaltung kann eine neue Abstimmung planen.";
-  updateCountdown();
+  const latestClosed = state.cycles.filter(cycle => cyclePhase(cycle) === "closed")
+    .sort((a, b) => new Date(b.closes_at) - new Date(a.closes_at) || b.id - a.id)[0];
+  state.displayedCycle = state.cycles.find(cycle => cycle.id === state.selectedCycleId)
+    || state.activeCycle || latestClosed || state.upcomingCycle || null;
+  state.selectedCycleId = state.displayedCycle?.id ?? null;
+  renderCycleSelection();
 }
 
 async function restoreMember() {
@@ -222,13 +264,15 @@ async function restoreMember() {
 }
 
 async function loadPlaylist() {
-  if (!state.activeCycle) {
+  const cycleId = state.displayedCycle?.id;
+  if (!cycleId) {
     state.playlist = [];
     renderPlaylist();
     return;
   }
   try {
-    const data = await api(`/api/v1/music/cycles/${state.activeCycle.id}/playlist`);
+    const data = await api(`/api/v1/music/cycles/${cycleId}/playlist`);
+    if (state.displayedCycle?.id !== cycleId) return;
     state.playlist = data.playlist || [];
     renderPlaylist();
   } catch (error) {
@@ -237,7 +281,7 @@ async function loadPlaylist() {
 }
 
 function songCard(song, mine = false) {
-  const controls = state.member ? `
+  const controls = !canVoteInDisplayedCycle() ? (mine ? `<span class="muted">${song.my_points} Punkte von dir</span>` : "") : state.member ? `
     <div class="points">
       <button type="button" data-vote="-1" aria-label="Einen Punkt entfernen">−</button>
       <strong>${song.my_points}</strong>
@@ -259,6 +303,7 @@ function songCard(song, mine = false) {
 function wireVoteButtons(root) {
   $$('[data-login-to-vote]', root).forEach(button => button.addEventListener("click", () => openMemberDialog()));
   $$('[data-vote]', root).forEach(button => button.addEventListener("click", async () => {
+    if (!canVoteInDisplayedCycle()) return toast("Diese Abstimmung ist nicht mehr geöffnet.", true);
     const card = button.closest("[data-song-id]");
     const song = state.playlist.find(item => item.suggestion_id === Number(card.dataset.songId));
     const next = song.my_points + Number(button.dataset.vote);
@@ -287,19 +332,23 @@ function wireVoteButtons(root) {
 
 function renderPlaylist() {
   const root = $("#playlist");
-  if (!state.activeCycle) {
-    root.innerHTML = state.upcomingCycle
-      ? `<div class="empty">Die Rangliste öffnet am ${formatDate(state.upcomingCycle.starts_at)}.</div>`
-      : '<div class="empty">Derzeit ist keine Abstimmung geöffnet.</div>';
+  const cycle = state.displayedCycle;
+  const phase = cyclePhase(cycle);
+  if (!cycle || phase === "planned") {
+    root.innerHTML = cycle
+      ? `<div class="empty">Die Rangliste öffnet am ${formatDate(cycle.starts_at)}.</div>`
+      : '<div class="empty">Derzeit ist keine Abstimmung vorhanden.</div>';
   } else if (!state.playlist.length) {
-    root.innerHTML = '<div class="empty">Noch keine Songs vorhanden. Mach den ersten Vorschlag.</div>';
+    root.innerHTML = phase === "closed"
+      ? '<div class="empty">Für diese Abstimmung wurden keine Songs vorgeschlagen. Beim Laden der Playlist gelten weiterhin die eingestellten Auffüllregeln.</div>'
+      : '<div class="empty">Noch keine Songs vorhanden. Mach den ersten Vorschlag.</div>';
   } else {
     root.innerHTML = state.playlist.map(song => songCard(song)).join("");
     wireVoteButtons(root);
   }
   $("#mineCount").textContent = state.playlist.filter(song => song.my_points > 0).length;
-  $("#playlistSummary").textContent = state.activeCycle
-    ? `${state.playlist.length} Song${state.playlist.length === 1 ? "" : "s"} · ${state.playlist.reduce((sum, song) => sum + song.total_points, 0)} Punkte`
+  $("#playlistSummary").textContent = cycle
+    ? `${phase === "closed" ? "Endergebnis · " : ""}${state.playlist.length} Song${state.playlist.length === 1 ? "" : "s"} · ${state.playlist.reduce((sum, song) => sum + song.total_points, 0)} Punkte`
     : "";
   renderMyVotes();
 }
@@ -409,10 +458,8 @@ async function searchSongs(event) {
     openMemberDialog();
     return;
   }
-  if (!state.activeCycle) {
-    toast(state.upcomingCycle
-      ? `Das Voting startet am ${formatDate(state.upcomingCycle.starts_at)}.`
-      : "Derzeit ist keine Abstimmung geöffnet.", true);
+  if (!canVoteInDisplayedCycle()) {
+    toast("Bitte oben eine laufende Abstimmung auswählen, um Songs vorzuschlagen.", true);
     return;
   }
   const query = $("#searchInput").value.trim();
@@ -435,7 +482,7 @@ async function searchSongs(event) {
 }
 
 async function suggestSong(button) {
-  if (!state.activeCycle) return toast("Es gibt keine aktive Abstimmung.", true);
+  if (!canVoteInDisplayedCycle()) return toast("Bitte oben eine laufende Abstimmung auswählen.", true);
   button.disabled = true;
   try {
     await api(`/api/v1/music/cycles/${state.activeCycle.id}/suggestions`, {
@@ -773,17 +820,21 @@ async function handlePlayerAction(button) {
 async function queueRanking() {
   if (!state.member) return openMemberDialog();
   if (!state.member.can_control_player) return toast("Du bist für die Player-Bedienung nicht freigegeben.", true);
-  const button = $("#queueFromRanking");
-  button.disabled = true;
+  const cycle = state.displayedCycle;
+  if (!cycle || cyclePhase(cycle) === "planned") return toast("Bitte eine laufende oder abgeschlossene Abstimmung auswählen.", true);
+  if (queueRankingPending) return;
+  queueRankingPending = true;
+  renderCycleSelection();
   try {
-    state.player = await api("/api/v1/music/player/queue/current", { method: "POST" });
+    state.player = await api(`/api/v1/music/player/queue/cycles/${cycle.id}`, { method: "POST" });
     renderPlayer();
     const build = state.player.playlist_build;
+    setTab("player");
     toast(build
-      ? `${build.total} Songs: ${build.sources.votes} Stimmen, ${build.sources.previous} vorherige, ${build.sources.genre} ${build.genre || "Genre"}.`
-      : `${state.player.queue.length} Songs sind im Player bereit.`);
+      ? `„${cycle.name}“: ${build.total} Songs geladen. Mit ▶ starten.`
+      : `${state.player.queue.length} Songs sind im Player bereit. Mit ▶ starten.`);
   } catch (error) { toast(error.message, true); }
-  finally { button.disabled = false; }
+  finally { queueRankingPending = false; renderCycleSelection(); }
 }
 
 async function loadSoundboard() {
@@ -1188,7 +1239,8 @@ function bindEvents() {
   $("#loginMode").addEventListener("click", () => setAuthMode("login"));
   $("#registerMode").addEventListener("click", () => setAuthMode("register"));
   $("#searchForm").addEventListener("submit", searchSongs);
-  $("#refreshPlaylist").addEventListener("click", loadPlaylist);
+  $("#refreshPlaylist").addEventListener("click", () => refreshVotingState().catch(error => toast(error.message, true)));
+  $("#cycleSelect").addEventListener("change", event => selectCycle(Number(event.target.value)));
   $("#adminLogin").addEventListener("submit", adminLogin);
   $("#adminLogout").addEventListener("click", adminLogout);
   $("#cycleForm").addEventListener("submit", createCycle);
@@ -1204,6 +1256,7 @@ function bindEvents() {
   $("#stopRadio").addEventListener("click", stopRadio);
   $$('[data-player-action]').forEach(button => button.addEventListener("click", () => handlePlayerAction(button)));
   $("#queueFromRanking").addEventListener("click", queueRanking);
+  $("#queueSelectedPlaylist").addEventListener("click", queueRanking);
   $("#refreshPlayer").addEventListener("click", () => loadPlayerState());
   $("#playerProgress").addEventListener("change", event => playerCommand("seek", Number(event.target.value)));
   $("#playerVolume").addEventListener("change", event => playerCommand("volume", Number(event.target.value)));

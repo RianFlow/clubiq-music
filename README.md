@@ -26,6 +26,20 @@ Player-Bedienung. Im geschützten DJ-Modus kann die Verwaltung Songs suchen,
 direkt einreihen, verschieben, sofort abspielen und entfernen. Die genaue Bedienung
 steht in [DJ, Warteschlange und Aktivitätsliste](docs/DJ-UND-AKTIVITAET.md).
 
+## Abgeschlossene Abstimmungen abspielen
+
+Oben unter **Abstimmung / Playlist auswählen** bleiben auch beendete Abstimmungen
+erreichbar. Wähle den Vereinsabend, klicke als freigegebener DJ auf
+**Diese Playlist in den Player laden** und starte im Player mit **▶**.
+Die bisherige Warteschlange wird ersetzt; die Stimmen der beendeten Abstimmung
+bleiben gesperrt. Ohne laufende Abstimmung öffnet die App das neueste Endergebnis.
+
+Beim ersten Laden nach dem Abstimmungsende wird die endgültige Playlist aus dem
+Endergebnis und den Auffüllregeln gespeichert. Weitere Aufrufe verwenden genau
+diese Reihenfolge, auch wenn inzwischen eine andere Abstimmung läuft. Eine vorher
+während des Votings erzeugte Vorschau wird dabei einmal mit den letzten Stimmen
+aktualisiert. Manuelle DJ-Änderungen betreffen nur die Player-Warteschlange.
+
 ## Voraussetzungen
 
 - Docker Engine mit Compose-Plugin

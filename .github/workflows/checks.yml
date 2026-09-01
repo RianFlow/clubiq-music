@@ -29,6 +29,8 @@ jobs:
           PY
       - name: Browser-Code prüfen
         run: for file in static/*.js sw.js; do node --check "$file"; done
+      - name: Archiv-Auswahl und Abstimmungsende prüfen
+        run: node tests/test_archive_ui.cjs
       - name: Player mit echtem mpv und stummer Ausgabe prüfen
         run: |
           docker run --rm -v "$PWD:/work:ro" -w /work debian:trixie-slim sh -c \
@@ -45,3 +47,4 @@ jobs:
         run: |
           docker compose up -d --wait db
           docker compose run --rm --no-deps -e SOUNDBOARD_TEST_POSTGRES=1 web python -m unittest discover -s tests -p test_soundboard_postgres.py
+          docker compose run --rm --no-deps -e ARCHIVE_TEST_POSTGRES=1 web python -m unittest discover -s tests -p test_archive_postgres.py
