@@ -8,9 +8,9 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/pics/logo.png">
   <link rel="apple-touch-icon" href="/pics/logo.png">
-  <link rel="stylesheet" href="/static/app.css?v=20260901-3">
-  <script defer src="/static/images.js?v=20260901-3"></script>
-  <script defer src="/static/app.js?v=20260901-3"></script>
+  <link rel="stylesheet" href="/static/app.css?v=20260901-4">
+  <script defer src="/static/images.js?v=20260901-4"></script>
+  <script defer src="/static/app.js?v=20260901-4"></script>
 </head>
 <body>
   <header class="topbar">
@@ -128,6 +128,8 @@
       </div>
       <section class="soundboard-panel">
         <div class="section-head compact"><div><p class="eyebrow">Direkte Sounds</p><h3>Soundboard</h3></div></div>
+        <p class="muted">Kurze Darts-Ansagen, Jubel und Spaß-Effekte. Nur freigegebene DJs können sie auf der Box abspielen. Die Musik wird kurz unterbrochen und danach fortgesetzt.</p>
+        <div id="soundboardFilters" class="soundboard-filters" role="group" aria-label="Sound-Kategorie"></div>
         <div id="soundboard" class="soundboard-grid"><div class="empty">Noch keine Sounds eingerichtet.</div></div>
       </section>
     </section>
@@ -269,10 +271,12 @@
             <h3>Soundboard-Sound hinzufügen</h3>
             <label>Name<input id="soundName" name="name" maxlength="80" required placeholder="z. B. Applaus"></label>
             <label>Farbe<select id="soundColor" name="color"><option value="green">Grün</option><option value="gold">Gold</option><option value="blue">Blau</option><option value="red">Rot</option></select></label>
+            <label>Kategorie<select id="soundCategory" name="category"><option value="Eigene">Eigene</option><option value="Darts">Darts</option><option value="Jubel">Jubel</option><option value="Spaß">Spaß</option></select></label>
             <label>Audiodatei<input id="soundFile" name="audio" type="file" accept="audio/mpeg,audio/ogg,audio/wav,audio/webm,audio/mp4" required></label>
             <button class="button primary" type="submit">Sound speichern</button>
             <small>MP3, WAV, OGG, M4A oder WebM · maximal 3 MB.</small>
           </form>
+          <p class="muted">32 kurze Sounds sind im ClubIQ-Paket enthalten. Entfernte Sounds bleiben auch nach Updates ausgeblendet; eigene Uploads bleiben erhalten.</p>
           <div id="adminSoundboard" class="admin-list"></div>
           <section class="panel-box radio-search-panel">
             <h3>Radiosender suchen</h3>

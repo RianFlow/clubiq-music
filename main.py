@@ -1180,9 +1180,10 @@ def bluetooth_action(operation: str, device: BluetoothDeviceAction):
 def list_soundboard():
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute(
-            "SELECT id, name, color FROM music_soundboard_items WHERE active = TRUE ORDER BY lower(name);"
+            "SELECT id, name, color, category, duration_ms, builtin_key FROM music_soundboard_items WHERE active = TRUE ORDER BY lower(name);"
         )
-        return {"items": [{"id": row[0], "name": row[1], "color": row[2]} for row in cur.fetchall()]}
+        return {"items": [{"id": row[0], "name": row[1], "color": row[2], "category": row[3],
+                           "duration_ms": row[4], "builtin": row[5] is not None} for row in cur.fetchall()]}
 
 
 @app.get("/api/v1/music/player/soundboard/{item_id}/audio")
@@ -1218,6 +1219,7 @@ async def upload_soundboard(
     name: str = Form(min_length=1, max_length=80),
     color: str = Form(default="green", pattern=r"^(green|gold|red|blue)$"),
     audio: UploadFile = File(...),
+    category: str = Form(default="Eigene", pattern=r"^(Darts|Jubel|Spaß|Eigene)$"),
 ):
     media_type = (audio.content_type or "").lower()
     if media_type not in SOUNDBOARD_MEDIA_TYPES:
@@ -1227,8 +1229,8 @@ async def upload_soundboard(
         raise HTTPException(status_code=413, detail="Der Sound darf höchstens 3 MB groß sein.")
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO music_soundboard_items (name, media_type, audio_data, color) VALUES (%s, %s, %s, %s) RETURNING id;",
-            (name.strip(), media_type, content, color),
+            "INSERT INTO music_soundboard_items (name, media_type, audio_data, color, category) VALUES (%s, %s, %s, %s, %s) RETURNING id;",
+            (name.strip(), media_type, content, color, category),
         )
         item_id = cur.fetchone()[0]
         conn.commit()
@@ -1238,7 +1240,7 @@ async def upload_soundboard(
 @app.delete("/api/v1/music/admin/soundboard/{item_id}", dependencies=[Depends(require_admin)])
 def delete_soundboard(item_id: int):
     with db_connect() as conn, conn.cursor() as cur:
-        cur.execute("DELETE FROM music_soundboard_items WHERE id = %s;", (item_id,))
+        cur.execute("UPDATE music_soundboard_items SET active = FALSE WHERE id = %s AND active = TRUE;", (item_id,))
         if cur.rowcount != 1:
             raise HTTPException(status_code=404, detail="Sound nicht gefunden.")
         conn.commit()

@@ -1,0 +1,334 @@
+[
+  {
+    "key": "clubiq-v1-180",
+    "name": "180!",
+    "category": "Darts",
+    "color": "gold",
+    "text": "One hundred and eighty!",
+    "voice": "en-gb",
+    "file": "180.wav",
+    "duration_ms": 1678,
+    "sha256": "7b2e3540b0905971ef1a15d15b614b4ef80c8ccb319d8d41a748bf9834565dfc"
+  },
+  {
+    "key": "clubiq-v1-140",
+    "name": "140!",
+    "category": "Darts",
+    "color": "green",
+    "text": "One hundred and forty!",
+    "voice": "en-gb",
+    "file": "140.wav",
+    "duration_ms": 1820,
+    "sha256": "cde5d3b9c422785f9923ff93018e27914691e96017c7bcfa4deb90abe84afe03"
+  },
+  {
+    "key": "clubiq-v1-100",
+    "name": "100!",
+    "category": "Darts",
+    "color": "green",
+    "text": "One hundred!",
+    "voice": "en-gb",
+    "file": "100.wav",
+    "duration_ms": 994,
+    "sha256": "dfd65f8d2298fbb3a09591a6b6af5bc365793f8e96505ed64f0067b5a75e89dd"
+  },
+  {
+    "key": "clubiq-v1-60",
+    "name": "60!",
+    "category": "Darts",
+    "color": "blue",
+    "text": "Sixty!",
+    "voice": "en-gb",
+    "file": "60.wav",
+    "duration_ms": 706,
+    "sha256": "650d649df897677c811161dd96b5a3e718e05879559a7d21edede282bd7cf01b"
+  },
+  {
+    "key": "clubiq-v1-26",
+    "name": "Die klassische 26",
+    "category": "Spaß",
+    "color": "blue",
+    "text": "Sechsundzwanzig. Der Klassiker!",
+    "voice": "de",
+    "file": "26.wav",
+    "duration_ms": 2544,
+    "sha256": "b2c81256775b20488590792d1a464c08df5d6af30e4103795ce9cdfe22ae8f6a"
+  },
+  {
+    "key": "clubiq-v1-bullseye",
+    "name": "Bullseye!",
+    "category": "Darts",
+    "color": "gold",
+    "text": "Bull's eye!",
+    "voice": "en-gb",
+    "file": "bullseye.wav",
+    "duration_ms": 814,
+    "sha256": "0385a9b5bfe728630dd2333333d62ce7db84e0079abc30fc18eb06e3858c9d6b"
+  },
+  {
+    "key": "clubiq-v1-checkout",
+    "name": "Checkout!",
+    "category": "Darts",
+    "color": "gold",
+    "text": "Check out!",
+    "voice": "en-gb",
+    "file": "checkout.wav",
+    "duration_ms": 754,
+    "sha256": "908ff098685d47cf410afad53b95a757fdfe487b28d679ff541afe408ea23892"
+  },
+  {
+    "key": "clubiq-v1-game-shot",
+    "name": "Game Shot!",
+    "category": "Darts",
+    "color": "gold",
+    "text": "Game shot!",
+    "voice": "en-gb",
+    "file": "game-shot.wav",
+    "duration_ms": 824,
+    "sha256": "638bd4e3c1f3345d2b77bd54b4088a44285cc3b509bf830638e8753273101723"
+  },
+  {
+    "key": "clubiq-v1-game-on",
+    "name": "Game On!",
+    "category": "Darts",
+    "color": "green",
+    "text": "Game on!",
+    "voice": "en-gb",
+    "file": "game-on.wav",
+    "duration_ms": 707,
+    "sha256": "0cbb900a4af4afa494f97c2cf6852e89ee2d74e5b55bb3729e6a22da41ce296d"
+  },
+  {
+    "key": "clubiq-v1-matchdart",
+    "name": "Matchdart",
+    "category": "Darts",
+    "color": "red",
+    "text": "Ruhe bitte. Matchdart!",
+    "voice": "de",
+    "file": "matchdart.wav",
+    "duration_ms": 1759,
+    "sha256": "55ebacb696db456099454e0e8353b7cea992462dcb255053bd5c416d075edfdb"
+  },
+  {
+    "key": "clubiq-v1-double",
+    "name": "Doppel getroffen!",
+    "category": "Darts",
+    "color": "green",
+    "text": "Doppel getroffen!",
+    "voice": "de",
+    "file": "double.wav",
+    "duration_ms": 1004,
+    "sha256": "e0067a6d6cac4e1965aa029a1a86d64ad73b5d2856cfdb4913e3041a404a689d"
+  },
+  {
+    "key": "clubiq-v1-triple",
+    "name": "Triple Twenty!",
+    "category": "Darts",
+    "color": "green",
+    "text": "Triple twenty!",
+    "voice": "en-gb",
+    "file": "triple.wav",
+    "duration_ms": 1121,
+    "sha256": "3bc9d9416f8288fc3685d88bbe3954483329d82edcf490b78e124257a56ab3ff"
+  },
+  {
+    "key": "clubiq-v1-nine-darter",
+    "name": "Neun-Darter!",
+    "category": "Darts",
+    "color": "gold",
+    "text": "Neun Darter! Unglaublich!",
+    "voice": "de",
+    "file": "nine-darter.wav",
+    "duration_ms": 2073,
+    "sha256": "3c35d56b22ca3ea1f1a79637387f3b897a30745454807ade2085e30db5ac4361"
+  },
+  {
+    "key": "clubiq-v1-bust",
+    "name": "Überworfen!",
+    "category": "Darts",
+    "color": "red",
+    "text": "Überworfen! Nächster Versuch!",
+    "voice": "de",
+    "file": "bust.wav",
+    "duration_ms": 2306,
+    "sha256": "3c208c5dce02966713af3c31d998e1358d7b2b1d1dd406d111661357cf12af92"
+  },
+  {
+    "key": "clubiq-v1-madhouse",
+    "name": "Madhouse · Doppel 1",
+    "category": "Darts",
+    "color": "red",
+    "text": "Madhouse! Double one!",
+    "voice": "en-gb",
+    "file": "madhouse.wav",
+    "duration_ms": 1897,
+    "sha256": "f7c17be63c96e2b1074ee9ab6ff3934ba7619b461d59eeb6b437e6c3887a52b7"
+  },
+  {
+    "key": "clubiq-v1-barver",
+    "name": "Auf geht's, Barver!",
+    "category": "Jubel",
+    "color": "green",
+    "text": "Auf geht's, Barver!",
+    "voice": "de",
+    "file": "barver.wav",
+    "duration_ms": 1418,
+    "sha256": "d829337599715d52af871e92e69c811cbcc74ee174174fe3d0fa42bd96428b66"
+  },
+  {
+    "key": "clubiq-v1-good-darts",
+    "name": "Good Darts!",
+    "category": "Darts",
+    "color": "blue",
+    "text": "Good darts!",
+    "voice": "en-gb",
+    "file": "good-darts.wav",
+    "duration_ms": 872,
+    "sha256": "f614275b19ed1531f0491dd5748b97ab8c63fa47e53ad5fd0d2da92d3aea515c"
+  },
+  {
+    "key": "clubiq-v1-warmup",
+    "name": "Nur warmgeworfen",
+    "category": "Spaß",
+    "color": "blue",
+    "text": "Das war nur zum Warmwerfen!",
+    "voice": "de",
+    "file": "warmup.wav",
+    "duration_ms": 2024,
+    "sha256": "cc477dc8910e6f5fc4c1aa6bd484234b9be574055a51db37788ab8f748fca76b"
+  },
+  {
+    "key": "clubiq-v1-board",
+    "name": "Die Scheibe war's",
+    "category": "Spaß",
+    "color": "blue",
+    "text": "Die Scheibe hing schief!",
+    "voice": "de",
+    "file": "board.wav",
+    "duration_ms": 1386,
+    "sha256": "76d38d71ce72964e9cef09964d1be18f4bfb4ec57bbcac4c06ad276d283348d0"
+  },
+  {
+    "key": "clubiq-v1-maths",
+    "name": "Kurz nachrechnen",
+    "category": "Spaß",
+    "color": "blue",
+    "text": "Moment. Ich muss kurz rechnen!",
+    "voice": "de",
+    "file": "maths.wav",
+    "duration_ms": 2208,
+    "sha256": "4fb1e6a4aa36c6e60fe585675b7ca9ad430025a2e6f277737ce9152725f66ca8"
+  },
+  {
+    "key": "clubiq-v1-almost",
+    "name": "Knapp daneben",
+    "category": "Spaß",
+    "color": "red",
+    "text": "Knapp daneben ist auch vorbei!",
+    "voice": "de",
+    "file": "almost.wav",
+    "duration_ms": 2019,
+    "sha256": "fe1003f60e2f6140335ffb1b1d5e8c1315034de1ec6197e8b4cfd471b79b768b"
+  },
+  {
+    "key": "clubiq-v1-next-round",
+    "name": "Nächste Runde!",
+    "category": "Darts",
+    "color": "green",
+    "text": "Nächste Runde! Pfeile bereit!",
+    "voice": "de",
+    "file": "next-round.wav",
+    "duration_ms": 2315,
+    "sha256": "fe93a8a6a4775f80283fc538782c21b7d7f79dc1e996fc07fd5d870eaa228d7f"
+  },
+  {
+    "key": "clubiq-v1-three-darts",
+    "name": "Drei Pfeile",
+    "category": "Darts",
+    "color": "green",
+    "file": "three-darts.wav",
+    "duration_ms": 1500,
+    "sha256": "c0e88ac42fcafede0135f4d1b3b341be47cdc9e8d91ff3216ee389dd11da515c"
+  },
+  {
+    "key": "clubiq-v1-fanfare",
+    "name": "Siegesfanfare",
+    "category": "Jubel",
+    "color": "gold",
+    "file": "fanfare.wav",
+    "duration_ms": 2000,
+    "sha256": "915813c1e764853687276ab2336abfd0e49b447723e84362f2d2cc371feb1df7"
+  },
+  {
+    "key": "clubiq-v1-applause",
+    "name": "Mini-Applaus",
+    "category": "Jubel",
+    "color": "gold",
+    "file": "applause.wav",
+    "duration_ms": 2600,
+    "sha256": "999affc5f4aac81ffce54cf27d7e8dd0dfdd263348665b9a7cb2b030c1a126a9"
+  },
+  {
+    "key": "clubiq-v1-drumroll",
+    "name": "Trommelwirbel",
+    "category": "Jubel",
+    "color": "gold",
+    "file": "drumroll.wav",
+    "duration_ms": 2200,
+    "sha256": "da18257916668fb34b5270b377029304ae3737cea87ba1425cb0e082ca53652f"
+  },
+  {
+    "key": "clubiq-v1-level-up",
+    "name": "Level Up!",
+    "category": "Jubel",
+    "color": "green",
+    "file": "level-up.wav",
+    "duration_ms": 1300,
+    "sha256": "814b1a4ed99c8a6f473b21f783c5b9b741d1d6d9f80563bf90cabdaac5b98a0f"
+  },
+  {
+    "key": "clubiq-v1-airhorn",
+    "name": "Kurze Party-Tröte",
+    "category": "Jubel",
+    "color": "gold",
+    "file": "airhorn.wav",
+    "duration_ms": 1100,
+    "sha256": "7bd366c4e7f473b8b0983e1b48c87404bce8813085fd113e4ba0c791625be306"
+  },
+  {
+    "key": "clubiq-v1-rimshot",
+    "name": "Ba-dum-tss",
+    "category": "Spaß",
+    "color": "blue",
+    "file": "rimshot.wav",
+    "duration_ms": 1500,
+    "sha256": "d389612478e996565d6b3b2bb1430525cce8a4678236055844c116ae1a110e93"
+  },
+  {
+    "key": "clubiq-v1-trombone",
+    "name": "Pech gehabt",
+    "category": "Spaß",
+    "color": "red",
+    "file": "trombone.wav",
+    "duration_ms": 2200,
+    "sha256": "de96559b6471d87366ad1998b317c2b27afd6b1e98fbdb52c05defcce5b0f8c8"
+  },
+  {
+    "key": "clubiq-v1-boing",
+    "name": "Boing!",
+    "category": "Spaß",
+    "color": "blue",
+    "file": "boing.wav",
+    "duration_ms": 1300,
+    "sha256": "e19beed21fe401a9d9b2f98149eca6f0bd0d46663ad6d0b480de9d3932adda34"
+  },
+  {
+    "key": "clubiq-v1-crickets",
+    "name": "Grillenzirpen",
+    "category": "Spaß",
+    "color": "blue",
+    "file": "crickets.wav",
+    "duration_ms": 2400,
+    "sha256": "b945b5fd986ca6fe0be600eba8f24cead78f88a2ec2309db3758dfaf80027aaf"
+  }
+]

@@ -206,8 +206,13 @@ input:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px rgba(36,92,81,
 .queue-row span { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: #eef0eb; font-weight: 800; }
 .queue-row strong, .queue-row small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .queue-row small { margin-top: 2px; color: var(--muted); }
-.soundboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
-.sound-button { min-height: 76px; border: 0; border-radius: 14px; color: white; background: var(--green); font-weight: 850; box-shadow: 0 4px 12px rgba(19,33,31,.1); }
+.soundboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.soundboard-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.soundboard-filters [aria-pressed="true"] { background: var(--green); color: white; }
+.soundboard-filters span { margin-left: 5px; opacity: .8; }
+.sound-button { min-height: 88px; padding: 12px 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 14px; color: white; background: var(--green); font-weight: 850; box-shadow: 0 4px 12px rgba(19,33,31,.1); }
+.sound-button strong { overflow-wrap: anywhere; hyphens: auto; }
+.sound-button small { font-weight: 500; opacity: .85; }
 .sound-button.gold { color: #33260b; background: #e2bd62; }
 .sound-button.blue { background: #326b8c; }
 .sound-button.red { background: #9e3e37; }
@@ -246,7 +251,7 @@ input:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px rgba(36,92,81,
 .button.tiny { min-height: 34px; padding: 6px 9px; font-size: .76rem; }
 .button.danger { color: var(--danger); }
 .device-state { display: inline-flex !important; margin-left: 8px; color: #17633f !important; font-weight: 750; }
-.sound-upload { display: grid; grid-template-columns: 1fr 150px 1.4fr auto; gap: 10px; align-items: end; }
+.sound-upload { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; align-items: end; }
 .sound-upload h3, .sound-upload small { grid-column: 1 / -1; }
 
 .toast { position: fixed; left: 50%; bottom: 24px; z-index: 50; width: max-content; max-width: min(620px, calc(100vw - 32px)); max-height: 40vh; overflow: auto; overflow-wrap: anywhere; transform: translate(-50%, 18px); padding: 12px 18px; border-radius: 12px; color: white; background: var(--green); opacity: 0; pointer-events: none; box-shadow: var(--shadow); transition: .2s ease; }

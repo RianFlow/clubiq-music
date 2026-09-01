@@ -125,6 +125,7 @@ Standardmäßig landet die Sicherung unter `./backups`. Für den ClubIQ-USB-Stic
 
 ```bash
 sudo env BACKUP_DIR=/mnt/vereinskasse-sicherung/clubiq-music ./scripts/backup.sh
+```
 
 Zusätzlich erstellt der Docker-Dienst `backup` automatisch alle sechs Stunden eine
 geprüfte PostgreSQL-Sicherung. Ist der gemeinsame USB-Stick mit der Markierung
@@ -141,6 +142,27 @@ installiert. Dafür muss ClubIQ Music über HTTPS geöffnet sein. Es wird nur di
 Bedienoberfläche zwischengespeichert, keine Online-Musik.
 
 ## Player-Freigaben und Internetradio
+
+### Darts-Soundboard
+
+Im Player stehen 32 kurze Sounds bereit: Darts-Ansagen wie **180**, **Bullseye**,
+**Game Shot** und **Matchdart**, dazu Jubel und Spaß-Effekte. Über die Kategorien
+**Darts**, **Jubel**, **Spaß** und **Eigene** bleibt das Board übersichtlich.
+Die angezeigte Sekundenangabe ist die Länge des jeweiligen mitgelieferten Clips.
+Die synthetischen Ansagen und Arcade-Effekte werden lokal mitgeliefert, ohne
+Internetabruf und ohne TV-/Musiksamples (Details unter `soundpack/README.md`).
+
+Nur freigeschaltete Player-Mitglieder können Sounds auf der Box auslösen.
+Ein Sound unterbricht die Musik kurz; danach setzt der Player die Playlist fort
+beziehungsweise verbindet den Live-Radiosender wieder. Bei Radio wird die
+unterbrochene Passage nicht nachgeholt. Bitte zunächst mit moderater Box-Lautstärke testen.
+
+Unter **Verwaltung → Player & Box** können Admins eigene Sounds hochladen und einer
+Kategorie zuordnen oder unerwünschte Buttons entfernen. Entfernte Sounds bleiben
+nach Neustarts und Updates ausgeblendet. Eigene Uploads werden beim Installieren
+des Pakets nicht verändert. Die Audio-Dateien liegen mit in der Datenbank-Sicherung.
+
+### Freigaben und Radiosender
 
 Player-Befehle sind für normale Mitglieder standardmäßig gesperrt. In
 **Verwaltung → Mitglieder** kann ein Admin mit **Player freigeben** einzelne
@@ -178,7 +200,6 @@ begrenzte Netzwerkwartezeit, kein API-Schlüssel erforderlich. Bei einem Serverw
 kann `RADIO_BROWSER_BASE_URL` in der `.env` auf einen aktuellen offiziellen API-Server
 gesetzt werden. Der native Player nutzt die auf mpv 0.40 verfügbare Option
 `--audio-fallback-to-null=no`; ein Ausfall der Box wird nicht durch stumme Ausgabe kaschiert.
-```
 
 Die Sicherung wird komprimiert, inhaltlich geprüft und mit SHA-256 versehen.
 

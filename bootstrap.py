@@ -3,6 +3,7 @@ import time
 import psycopg
 
 from db_config import connection_kwargs
+from soundboard_pack import seed_soundboard
 
 
 SCHEMA_SQL = """
@@ -94,6 +95,9 @@ CREATE TABLE IF NOT EXISTS music_soundboard_items (
     active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE music_soundboard_items ADD COLUMN IF NOT EXISTS builtin_key VARCHAR(80) UNIQUE;
+ALTER TABLE music_soundboard_items ADD COLUMN IF NOT EXISTS category VARCHAR(20) NOT NULL DEFAULT 'Eigene';
+ALTER TABLE music_soundboard_items ADD COLUMN IF NOT EXISTS duration_ms INTEGER;
 
 CREATE TABLE IF NOT EXISTS music_player_audit (
     id BIGSERIAL PRIMARY KEY,
@@ -197,6 +201,7 @@ def setup(max_attempts: int = 30) -> None:
                 with conn.cursor() as cur:
                     cur.execute(SCHEMA_SQL)
                     cur.execute(DEFAULTS_SQL)
+                    seed_soundboard(cur)
                 conn.commit()
             print("Datenbank-Initialisierung erfolgreich.")
             return
