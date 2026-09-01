@@ -12,7 +12,8 @@ env_file="$project_dir/.env"
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y --no-install-recommends bluez bluez-alsa-utils libasound2-plugin-bluez mpv yt-dlp openssl
+apt-get install -y --no-install-recommends bluez bluez-alsa-utils libasound2-plugin-bluez mpv openssl python3 ca-certificates
+python3 "$project_dir/scripts/install-player-runtime.py"
 systemctl enable --now bluetooth bluealsa
 
 install -d -m 0700 /etc/clubiq-music
@@ -45,6 +46,8 @@ Restart=always
 RestartSec=3
 Environment=PLAYER_AGENT_SOCKET=/run/clubiq-music/player.sock
 Environment=PLAYER_AGENT_TOKEN_FILE=/etc/clubiq-music/player-token
+Environment=PATH=/opt/clubiq-music-runtime/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=DENO_DIR=/var/lib/clubiq-music/deno
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true

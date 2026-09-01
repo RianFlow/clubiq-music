@@ -19,6 +19,7 @@ import time
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from socketserver import UnixStreamServer
+from urllib.parse import urlsplit, parse_qs
 
 
 SOCKET_PATH = Path(os.getenv("PLAYER_AGENT_SOCKET", "/run/clubiq-music/player.sock"))
@@ -29,6 +30,82 @@ STATE_FILE = Path(os.getenv("PLAYER_STATE_FILE", "/var/lib/clubiq-music/player.j
 MAC_RE = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$")
 ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 BLUETOOTH_LOCK = threading.RLock()
+RUNTIME_BIN = Path('/opt/clubiq-music-runtime/bin')
+YTDLP_BIN = str(RUNTIME_BIN / 'yt-dlp')
+
+
+def player_environment() -> dict:
+    return {**os.environ, 'PATH': f"{RUNTIME_BIN}:{os.environ.get('PATH', '/usr/bin:/bin')}",
+            'DENO_DIR': '/var/lib/clubiq-music/deno', 'LC_ALL': 'C'}
+
+
+class NextTrackPreparer:
+    """Resolve one upcoming audio stream; signed URLs stay in memory, never on disk."""
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.busy = ''
+        self.attempted = ''
+        self.attempted_at = 0.0
+        self.ready = None
+
+    @staticmethod
+    def resolve(url):
+        result = subprocess.run(
+            [YTDLP_BIN, '--ignore-config', '--no-playlist', '--no-warnings', '--no-progress',
+             '--no-cache-dir', '--socket-timeout', '10', '--retries', '1', '--extractor-retries', '1',
+             '-f', 'bestaudio', '-J', '--', url], capture_output=True, text=True,
+            timeout=50, env=player_environment())
+        if result.returncode:
+            raise RuntimeError('Der nächste YouTube-Titel konnte noch nicht vorbereitet werden.')
+        data = json.loads(result.stdout)
+        stream = str(data.get('url', ''))
+        parsed = urlsplit(stream)
+        # Only the YouTube CDN, never arbitrary URLs or credentials from extractor output.
+        if (parsed.scheme != 'https' or not (parsed.hostname or '').endswith('.googlevideo.com')
+                or parsed.username or parsed.password or '\n' in stream or '\r' in stream
+                or data.get('vcodec') != 'none'):
+            raise ValueError('Kein direkt unterstützter YouTube-Audiostream.')
+        expires = min(time.time() + 600, float(parse_qs(parsed.query).get('expire', [time.time() + 600])[0]) - 60)
+        options = {'ytdl': 'no'}
+        for field, option in [('User-Agent', 'user-agent'), ('Referer', 'referrer')]:
+            value = str((data.get('http_headers') or {}).get(field, ''))
+            if value and not any(char in value for char in '\r\n'):
+                options[option] = value
+        return {'source': url, 'url': stream, 'options': options, 'expires': expires}
+
+    def get(self, url):
+        with self.lock:
+            if self.ready and self.ready['source'] == url and self.ready['expires'] > time.time():
+                return dict(self.ready)
+        return None
+
+    def invalidate(self, url):
+        with self.lock:
+            if self.ready and self.ready['source'] == url:
+                self.ready = None
+
+    def prepare(self, url):
+        if not url.startswith('https://www.youtube.com/watch?v='):
+            return
+        with self.lock:
+            if self.busy or (self.ready and self.ready['source'] == url and self.ready['expires'] > time.time()):
+                return
+            if self.attempted == url and time.monotonic() - self.attempted_at < 60:
+                return
+            self.busy = self.attempted = url
+            self.attempted_at = time.monotonic()
+
+        def worker():
+            try:
+                ready = self.resolve(url)
+                with self.lock:
+                    self.ready = ready
+            except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired):
+                pass  # A preparation failure must not interrupt the current song.
+            finally:
+                with self.lock:
+                    self.busy = ''
+        threading.Thread(target=worker, daemon=True).start()
 
 
 def run(command: list[str], timeout: int = 15, check: bool = False) -> subprocess.CompletedProcess[str]:
@@ -142,6 +219,12 @@ class MpvController:
         self.radio_station: dict | None = None
         self.radio_retry_count = 0
         self.radio_last_load_at = 0.0
+        self.preparer = NextTrackPreparer()
+        self.playlist_loading = False
+        self.load_started_at = 0.0
+        self.playlist_retry_count = 0
+        self.playlist_retry_at = 0.0
+        self.end_handled = False
         self.load_state()
 
     def load_state(self) -> None:
@@ -187,7 +270,7 @@ class MpvController:
             self.save_state()
             return
         running = bool(self.process and self.process.poll() is None and MPV_SOCKET.exists())
-        if running and not bool(self.property("idle-active", True)):
+        if running and not self.playlist_loading and not bool(self.property("idle-active", True)):
             self.resume_position = max(0.0, float(self.property("time-pos", 0) or 0))
             self.resume_paused = bool(self.property("pause", True))
         self.save_state()
@@ -199,20 +282,8 @@ class MpvController:
             return
         if not (0 <= self.current_index < len(self.queue)):
             return
-        self.ensure_mpv()
-        item = self.queue[self.current_index]
-        self.command("loadfile", item["url"], "replace", start=False)
-        self.command("set_property", "pause", True, start=False)
-        deadline = time.monotonic() + 12
-        while time.monotonic() < deadline:
-            if not bool(self.property("idle-active", True)):
-                break
-            time.sleep(.2)
-        if self.resume_position > 1:
-            self.command("set_property", "time-pos", self.resume_position, start=False)
+        self.load_current(play=not self.resume_paused, position=self.resume_position)
         self.command("set_property", "mute", self.muted, start=False)
-        self.command("set_property", "pause", self.resume_paused, start=False)
-        self.track_was_active = not self.resume_paused
         self.restored_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         self.last_error = ""
         self.save_state()
@@ -233,8 +304,10 @@ class MpvController:
             f"--log-file={MPV_LOG_FILE}",
             f"--audio-device={audio_device}", "--audio-fallback-to-null=no", f"--volume={self.volume}",
             f"--mute={'yes' if self.muted else 'no'}", "--network-timeout=10",
+            "--vid=no", "--cache=yes", "--cache-secs=20", "--demuxer-max-bytes=16MiB",
         ]
-        self.process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True)
+        self.process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                        text=True, env=player_environment())
         for _ in range(30):
             if MPV_SOCKET.exists():
                 return
@@ -290,7 +363,7 @@ class MpvController:
         except (OSError, ValueError, RuntimeError):
             return default
 
-    def load_current(self, play: bool = True) -> None:
+    def load_current(self, play: bool = True, *, position: float = 0.0, retry: bool = False) -> None:
         if not self.queue:
             self.current_index = -1
             self.command("stop")
@@ -300,16 +373,93 @@ class MpvController:
         self.source_mode = "playlist"
         self.radio_station = None
         item = self.queue[self.current_index]
-        self.resume_position = 0.0
+        self.resume_position = max(0.0, position)
         self.resume_paused = not play
-        self.command("loadfile", item["url"], "replace")
+        self.playlist_loading = True
+        self.load_started_at = time.monotonic()
+        self.playlist_retry_at = 0.0
+        self.end_handled = False
+        if not retry:
+            self.playlist_retry_count = 0
+            self.last_error = ''
+        prepared = None if retry else self.preparer.get(item['url'])
+        options = {**(prepared['options'] if prepared else {}), 'keep-open': 'yes',
+                   'start': str(self.resume_position)}
+        self.command("loadfile", prepared['url'] if prepared else item["url"], "replace", -1, options)
         self.track_was_active = False
-        if not play:
-            self.command("set_property", "pause", True)
+        self.command("set_property", "pause", not play)
         self.save_state()
+
+    def fail_current(self, detail: str) -> None:
+        """Retry the SAME item once. Never turn a failed load into a song end."""
+        self.playlist_loading = False
+        self.track_was_active = False
+        self.command('stop', start=False)
+        if 0 <= self.current_index < len(self.queue):
+            self.preparer.invalidate(self.queue[self.current_index]['url'])
+        if self.playlist_retry_count < 1 and not self.resume_paused:
+            self.playlist_retry_count += 1
+            self.playlist_retry_at = time.monotonic() + 3
+            self.last_error = f'{detail} Derselbe Titel wird einmal erneut versucht.'
+        else:
+            self.playlist_retry_at = 0.0
+            self.resume_paused = True
+            self.last_error = f'{detail} Wiedergabe angehalten. Mit Start erneut versuchen oder einen anderen Titel wählen.'
+        self.save_state()
+
+    def next_url(self) -> str:
+        if self.shuffle or not self.queue or self.current_index < 0:
+            return ''
+        index = self.current_index if self.repeat == 'one' else self.current_index + 1
+        if index == len(self.queue) and self.repeat == 'all':
+            index = 0
+        return self.queue[index]['url'] if 0 <= index < len(self.queue) else ''
+
+    def check_playlist(self) -> None:
+        if self.source_mode != 'playlist' or self.sound_active:
+            return
+        if self.playlist_retry_at:
+            if time.monotonic() >= self.playlist_retry_at and not self.resume_paused:
+                self.load_current(position=self.resume_position, retry=True)
+            return
+        idle = self.property('idle-active', None)
+        if idle is None:
+            return  # An IPC failure is not evidence that a song has ended.
+        if self.playlist_loading:
+            if not idle and self.property('audio-params', None):
+                self.playlist_loading = False
+                self.track_was_active = True
+                self.last_error = ''
+            elif time.monotonic() - self.load_started_at > (2 if idle else 60):
+                self.fail_current('Titel konnte nicht geladen werden. Internet oder YouTube-Zugriff prüfen.')
+            return
+        if not self.track_was_active or self.end_handled:
+            return
+        if idle:
+            self.fail_current('Die Wiedergabe ist unerwartet abgebrochen.')
+            return
+        # keep-open keeps the real EOF visible, unlike the old idle heuristic.
+        if self.property('eof-reached', False):
+            duration = float(self.property('duration', 0) or 0)
+            position = float(self.property('time-pos', self.resume_position) or 0)
+            if duration > 0 and position + 5 < duration:
+                self.fail_current('Der Audiostream ist vor dem Liedende abgebrochen.')
+                return
+            self.end_handled = True
+            self.track_was_active = False
+            self.resume_position = 0.0
+            self.resume_paused = True
+            self.command('set_property', 'pause', True, start=False)
+            self.save_state()
+            self.advance_after_end()
+        elif not self.property('pause', True):
+            self.preparer.prepare(self.next_url())
 
     def set_queue(self, items: list[dict]) -> None:
         with self.lock:
+            self.playlist_loading = False
+            self.playlist_retry_at = 0.0
+            self.track_was_active = False
             self.source_mode = "playlist"
             self.radio_station = None
             self.queue = items[:250]
@@ -373,6 +523,9 @@ class MpvController:
             self.queue.pop(index)
             if not self.queue:
                 self.current_index = -1
+                self.playlist_loading = False
+                self.playlist_retry_at = 0.0
+                self.track_was_active = False
                 if self.process and self.process.poll() is None:
                     self.command("stop")
             elif index < self.current_index:
@@ -436,6 +589,7 @@ class MpvController:
         def worker() -> None:
             try:
                 self.command("loadfile", url, "replace", start=False)
+                self.command("set_property", "pause", False, start=False)
                 active_seen = False
                 deadline = time.monotonic() + 35
                 while time.monotonic() < deadline:
@@ -451,9 +605,7 @@ class MpvController:
                         self.command("set_property", "pause", True)
                 elif 0 <= saved_index < len(self.queue):
                     self.current_index = saved_index
-                    self.load_current(play=not saved_paused)
-                    if saved_position:
-                        self.command("set_property", "time-pos", saved_position)
+                    self.load_current(play=not saved_paused, position=saved_position)
             except Exception as exc:
                 self.last_error = f"Soundboard: {exc}"
             finally:
@@ -468,6 +620,8 @@ class MpvController:
         if self.source_mode == "playlist":
             self.checkpoint_playback()
         self.ensure_mpv()
+        self.playlist_loading = False
+        self.playlist_retry_at = 0.0
         self.source_mode = "radio"
         self.radio_station = {
             "id": int(station["id"]),
@@ -523,13 +677,15 @@ class MpvController:
                 elif self.current_index < 0 and self.queue:
                     self.current_index = 0
                     self.load_current()
-                elif self.current_index >= 0 and bool(self.property("idle-active", True)):
+                elif self.current_index >= 0 and (self.end_handled or bool(self.property("idle-active", True))):
                     self.load_current()
                 else:
                     self.command("set_property", "pause", False)
                 self.resume_paused = False
                 self.save_state()
             elif action == "pause":
+                self.resume_paused = True
+                self.playlist_retry_at = 0.0
                 self.command("set_property", "pause", True)
                 self.checkpoint_playback()
             elif action in {"next", "previous"}:
@@ -586,7 +742,10 @@ class MpvController:
         return {
             "available": True,
             "running": running,
-            "playing": not idle and not paused,
+            "playing": not idle and not paused and not self.playlist_loading and not self.playlist_retry_at,
+            "loading": self.playlist_loading or bool(self.playlist_retry_at),
+            "buffering": bool(self.property('paused-for-cache', False)) if running else False,
+            "next_prepared": bool(self.preparer.get(self.next_url())) if self.source_mode == 'playlist' else False,
             "paused": paused,
             "position": round(float(position), 1),
             "duration": round(float(duration), 1),
@@ -775,32 +934,21 @@ def playback_loop(stop: threading.Event) -> None:
     while not stop.wait(1):
         if PLAYER.sound_active or not (PLAYER.process and PLAYER.process.poll() is None):
             continue
-        idle = bool(PLAYER.property("idle-active", True))
-        if not idle:
-            PLAYER.track_was_active = True
-            if PLAYER.source_mode == "radio":
-                PLAYER.radio_retry_count = 0
-                PLAYER.last_error = ""
-            if time.monotonic() - PLAYER.last_checkpoint >= 5:
-                PLAYER.last_checkpoint = time.monotonic()
-                try:
-                    PLAYER.checkpoint_playback()
-                except Exception as exc:
-                    PLAYER.last_error = f"Player-Sicherung: {exc}"
-        elif PLAYER.source_mode == "radio" and time.monotonic() - PLAYER.radio_last_load_at >= 5:
-            try:
-                with PLAYER.lock:
+        try:
+            with PLAYER.lock:
+                PLAYER.check_playlist()
+                idle = PLAYER.property("idle-active", None)
+                if idle is False:
+                    if PLAYER.source_mode == "radio":
+                        PLAYER.radio_retry_count = 0
+                        PLAYER.last_error = ""
+                    if time.monotonic() - PLAYER.last_checkpoint >= 5:
+                        PLAYER.last_checkpoint = time.monotonic()
+                        PLAYER.checkpoint_playback()
+                elif idle is True and PLAYER.source_mode == "radio" and time.monotonic() - PLAYER.radio_last_load_at >= 5:
                     PLAYER.retry_radio()
-            except Exception as exc:
-                PLAYER.last_error = f"Internetradio: {exc}"
-                PLAYER.radio_last_load_at = time.monotonic()
-        elif PLAYER.track_was_active:
-            PLAYER.track_was_active = False
-            try:
-                with PLAYER.lock:
-                    PLAYER.advance_after_end()
-            except Exception as exc:
-                PLAYER.last_error = f"Warteschlange: {exc}"
+        except Exception as exc:
+            PLAYER.last_error = f"Player: {exc}"
 
 
 def main() -> None:

@@ -478,13 +478,19 @@ function renderPlayer() {
   $("#playerArtist").textContent = player.sound_active ? "Danach wird der Song automatisch fortgesetzt" : current?.artist || (connected
     ? "Playlist aus Abstimmung und Fallback-Regeln erstellen"
     : "Die Verwaltung verbindet zuerst eine Bluetooth-Box");
+  const playbackStatus = $("#playerPlaybackStatus");
+  playbackStatus.textContent = player.last_error || (player.loading ? "Titel wird geladen …"
+    : player.buffering ? "Audio wird gepuffert …"
+    : player.next_prepared ? "Nächster Titel ist vorbereitet." : "");
+  playbackStatus.hidden = !playbackStatus.textContent;
+  playbackStatus.classList.toggle("error", Boolean(player.last_error));
   setMediaImage($("#playerCover"), current?.thumbnail, player.source_mode === "radio");
   $("#playerProgress").max = Math.max(1, Number(player.duration) || 1);
   if (!$("#playerProgress").matches(":active")) $("#playerProgress").value = Number(player.position) || 0;
   $("#playerPosition").textContent = mediaTime(player.position);
   $("#playerDuration").textContent = mediaTime(player.duration);
-  $("#playerPlay").textContent = player.playing ? "❚❚" : "▶";
-  $("#playerPlay").title = player.playing ? "Pause" : "Wiedergabe";
+  $("#playerPlay").textContent = player.playing || player.loading ? "❚❚" : "▶";
+  $("#playerPlay").title = player.playing || player.loading ? "Pause" : "Wiedergabe";
   $("#playerVolume").value = Number(player.volume ?? 70);
   $("#playerVolumeValue").textContent = `${Number(player.volume ?? 70)} %`;
   $("#playerMute").textContent = player.muted ? "🔇" : "🔊";
@@ -755,7 +761,7 @@ async function playerCommand(action, value = null) {
 async function handlePlayerAction(button) {
   let action = button.dataset.playerAction;
   let value = null;
-  if (action === "play" && state.player.playing) action = "pause";
+  if (action === "play" && (state.player.playing || state.player.loading)) action = "pause";
   if (action === "shuffle") value = !state.player.shuffle;
   if (action === "repeat") {
     value = state.player.repeat === "off" ? "all" : state.player.repeat === "all" ? "one" : "off";

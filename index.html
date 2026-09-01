@@ -8,9 +8,9 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/pics/logo.png">
   <link rel="apple-touch-icon" href="/pics/logo.png">
-  <link rel="stylesheet" href="/static/app.css?v=20260901-4">
-  <script defer src="/static/images.js?v=20260901-4"></script>
-  <script defer src="/static/app.js?v=20260901-4"></script>
+  <link rel="stylesheet" href="/static/app.css?v=20260901-5">
+  <script defer src="/static/images.js?v=20260901-5"></script>
+  <script defer src="/static/app.js?v=20260901-5"></script>
 </head>
 <body>
   <header class="topbar">
@@ -98,6 +98,7 @@
             <img id="playerCover" class="player-cover" src="/pics/logo.png" alt="">
             <div><p class="eyebrow">Jetzt läuft</p><h3 id="playerTitle">Noch kein Song gewählt</h3><p id="playerArtist" class="muted">Playlist aus Abstimmung und Fallback-Regeln erstellen</p></div>
           </div>
+          <p id="playerPlaybackStatus" class="muted" role="status" aria-live="polite" hidden></p>
           <input id="playerProgress" class="player-progress" type="range" min="0" max="1" value="0" aria-label="Wiedergabeposition">
           <div class="time-row"><span id="playerPosition">0:00</span><span id="playerDuration">0:00</span></div>
           <div id="playerControls" class="player-controls" data-player-control hidden>

@@ -103,6 +103,37 @@ nach dem Aktualisieren auch `sudo ./scripts/install-player.sh` ausführen. Diese
 installiert den Player-Dienst auf dem Raspberry erneut; gespeicherte Kopplungen
 und Einstellungen werden dabei nicht gelöscht.
 
+### YouTube-Laden, Puffer und Fehler
+
+Der Installer richtet **yt-dlp 2026.08.19 mit Deno 2.9.6** separat unter
+`/opt/clubiq-music-runtime` ein. Downloads werden gegen fest hinterlegte SHA-256-Werte
+der offiziellen Releases geprüft. System-Python und das Debian-Paket werden nicht
+überschrieben; alte Laufzeitverzeichnisse bleiben für einen Rückfall erhalten.
+Ein bloßes `apt upgrade yt-dlp` kann weiterhin eine zu alte Debian-Version liefern.
+
+Ein Ladefehler zählt nicht mehr als Liedende: ClubIQ versucht **denselben Titel einmal**
+erneut und hält danach mit einer sichtbaren Meldung an. „Start“ startet einen neuen
+Versuch, „Weiter“ überspringt den Titel bewusst. Nur ein echtes Dateiende führt
+automatisch zum nächsten Song. Der Player zeigt Laden und Puffern gesondert an.
+
+Während der Wiedergabe wird bei normaler Reihenfolge die Stream-Adresse des nächsten
+Titels vorbereitet (bei Zufallswiedergabe nicht vorhersagbar). Es läuft höchstens
+ein Hintergrundabruf; eine Adresse wird maximal zehn Minuten im Arbeitsspeicher
+behalten. Es werden **keine Songs dauerhaft heruntergeladen**. Der aktive Stream
+hat einen Puffer von bis zu 20 Sekunden, begrenzt auf 16 MiB. Das überbrückt kurze
+Schwankungen, ersetzt aber kein Internet. YouTube-Änderungen oder Zugriffsbeschränkungen
+können weiterhin ein späteres Update erfordern.
+
+Versionen prüfen:
+
+```bash
+/opt/clubiq-music-runtime/bin/yt-dlp --version
+/opt/clubiq-music-runtime/bin/deno --version
+```
+
+Grundlagen: [yt-dlp / JavaScript-Laufzeit](https://github.com/yt-dlp/yt-dlp/wiki/EJS)
+und [mpv keep-open / eof-reached](https://mpv.io/manual/stable/#options-keep-open).
+
 Technische Grundlage: [BlueZ bluetoothctl](https://github.com/bluez/bluez/blob/5.82/client/main.c)
 (Einzelbefehle mit Rückmeldung und zeitlich begrenztem Pairing-Agenten) und
 [modale Browser-Ebene](https://developer.mozilla.org/en-US/docs/Glossary/Top_layer).

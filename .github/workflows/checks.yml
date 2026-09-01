@@ -29,6 +29,10 @@ jobs:
           PY
       - name: Browser-Code prüfen
         run: for file in static/*.js sw.js; do node --check "$file"; done
+      - name: Player mit echtem mpv und stummer Ausgabe prüfen
+        run: |
+          docker run --rm -v "$PWD:/work:ro" -w /work debian:trixie-slim sh -c \
+            'apt-get update -qq && apt-get install -y --no-install-recommends python3 mpv >/dev/null && python3 scripts/player-smoke-test.py'
       - name: Compose-Konfiguration prüfen
         run: |
           cp .env.example .env
