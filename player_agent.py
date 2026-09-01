@@ -150,12 +150,14 @@ def bluetoothctl(command: str, timeout: int = 5) -> str:
     return output
 
 
-def connect_bluetooth_device(address: str) -> dict:
+def connect_bluetooth_device(address: str, allow_pair: bool = True) -> dict:
     with BLUETOOTH_LOCK:
         bluetoothctl("power on")
         info = device_info(address)
         # Never re-pair a known device: this can invalidate its existing bond.
         if not info["paired"]:
+            if not allow_pair:
+                raise ValueError("Diese Box ist nicht mehr gekoppelt. Bitte einmal unter Verwaltung → Player & Box koppeln.")
             bluetoothctl(f"pair {address}", timeout=25)
         bluetoothctl(f"trust {address}")
         info = device_info(address)
@@ -209,6 +211,7 @@ class MpvController:
         self.muted = False
         self.last_error = ""
         self.connected_speaker = ""
+        self.last_speaker = ""
         self.sound_active = False
         self.track_was_active = False
         self.resume_position = 0.0
@@ -237,6 +240,7 @@ class MpvController:
             self.volume = max(0, min(100, int(saved.get("volume", 70))))
             self.muted = bool(saved.get("muted", False))
             self.connected_speaker = saved.get("connected_speaker", "")
+            self.last_speaker = saved.get("last_speaker", self.connected_speaker)
             self.resume_position = max(0.0, float(saved.get("resume_position", 0) or 0))
             self.resume_paused = bool(saved.get("resume_paused", True))
             self.source_mode = saved.get("source_mode", "playlist")
@@ -255,12 +259,29 @@ class MpvController:
             "volume": self.volume,
             "muted": self.muted,
             "connected_speaker": self.connected_speaker,
+            "last_speaker": self.last_speaker,
             "resume_position": round(self.resume_position, 1),
             "resume_paused": self.resume_paused,
             "source_mode": self.source_mode,
             "radio_station": self.radio_station,
         }, ensure_ascii=False), encoding="utf-8")
         temp.replace(STATE_FILE)
+
+    def connect_speaker(self, address: str, allow_pair: bool = True) -> dict:
+        with BLUETOOTH_LOCK, self.lock:
+            already_connected = self.connected_speaker == address and device_info(address)["connected"]
+            info = connect_bluetooth_device(address, allow_pair=allow_pair)
+            running = bool(self.process and self.process.poll() is None)
+            if not already_connected:
+                self.checkpoint_playback()
+                self.stop_mpv()
+            self.connected_speaker = address
+            self.last_speaker = address
+            self.last_error = ""
+            self.save_state()
+            if not already_connected or not running:
+                self.restore_session()
+            return info
 
     def checkpoint_playback(self) -> None:
         """Persist enough state to resume after a reboot or Bluetooth outage."""
@@ -274,6 +295,19 @@ class MpvController:
             self.resume_position = max(0.0, float(self.property("time-pos", 0) or 0))
             self.resume_paused = bool(self.property("pause", True))
         self.save_state()
+
+    def disconnect_speaker(self, address: str, forget: bool = False) -> dict:
+        with BLUETOOTH_LOCK, self.lock:
+            if self.connected_speaker == address:
+                self.checkpoint_playback()
+                self.stop_mpv()
+            bluetoothctl(f"{'remove' if forget else 'disconnect'} {address}")
+            if self.connected_speaker == address:
+                self.connected_speaker = ""
+            if forget and self.last_speaker == address:
+                self.last_speaker = ""
+            self.save_state()
+            return {"ok": True} if forget else {"device": device_info(address)}
 
     def restore_session(self) -> None:
         """Reconnect mpv to the saved track without losing queue or position."""
@@ -806,9 +840,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, {"ok": True, "mpv": bool(PLAYER.process and PLAYER.process.poll() is None)})
             if self.path == "/state":
                 return self.reply(200, PLAYER.state())
-            if self.path == "/bluetooth/devices":
+            if self.path in {"/bluetooth/devices", "/bluetooth/saved"}:
                 paired = parse_devices(bluetoothctl("devices Paired"))
-                return self.reply(200, {"devices": [device_info(item["address"]) for item in paired]})
+                return self.reply(200, {"devices": [device_info(item["address"]) for item in paired],
+                                        "selected_address": PLAYER.connected_speaker or PLAYER.last_speaker})
             self.reply(404, {"error": "Nicht gefunden."})
         except Exception as exc:
             self.reply(503, {"error": str(exc)})
@@ -825,30 +860,13 @@ class Handler(BaseHTTPRequestHandler):
                 if not MAC_RE.fullmatch(address):
                     return self.reply(422, {"error": "Ungültige Bluetooth-Adresse."})
                 operation = self.path.rsplit("/", 1)[-1]
-                if operation == "connect":
-                    info = connect_bluetooth_device(address)
-                    PLAYER.connected_speaker = address
-                    PLAYER.last_error = ""
-                    PLAYER.save_state()
-                    PLAYER.restore_session()
+                if operation in {"connect", "reconnect"}:
+                    info = PLAYER.connect_speaker(address, allow_pair=operation == "connect")
                     return self.reply(200, {"device": info})
                 if operation == "disconnect":
-                    PLAYER.stop_mpv()
-                    bluetoothctl(f"disconnect {address}")
-                    if PLAYER.connected_speaker == address:
-                        # Ein bewusstes Trennen darf nicht vom automatischen
-                        # Wiederverbinden wenige Sekunden später aufgehoben werden.
-                        PLAYER.connected_speaker = ""
-                        PLAYER.save_state()
-                    return self.reply(200, {"device": device_info(address)})
+                    return self.reply(200, PLAYER.disconnect_speaker(address))
                 if operation == "forget":
-                    if PLAYER.connected_speaker == address:
-                        PLAYER.stop_mpv()
-                    bluetoothctl(f"remove {address}")
-                    if PLAYER.connected_speaker == address:
-                        PLAYER.connected_speaker = ""
-                        PLAYER.save_state()
-                    return self.reply(200, {"ok": True})
+                    return self.reply(200, PLAYER.disconnect_speaker(address, forget=True))
             if self.path == "/queue":
                 items = data.get("items", [])
                 safe = []

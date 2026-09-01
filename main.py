@@ -266,7 +266,8 @@ async def security_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
-        "script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'"
+        "script-src 'self'; connect-src 'self'; frame-src https://www.youtube-nocookie.com; "
+        "base-uri 'none'; frame-ancestors 'none'"
     )
     response.headers["Referrer-Policy"] = "same-origin"
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -805,6 +806,48 @@ def get_playlist(cycle_id: int, member: dict | None = Depends(optional_member)):
     return {"playlist": playlist}
 
 
+@app.get("/api/v1/music/cycles/{cycle_id}/previous-playlist")
+def get_previous_playlist(cycle_id: int):
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT starts_at FROM music_cycles WHERE id = %s;", (cycle_id,))
+        current = cur.fetchone()
+        if not current:
+            raise HTTPException(status_code=404, detail="Abstimmung nicht gefunden.")
+        cur.execute("""
+            SELECT c.id, c.name, p.items_json FROM music_cycles c
+            LEFT JOIN music_cycle_playlists p ON p.cycle_id = c.id
+            WHERE c.id <> %s AND c.starts_at < %s
+              AND (c.status = 'closed' OR c.closes_at <= CURRENT_TIMESTAMP)
+            ORDER BY c.starts_at DESC, c.id DESC LIMIT 1;
+        """, (cycle_id, current[0]))
+        previous = cur.fetchone()
+        if not previous:
+            return {"cycle": None, "songs": []}
+        items = previous[2]
+        if isinstance(items, str):
+            items = json.loads(items)
+        if not items:
+            cur.execute("""
+                SELECT s.title, s.channel_title, s.external_id FROM music_suggestions s
+                LEFT JOIN music_votes v ON v.suggestion_id = s.id
+                WHERE s.cycle_id = %s AND s.status = 'approved' AND s.provider = 'youtube'
+                GROUP BY s.id ORDER BY COALESCE(SUM(v.points), 0) DESC, s.created_at ASC, s.id ASC
+                LIMIT 50;
+            """, (previous[0],))
+            items = [{"title": row[0], "artist": row[1], "external_id": row[2]} for row in cur.fetchall()]
+    songs = []
+    seen = set()
+    for item in items:
+        external_id = str(item.get("external_id", ""))
+        if external_id in seen or not YOUTUBE_VIDEO_ID.fullmatch(external_id):
+            continue
+        seen.add(external_id)
+        songs.append({"external_id": external_id, "title": item.get("title", "Song"),
+                      "channel_title": item.get("artist", ""), "provider": "youtube",
+                      "thumbnail_url": f"/api/v1/music/thumbnails/youtube/{external_id}"})
+    return {"cycle": {"id": previous[0], "name": previous[1]}, "songs": songs[:50]}
+
+
 @app.get("/api/v1/music/player/state")
 def get_player_state():
     state = player_agent("GET", "/state")
@@ -1200,6 +1243,17 @@ def bluetooth_devices():
 @app.post("/api/v1/music/player/bluetooth/scan", dependencies=[Depends(require_admin)])
 def bluetooth_scan():
     return player_agent("POST", "/bluetooth/scan", {}, timeout=20)
+
+
+@app.get("/api/v1/music/player/bluetooth/saved")
+def saved_bluetooth_speakers(_member: dict = Depends(require_player_operator)):
+    return player_agent("GET", "/bluetooth/saved", timeout=30)
+
+
+@app.post("/api/v1/music/player/bluetooth/reconnect")
+def reconnect_saved_speaker(device: BluetoothDeviceAction, _member: dict = Depends(require_player_operator)):
+    # The native agent rechecks the bond and never pairs unknown devices here.
+    return player_agent("POST", "/bluetooth/reconnect", device.model_dump(), timeout=60)
 
 
 @app.post("/api/v1/music/player/bluetooth/{operation}", dependencies=[Depends(require_admin)])

@@ -66,6 +66,16 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .archive-player-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 20px; }
 .archive-player-actions .muted { font-size: .85rem; flex: 1 1 230px; }
 #queueCycleName { flex-basis: 100%; font-size: .85rem; }
+.previous-playlist { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line); }
+.previous-playlist > p { margin-bottom: 12px; font-size: .88rem; }
+.preview-button { margin-top: 9px; }
+.preview-card { width: min(680px, 100%); }
+.preview-card h2 { padding-right: 30px; font-size: 1.8rem; }
+.preview-card p { margin: 14px 0; font-size: .9rem; }
+.preview-card iframe { width: 100%; aspect-ratio: 16 / 9; min-height: 200px; border: 0; margin-top: 14px; }
+.saved-speaker-panel { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.saved-speaker-panel label { flex: 1 1 230px; }
+.saved-speaker-panel p { flex-basis: 100%; overflow-wrap: anywhere; }
 .eyebrow { margin: 0 0 8px; color: var(--green-2); font-size: .72rem; font-weight: 800; letter-spacing: .17em; text-transform: uppercase; }
 h1, h2, h3, p { overflow-wrap: anywhere; }
 h1 { margin: 0 0 8px; font-family: Georgia, serif; font-size: clamp(2.5rem, 7vw, 5rem); line-height: .96; font-weight: 500; }

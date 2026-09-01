@@ -42,6 +42,29 @@ von der Verwaltung ausdrücklich wieder geöffnet, wird sie anschließend erneut
 ausgewertet. Änderungen in der DJ-Warteschlange verändern das gespeicherte
 Abstimmungsergebnis nicht.
 
+## Box ohne neue Suche verbinden
+
+Im **Player** eine **Gespeicherte Bluetooth-Box** auswählen und **Verbinden**
+drücken. Die Box muss eingeschaltet, in Reichweite und für den Raspberry
+verfügbar sein. Falls sie noch mit einem Handy verbunden ist, dort zuerst trennen.
+Eine neue Suche oder ein erneuter Kopplungsmodus ist für gespeicherte Kopplungen
+nicht nötig. Wenn die Box ihre Kopplung vergessen hat, muss die Verwaltung sie
+einmal neu koppeln. Der Verbinden-Knopf ist nur für freigegebene DJs sichtbar.
+
+## Songs wiederverwenden und vorher anhören
+
+Bei einer neuen Abstimmung steht unter der Rangliste **Aus der letzten Playlist**.
+Mit **Wieder vorschlagen** kann jedes angemeldete Mitglied einen Titel erneut
+zur Wahl stellen. Seine Punkte beginnen bei null. Bereits enthaltene Songs
+werden als **Schon in Abstimmung** markiert.
+
+An den Songs und Suchergebnissen öffnet **▶ Hörprobe** einen Dialog. Nach dem
+bewussten Klick auf **YouTube laden & Hörprobe starten** werden 30 Sekunden
+über den eingebetteten YouTube-Player abgespielt. Das passiert auf deinem
+Handy/Tablet und unterbricht die Vereinsmusik nicht. Kopfhörer sind dafür sinnvoll.
+Die Hörprobe benötigt Internet; YouTube kann einzelne Videos für die Einbettung
+sperren. Der Link **Auf YouTube öffnen** ist dann eine Alternative.
+
 ## Automatische Playlist-Auffüllung
 
 ClubIQ baut die Liste immer in dieser festen Reihenfolge:

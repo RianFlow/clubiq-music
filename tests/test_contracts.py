@@ -17,7 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class SecurityContractTests(unittest.TestCase):
     def test_archive_queue_requires_player_permission(self):
-        for path in ("/api/v1/music/player/queue/current", "/api/v1/music/player/queue/cycles/{cycle_id}"):
+        for path in ("/api/v1/music/player/queue/current", "/api/v1/music/player/queue/cycles/{cycle_id}",
+                     "/api/v1/music/player/bluetooth/saved", "/api/v1/music/player/bluetooth/reconnect"):
             route = next(route for route in main.app.routes if getattr(route, "path", None) == path)
             self.assertIn(main.require_player_operator, [dependency.call for dependency in route.dependant.dependencies])
 
@@ -143,6 +144,7 @@ class SecurityContractTests(unittest.TestCase):
         response = asyncio.run(main.security_headers(request, call_next))
         self.assertEqual(response.headers["x-frame-options"], "DENY")
         self.assertIn("script-src 'self'", response.headers["content-security-policy"])
+        self.assertIn("frame-src https://www.youtube-nocookie.com;", response.headers["content-security-policy"])
 
 
 class OfflineFrontendContractTests(unittest.TestCase):

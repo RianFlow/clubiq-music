@@ -7,13 +7,14 @@ function node(selector) {
   if (!nodes.has(selector)) nodes.set(selector, {
     textContent: '', innerHTML: '', hidden: false, disabled: false,
     dataset: {}, style: {}, querySelectorAll: () => [],
+    replaceChildren(...children) { this.children = children; },
   });
   return nodes.get(selector);
 }
 const context = vm.createContext({
   console, Date, Intl,
   localStorage: { getItem: () => '' }, sessionStorage: { getItem: () => '' },
-  document: { querySelector: node, querySelectorAll: () => [] },
+  document: { querySelector: node, querySelectorAll: () => [], createElement: () => ({}) },
 });
 const source = fs.readFileSync('static/app.js', 'utf8');
 vm.runInContext(source.slice(0, source.indexOf('\nstart();')), context);
@@ -33,6 +34,7 @@ async function test() {
       requests.push(path);
       if (path.endsWith('/cycles')) return {cycles};
       if (path.endsWith('/playlist')) return {playlist: [song]};
+      if (path.endsWith('/previous-playlist')) return {cycle: closed, songs: []};
       return {queue: [song], playlist_build: {total: 1}};
     };
     toast = message => messages.push(message);
@@ -52,7 +54,7 @@ async function test() {
   assert.equal(run('canVoteInDisplayedCycle()'), false);
   assert.equal(node('#budgetCard').hidden, true);
   await run('selectCycle(1)');
-  assert.equal(run('requests.at(-1)'), '/api/v1/music/cycles/1/playlist');
+  assert.equal(run('requests.at(-2)'), '/api/v1/music/cycles/1/playlist');
   assert.match(node('#playlist').innerHTML, /Archivsong/);
   assert.match(node('#playlistSummary').textContent, /Endergebnis/);
   assert.doesNotMatch(run('songCard(song)'), /data-vote|data-login-to-vote/);
@@ -62,7 +64,7 @@ async function test() {
   assert.equal(run('requests.at(-1)'), '/api/v1/music/player/queue/cycles/1');
   assert.match(run('messages.at(-1)'), /Vereinsabend/);
   // A slow response for an older selection must not overwrite the chosen list.
-  run('let resolveOld; api = () => new Promise(resolve => {resolveOld = resolve;});');
+  run('let resolveOld; api = path => path.endsWith("/previous-playlist") ? Promise.resolve({cycle: null, songs: []}) : new Promise(resolve => {resolveOld = resolve;});');
   const pending = run('loadPlaylist()');
   run('state.displayedCycle = active; state.playlist = []; resolveOld({playlist: [song]});');
   await pending;
@@ -75,6 +77,28 @@ async function test() {
   run('state.displayedCycle = planned; requests = []; api = async path => requests.push(path);');
   await run('queueRanking()');
   assert.equal(run('requests.length'), 0);
+  // Preview uses only a user-started local iframe, never the shared player API.
+  run('requests = []; previewVideoId = "aaaaaaaaaaa"; startPreview();');
+  const frame = node('#previewFrame').children[0];
+  assert.match(frame.src, /^https:\/\/www.youtube-nocookie.com\/embed\/aaaaaaaaaaa\?/);
+  assert.match(frame.src, /end=30/);
+  assert.equal(frame.referrerPolicy, 'strict-origin-when-cross-origin');
+  assert.equal(run('requests.length'), 0);
+  assert.equal(run('previewButton({external_id: "bad-id", title: "Test"})'), '');
+  // Previous songs are visible and can be proposed, but never carry old votes.
+  run(`state.displayedCycle = {...active, status:'active'}; state.activeCycle = state.displayedCycle;
+       state.playlist = []; state.previousPlaylist = {cycle: closed, songs:[{external_id:'aaaaaaaaaaa', title:'Voriger Song'}]}; renderPreviousPlaylist();`);
+  assert.equal(node('#previousPlaylistPanel').hidden, false);
+  assert.match(node('#previousPlaylist').innerHTML, /Voriger Song/);
+  assert.match(node('#previousPlaylist').innerHTML, /Wieder vorschlagen/);
+  // Reconnect addresses only a saved device, without discovery or pairing calls.
+  run(`state.member.can_control_player = true; state.savedSpeakers = [{address:'02:11:22:33:44:55'}];
+       api = async path => {requests.push(path); return {};}; loadPlayerState = async () => {};`);
+  node('#savedSpeakerSelect').value = '02:11:22:33:44:55';
+  await run('reconnectSpeaker()');
+  assert.equal(run('requests.at(-1)'), '/api/v1/music/player/bluetooth/reconnect');
+  assert.equal(run('requests.some(path => path.endsWith("/scan") || path.endsWith("/connect"))'), false);
+  run('requests = [];');
   run('state.displayedCycle = closed; state.member.can_control_player = false;');
   await run('queueRanking()');
   assert.equal(run('requests.length'), 0);
