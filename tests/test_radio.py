@@ -1,3 +1,4 @@
+import json
 import socketserver
 import subprocess
 import unittest
@@ -126,6 +127,59 @@ class RadioPlayerTests(unittest.TestCase):
         with patch.object(agent.MpvController, "load_state"):
             self.player = agent.MpvController()
 
+    @patch.object(agent.socket, "AF_UNIX", 1, create=True)
+    def test_mpv_ipc_accepts_matching_reply_among_events_and_chunks(self):
+        cases = [
+            [b'{"event":"start-file"}\n{"request_id":1,"error":"success","data":12}\n{"event":"file-loaded"}\n'],
+            [b'{"event":"start-file"}\n', b'{"request_id":1,"error":"success","da', b'ta":12}\n'],
+            [b'{"request_id":0,"error":"success","data":99}\n{"request_id":1,"error":"success","data":12}\n'],
+        ]
+        for chunks in cases:
+            with self.subTest(chunks=chunks), patch.object(self.player, "ensure_mpv"), \
+                 patch.object(agent.socket, "socket") as socket_factory:
+                client = socket_factory.return_value.__enter__.return_value
+                client.recv.side_effect = chunks
+                self.assertEqual(self.player.command("get_property", "time-pos"), 12)
+                self.assertEqual(json.loads(client.sendall.call_args.args[0])["request_id"], 1)
+
+    @patch.object(agent.socket, "AF_UNIX", 1, create=True)
+    def test_mpv_ipc_reports_command_failure_and_missing_reply(self):
+        for chunks, message in [
+            ([b'{"event":"idle"}\n', b''], "ohne Antwort"),
+            ([b'{"request_id":1,"error":"property unavailable"}\n'], "property unavailable"),
+        ]:
+            with self.subTest(chunks=chunks), patch.object(self.player, "ensure_mpv"), \
+                 patch.object(agent.socket, "socket") as socket_factory:
+                socket_factory.return_value.__enter__.return_value.recv.side_effect = chunks
+                with self.assertRaisesRegex(RuntimeError, message):
+                    self.player.command("get_property", "time-pos")
+
+    def test_radio_restore_preserves_paused_state(self):
+        self.player.source_mode = "radio"
+        self.player.radio_station = {"id": 5, "name": "Test", "stream_url": "https://radio.example/stream"}
+        for paused in (True, False):
+            self.player.resume_paused = paused
+            with patch.object(self.player, "play_radio") as radio:
+                self.player.restore_session()
+                radio.assert_called_once_with(self.player.radio_station, play=not paused)
+
+    def test_paused_radio_does_not_retry_or_start_playing(self):
+        self.player.source_mode = "radio"
+        self.player.radio_station = {"id": 5, "stream_url": "https://radio.example/stream"}
+        self.player.resume_paused = True
+        with patch.object(self.player, "command") as command:
+            self.player.retry_radio()
+            command.assert_not_called()
+
+    def test_radio_can_load_without_starting_playback(self):
+        self.player.source_mode = "radio"
+        station = {"id": 5, "name": "Test", "stream_url": "https://radio.example/stream"}
+        with patch.object(self.player, "ensure_mpv"), patch.object(self.player, "save_state"), \
+             patch.object(self.player, "command") as command:
+            self.player.play_radio(station, play=False)
+            command.assert_any_call("set_property", "pause", True, start=False)
+            self.assertTrue(self.player.resume_paused)
+
     @patch.object(agent, "MPV_LOG_FILE")
     @patch.object(agent, "MPV_SOCKET")
     @patch.object(agent.subprocess, "Popen")
@@ -165,4 +219,3 @@ class RadioPlayerTests(unittest.TestCase):
             self.assertEqual(self.player.current_index, 0)
             playlist.assert_not_called()
             command.assert_not_called()
-
