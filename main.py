@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 
 from db_config import connection_kwargs
 from radio_directory import DirectoryUnavailable, get_station, search_stations
+from radio_logos import CACHE_SECONDS, FAILURE_SECONDS, cached_logo
 
 load_dotenv()
 
@@ -54,6 +55,22 @@ class UnixHTTPConnection(http.client.HTTPConnection):
         self.sock.connect(self.socket_path)
 
 
+def station_logo_path(station_id) -> str:
+    if type(station_id) is not int or station_id <= 0:
+        return "/static/radio-placeholder.svg"
+    return f"/api/v1/music/radio/stations/{station_id}/logo"
+
+
+def player_image_urls(state: dict) -> dict:
+    station = state.get("radio_station")
+    if state.get("source_mode") == "radio" and isinstance(station, dict):
+        logo_path = station_logo_path(station.get("id"))
+        state["radio_station"] = {**station, "logo_image_url": logo_path}
+        if isinstance(state.get("current"), dict):
+            state["current"] = {**state["current"], "thumbnail": logo_path}
+    return state
+
+
 def player_agent(method: str, path: str, payload: dict | None = None, timeout: float = 12) -> dict:
     if not PLAYER_AGENT_TOKEN:
         raise HTTPException(status_code=503, detail="Der Raspberry-Player ist noch nicht eingerichtet.")
@@ -70,7 +87,7 @@ def player_agent(method: str, path: str, payload: dict | None = None, timeout: f
         result = json.loads(response.read() or b"{}")
         if response.status >= 400:
             raise HTTPException(status_code=503, detail=result.get("error", "Player antwortet nicht."))
-        return result
+        return player_image_urls(result)
     except HTTPException:
         raise
     except (OSError, ValueError, http.client.HTTPException) as exc:
@@ -800,8 +817,26 @@ def radio_station_dict(row) -> dict:
     return {
         "id": row[0], "name": row[1], "stream_url": row[2],
         "fallback_url": row[3], "logo_url": row[4], "genre": row[5],
-        "active": row[6], "sort_order": row[7],
+        "active": row[6], "sort_order": row[7], "logo_image_url": station_logo_path(row[0]),
     }
+
+
+@app.get("/api/v1/music/radio/stations/{station_id}/logo")
+def radio_station_logo(station_id: int):
+    # No arbitrary URL parameter: only artwork saved by an administrator.
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT logo_url FROM music_radio_stations WHERE id = %s;", (station_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Radiosender nicht gefunden.")
+    image = cached_logo(row[0])
+    if image:
+        return Response(content=image[0], media_type=image[1], headers={
+            "Cache-Control": f"public, max-age={CACHE_SECONDS}",
+        })
+    return FileResponse("static/radio-placeholder.svg", media_type="image/svg+xml", headers={
+        "Cache-Control": f"public, max-age={FAILURE_SECONDS}",
+    })
 
 
 @app.get("/api/v1/music/player/radio/stations")

@@ -165,6 +165,14 @@ oder HLS-Adressen und ein Ersatz-Stream möglich. Freigeschaltete Mitglieder wec
 zwischen Playlist und Radio; die Party-Anzeige übernimmt Sender und verfügbare
 Titelinformationen automatisch.
 
+Senderlogos werden über den Raspberry geladen und für sechs Stunden zwischengespeichert,
+damit sie auch bei reinem HTTP-Bildangebot auf der HTTPS-Seite erscheinen. Es werden nur
+kleine Rasterbilder von öffentlichen Adressen geladen; interne Netzadressen, ungeprüfte
+Weiterleitungen, SVG- und HTML-Inhalte werden abgewiesen. Ist ein Logo beim Anbieter
+gesperrt oder fehlt es, erscheint ein Radio-Symbol statt eines kaputten Bildes.
+Fehlgeschlagene Abrufe werden nach fünf Minuten beim nächsten Laden erneut geprüft. Das gilt auch für Player,
+Fernbedienung und Party-Anzeige; die Sicherheitsrichtlinie der App bleibt unverändert.
+
 Technik: [Radio-Browser-API](https://docs.radio-browser.info/), Suchcache fünf Minuten,
 begrenzte Netzwerkwartezeit, kein API-Schlüssel erforderlich. Bei einem Serverwechsel
 kann `RADIO_BROWSER_BASE_URL` in der `.env` auf einen aktuellen offiziellen API-Server

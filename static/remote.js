@@ -19,7 +19,7 @@ function setConnection(ok,text){$("#remoteStatus").className=`connection${ok?"":
 
 function render() {
   const current=player.current||{};
-  $("#remoteCover").src=current.thumbnail||"/pics/logo.png";
+  setMediaImage($("#remoteCover"),current.thumbnail,player.source_mode==="radio");
   $("#remoteTitle").textContent=current.title||"Noch kein Song";
   $("#remoteArtist").textContent=current.artist||"–";
   $("#remoteProgress").max=Math.max(1,Number(player.duration)||1);
