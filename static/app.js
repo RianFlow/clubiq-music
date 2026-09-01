@@ -12,6 +12,7 @@ const state = {
   playlist: [],
   player: { available: false, queue: [], current_index: -1, volume: 70, repeat: "off", shuffle: false },
   soundboard: [],
+  soundCategory: "Alle",
   radioStations: [],
   savedRadioStations: [],
   speakers: [],
@@ -782,8 +783,30 @@ async function queueRanking() {
 async function loadSoundboard() {
   const data = await api("/api/v1/music/player/soundboard");
   state.soundboard = data.items || [];
-  $("#soundboard").innerHTML = state.soundboard.length ? state.soundboard.map(item => `
-    <button class="sound-button ${esc(item.color)}" data-play-sound="${item.id}" type="button">${esc(item.name)}</button>
+  renderSoundboard();
+  renderAdminSoundboard();
+}
+
+function soundDuration(item) {
+  return item.duration_ms ? `${(item.duration_ms / 1000).toLocaleString("de-DE", { maximumFractionDigits: 1 })} s` : "Eigener Clip";
+}
+
+function renderSoundboard() {
+  const categories = ["Alle", "Darts", "Jubel", "Spaß", "Eigene"].filter(category =>
+    category === "Alle" || state.soundboard.some(item => (item.category || "Eigene") === category));
+  if (!categories.includes(state.soundCategory)) state.soundCategory = "Alle";
+  $("#soundboardFilters").innerHTML = categories.map(category => {
+    const count = state.soundboard.filter(item => category === "Alle" || (item.category || "Eigene") === category).length;
+    return `<button class="button ghost small" type="button" data-sound-category="${esc(category)}" aria-pressed="${state.soundCategory === category}">${esc(category)} <span>${count}</span></button>`;
+  }).join("");
+  $$('[data-sound-category]').forEach(button => button.addEventListener("click", () => {
+    state.soundCategory = button.dataset.soundCategory;
+    renderSoundboard();
+    $$("[data-sound-category]").find(item => item.dataset.soundCategory === state.soundCategory)?.focus();
+  }));
+  const items = state.soundboard.filter(item => state.soundCategory === "Alle" || (item.category || "Eigene") === state.soundCategory);
+  $("#soundboard").innerHTML = items.length ? items.map(item => `
+    <button class="sound-button ${esc(item.color)}" data-play-sound="${item.id}" type="button"><strong>${esc(item.name)}</strong><small>${esc(soundDuration(item))}</small></button>
   `).join("") : '<div class="empty">Noch keine Sounds eingerichtet.</div>';
   $$('[data-play-sound]').forEach(button => button.addEventListener("click", async () => {
     if (!state.member) return openMemberDialog();
@@ -795,22 +818,21 @@ async function loadSoundboard() {
     } catch (error) { toast(error.message, true); }
     finally { button.disabled = false; }
   }));
-  renderAdminSoundboard();
 }
 
 function renderAdminSoundboard() {
   const root = $("#adminSoundboard");
   if (!root) return;
   root.innerHTML = state.soundboard.length ? state.soundboard.map(item => `
-    <div class="admin-row"><div><strong>${esc(item.name)}</strong><span>Soundboard · ${esc(item.color)}</span></div>
-      <button class="button ghost small" data-delete-sound="${item.id}" type="button">Löschen</button></div>
+    <div class="admin-row"><div><strong>${esc(item.name)}</strong><span>${esc(item.category || "Eigene")} · ${esc(soundDuration(item))}${item.builtin ? " · ClubIQ-Paket" : ""}</span></div>
+      <button class="button ghost small" data-delete-sound="${item.id}" type="button">Entfernen</button></div>
   `).join("") : '<div class="empty">Noch keine Soundboard-Sounds gespeichert.</div>';
   $$('[data-delete-sound]', root).forEach(button => button.addEventListener("click", async () => {
-    if (!window.confirm("Diesen Sound wirklich löschen?")) return;
+    if (!window.confirm("Diesen Sound aus dem Soundboard entfernen? Er bleibt auch nach einem Update ausgeblendet.")) return;
     try {
       await api(`/api/v1/music/admin/soundboard/${button.dataset.deleteSound}`, { method: "DELETE" }, true);
       await loadSoundboard();
-      toast("Sound wurde gelöscht.");
+      toast("Sound wurde entfernt.");
     } catch (error) { toast(error.message, true); }
   }));
 }

@@ -37,3 +37,7 @@ jobs:
         run: docker compose build web
       - name: Sicherheits- und UI-Verträge prüfen
         run: docker compose run --rm --no-deps web python -m unittest discover -s tests
+      - name: Soundboard-Migration mit PostgreSQL prüfen
+        run: |
+          docker compose up -d --wait db
+          docker compose run --rm --no-deps -e SOUNDBOARD_TEST_POSTGRES=1 web python -m unittest discover -s tests -p test_soundboard_postgres.py
