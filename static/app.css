@@ -60,6 +60,12 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 
 .shell { width: min(1040px, calc(100% - 32px)); margin: 30px auto 72px; }
 .hero { display: grid; grid-template-columns: 1fr 260px; align-items: end; gap: 26px; padding: 34px 0 26px; }
+.hero > div { min-width: 0; }
+.cycle-picker { margin-top: 18px; max-width: 580px; }
+.cycle-picker select:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.archive-player-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 20px; }
+.archive-player-actions .muted { font-size: .85rem; flex: 1 1 230px; }
+#queueCycleName { flex-basis: 100%; font-size: .85rem; }
 .eyebrow { margin: 0 0 8px; color: var(--green-2); font-size: .72rem; font-weight: 800; letter-spacing: .17em; text-transform: uppercase; }
 h1, h2, h3, p { overflow-wrap: anywhere; }
 h1 { margin: 0 0 8px; font-family: Georgia, serif; font-size: clamp(2.5rem, 7vw, 5rem); line-height: .96; font-weight: 500; }

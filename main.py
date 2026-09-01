@@ -948,21 +948,42 @@ def activity_leaderboard(limit: int = Query(default=8, ge=1, le=25)):
 
 @app.post("/api/v1/music/player/queue/current")
 def use_current_ranking(member: dict = Depends(require_player_operator)):
+    return queue_cycle_ranking(None, member)
+
+
+@app.post("/api/v1/music/player/queue/cycles/{cycle_id}")
+def use_cycle_ranking(cycle_id: int, member: dict = Depends(require_player_operator)):
+    return queue_cycle_ranking(cycle_id, member)
+
+
+def queue_cycle_ranking(cycle_id: int | None, member: dict):
+    close_expired_cycles()
     with db_connect() as conn, conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT id, starts_at, playlist_target_count, reuse_previous_playlist,
-                   genre_fallback_enabled, fallback_genre
-            FROM music_cycles
-            WHERE status = 'active' AND starts_at <= CURRENT_TIMESTAMP
-              AND closes_at > CURRENT_TIMESTAMP
-            ORDER BY id DESC LIMIT 1;
-            """
-        )
+        columns = """SELECT id, starts_at, playlist_target_count, reuse_previous_playlist,
+                            genre_fallback_enabled, fallback_genre, status, closes_at, name
+                     FROM music_cycles """
+        if cycle_id is None:
+            cur.execute(columns + """
+                WHERE status IN ('active', 'closed') AND starts_at <= CURRENT_TIMESTAMP
+                ORDER BY CASE WHEN status = 'active' AND closes_at > CURRENT_TIMESTAMP
+                              THEN 0 ELSE 1 END, closes_at DESC, id DESC LIMIT 1;
+            """)
+        else:
+            cur.execute(columns + "WHERE id = %s;", (cycle_id,))
         cycle = cur.fetchone()
         if not cycle:
-            raise HTTPException(status_code=409, detail="Zurzeit läuft keine Abstimmung.")
-        cycle_id, starts_at, target, reuse_previous, use_genre, fallback_genre = cycle
+            raise HTTPException(status_code=404 if cycle_id is not None else 409,
+                                detail="Keine verfügbare Abstimmung gefunden.")
+        cycle_id, starts_at, target, reuse_previous, use_genre, fallback_genre, status, closes_at, name = cycle
+        if status not in {'active', 'closed'} or starts_at > datetime.now(timezone.utc):
+            raise HTTPException(status_code=409, detail="Diese Abstimmung hat noch nicht begonnen.")
+        archived = status == 'closed' or closes_at <= datetime.now(timezone.utc)
+        if archived:
+            cur.execute("SELECT items_json FROM music_cycle_playlists WHERE cycle_id = %s AND finalized_at IS NOT NULL;", (cycle_id,))
+            saved = cur.fetchone()
+            if saved:
+                generated = json.loads(saved[0]) if isinstance(saved[0], str) else saved[0]
+                return send_ranked_playlist(generated, cycle_id, name, target, use_genre, fallback_genre, member, True)
         cur.execute(
             """
             SELECT s.title, s.channel_title, s.external_id, COALESCE(SUM(v.points), 0) AS points
@@ -1032,21 +1053,33 @@ def use_current_ranking(member: dict = Depends(require_player_operator)):
             status_code=409,
             detail="Es gibt noch keine Stimmen und keine verfügbaren Titel zum Auffüllen.",
         )
-    counts = {
-        source: sum(1 for item in generated if item["source"] == source)
-        for source in ("votes", "previous", "genre")
-    }
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO music_cycle_playlists (cycle_id, items_json, generated_at, updated_at)
-            VALUES (%s, %s::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            INSERT INTO music_cycle_playlists (cycle_id, items_json, generated_at, updated_at, finalized_at)
+            VALUES (%s, %s::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
+                    CASE WHEN %s THEN CURRENT_TIMESTAMP ELSE NULL END)
             ON CONFLICT (cycle_id) DO UPDATE
             SET items_json = EXCLUDED.items_json, generated_at = CURRENT_TIMESTAMP,
-                updated_at = CURRENT_TIMESTAMP;
+                updated_at = CURRENT_TIMESTAMP, finalized_at = EXCLUDED.finalized_at
+            WHERE music_cycle_playlists.finalized_at IS NULL;
             """,
-            (cycle_id, json.dumps(generated)),
+            (cycle_id, json.dumps(generated), archived),
         )
+        # Another DJ may have finalized this cycle while provider results loaded.
+        # Always use the winning snapshot, never overwrite an existing final list.
+        cur.execute("SELECT items_json FROM music_cycle_playlists WHERE cycle_id = %s;", (cycle_id,))
+        stored = cur.fetchone()[0]
+        generated = json.loads(stored) if isinstance(stored, str) else stored
+        conn.commit()
+    return send_ranked_playlist(generated, cycle_id, name, target, use_genre, fallback_genre, member, archived)
+
+
+def send_ranked_playlist(generated, cycle_id, name, target, use_genre, fallback_genre, member, archived):
+    items = [player_item(item) for item in generated]
+    counts = {source: sum(1 for item in generated if item.get('source') == source)
+              for source in ('votes', 'previous', 'genre')}
+    with db_connect() as conn, conn.cursor() as cur:
         cur.execute(
             "INSERT INTO music_player_audit (member_id, action, detail_json) VALUES (%s, 'queue_from_ranking', %s);",
             (member["member_id"], json.dumps({
@@ -1059,6 +1092,7 @@ def use_current_ranking(member: dict = Depends(require_player_operator)):
     result["playlist_build"] = {
         "target": target, "total": len(items), "sources": counts,
         "genre": fallback_genre if use_genre else None,
+        "cycle_id": cycle_id, "cycle_name": name, "archived": archived,
     }
     return result
 
@@ -1661,6 +1695,9 @@ def update_cycle(cycle_id: int, update: CycleUpdate):
         )
         if cur.rowcount != 1:
             raise HTTPException(status_code=404, detail="Abstimmung nicht gefunden.")
+        if target_status in {"planned", "active"} and closes_at > datetime.now(timezone.utc):
+            # Explicitly reopening a cycle allows new votes to determine its next final list.
+            cur.execute("UPDATE music_cycle_playlists SET finalized_at = NULL WHERE cycle_id = %s;", (cycle_id,))
         conn.commit()
     return {"status": "success"}
 

@@ -22,14 +22,31 @@ abgespielt wird:
 - Bereits gespielte Titel bleiben abgeblendet als kurzer Verlauf sichtbar.
 - Manuell ergänzte Titel sind mit **DJ** gekennzeichnet.
 
-Ein angemeldetes Mitglied kann mit **Playlist erstellen & abspielen** die festgelegte
-Playlist in den Player übernehmen. Dadurch wird eine vorhandene Warteschlange ersetzt.
+Ein von der Verwaltung freigegebenes Mitglied kann mit **Ausgewählte Playlist laden**
+die oben ausgewählte Abstimmung in den Player übernehmen. Dadurch wird eine
+vorhandene Warteschlange ersetzt. Anschließend startet **▶** die Wiedergabe.
+
+## Nach dem Abstimmungsende
+
+1. Oben **Abstimmung / Playlist auswählen** öffnen.
+2. Unter **Abgeschlossene Abstimmungen** den gewünschten Vereinsabend auswählen.
+3. Das Endergebnis ansehen. Stimmen können jetzt nicht mehr verändert werden.
+4. Als freigegebener DJ **Diese Playlist in den Player laden** drücken.
+5. Im Player **▶** drücken. Die Box ist weiterhin mit dem Raspberry verbunden.
+
+Auch beim Ablauf des Countdowns bleibt die gerade geöffnete Liste sichtbar.
+Eine neue Abstimmung verdrängt das gewählte Archiv nicht. Die endgültige Playlist
+wird beim ersten Laden nach Ende aus den letzten Stimmen und den Auffüllregeln
+gespeichert; danach bleibt sie beim erneuten Laden gleich. Wird eine Abstimmung
+von der Verwaltung ausdrücklich wieder geöffnet, wird sie anschließend erneut
+ausgewertet. Änderungen in der DJ-Warteschlange verändern das gespeicherte
+Abstimmungsergebnis nicht.
 
 ## Automatische Playlist-Auffüllung
 
 ClubIQ baut die Liste immer in dieser festen Reihenfolge:
 
-1. Songs mit Stimmen aus der aktuellen Abstimmung, nach Punkten sortiert
+1. Songs mit Stimmen aus der ausgewählten Abstimmung, nach Punkten sortiert
 2. noch fehlende Songs aus der zuletzt tatsächlich erzeugten ClubIQ-Playlist
 3. noch fehlende populäre Songs aus dem eingestellten Genre
 
