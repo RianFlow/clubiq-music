@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse
+from uuid import UUID
 
 import psycopg
 import requests
@@ -23,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from db_config import connection_kwargs
+from radio_directory import DirectoryUnavailable, get_station, search_stations
 
 load_dotenv()
 
@@ -325,6 +327,10 @@ class RadioStationCreate(BaseModel):
     genre: str | None = Field(default=None, max_length=80)
     active: bool = True
     sort_order: int = Field(default=0, ge=-1000, le=1000)
+
+
+class RadioStationImport(BaseModel):
+    station_uuid: UUID
 
 
 class RadioStationUpdate(BaseModel):
@@ -1397,6 +1403,42 @@ def admin_radio_stations():
                FROM music_radio_stations ORDER BY sort_order, lower(name);"""
         )
         return {"stations": [radio_station_dict(row) for row in cur.fetchall()]}
+
+
+@app.get("/api/v1/music/admin/radio/search", dependencies=[Depends(require_admin)])
+def search_radio_directory(q: str = Query(min_length=2, max_length=80)):
+    try:
+        return {"stations": search_stations(q), "source": "Radio-Browser"}
+    except DirectoryUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/v1/music/admin/radio/import", dependencies=[Depends(require_admin)])
+def import_radio_station(selection: RadioStationImport):
+    try:
+        station = get_station(selection.station_uuid)
+    except DirectoryUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    with db_connect() as conn, conn.cursor() as cur:
+        # Serialize imports so a retry/double click cannot create duplicates.
+        cur.execute("SELECT pg_advisory_xact_lock(724031);")
+        cur.execute("SELECT id FROM music_radio_stations WHERE stream_url = %s LIMIT 1;",
+                    (station["stream_url"],))
+        existing = cur.fetchone()
+        if existing:
+            return {"status": "existing", "id": existing[0]}
+        cur.execute(
+            """INSERT INTO music_radio_stations (name, stream_url, logo_url, genre)
+               VALUES (%s, %s, %s, %s) RETURNING id;""",
+            (station["name"], station["stream_url"], station["logo_url"], station["genre"]),
+        )
+        station_id = cur.fetchone()[0]
+        conn.commit()
+    return {"status": "success", "id": station_id}
 
 
 @app.post("/api/v1/music/admin/radio/stations", dependencies=[Depends(require_admin)], status_code=201)

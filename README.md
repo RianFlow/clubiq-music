@@ -147,11 +147,29 @@ Player-Befehle sind für normale Mitglieder standardmäßig gesperrt. In
 Mitglieder berechtigen. Diese Freigabe wird bei jedem schreibenden API-Aufruf
 serverseitig geprüft; Abstimmen und Vorschlagen bleiben davon unabhängig.
 
-Unter **Verwaltung → Player & Box** lassen sich Internetradio-Sender mit einer
-direkten MP3-, AAC- oder HLS-Stream-Adresse verwalten. Optional kann ein
-Ersatz-Stream hinterlegt werden. Freigeschaltete Mitglieder wechseln im Player
+Unter **Verwaltung → Player & Box → Radiosender suchen** reicht ein Stichwort
+wie **NDR 2**, **ffn**, **Rock** oder **Schlager**. Die Suche fragt Sendernamen und
+Musikrichtungen im freien [Radio-Browser-Verzeichnis](https://www.radio-browser.info/)
+ab. Mit **Hinzufügen** wird die Stream-Adresse automatisch gespeichert; anschließend
+unten in der Senderliste **Abspielen** wählen. Doppelte Importe werden abgefangen.
+Auch ein Admin muss zum Verwalten von Sendern im Verwaltungsbereich angemeldet sein.
+
+Für Suche und Wiedergabe benötigt der Raspberry Internet; das Tablet darf im
+Kassen-WLAN bleiben. Ein Verzeichnisausfall verhindert nicht den Start bereits
+gespeicherter Sender. Sender können ihre Streams ändern oder zeitweise ausfallen.
+Die Suche verwendet das zuletzt als erreichbar markierte Angebot des Verzeichnisses,
+das ist keine Garantie für eine unterbrechungsfreie Wiedergabe.
+
+Unter **Eigene Stream-Adresse eingeben (optional)** bleiben direkte MP3-, AAC-
+oder HLS-Adressen und ein Ersatz-Stream möglich. Freigeschaltete Mitglieder wechseln im Player
 zwischen Playlist und Radio; die Party-Anzeige übernimmt Sender und verfügbare
 Titelinformationen automatisch.
+
+Technik: [Radio-Browser-API](https://docs.radio-browser.info/), Suchcache fünf Minuten,
+begrenzte Netzwerkwartezeit, kein API-Schlüssel erforderlich. Bei einem Serverwechsel
+kann `RADIO_BROWSER_BASE_URL` in der `.env` auf einen aktuellen offiziellen API-Server
+gesetzt werden. Der native Player nutzt die auf mpv 0.40 verfügbare Option
+`--audio-fallback-to-null=no`; ein Ausfall der Box wird nicht durch stumme Ausgabe kaschiert.
 ```
 
 Die Sicherung wird komprimiert, inhaltlich geprüft und mit SHA-256 versehen.

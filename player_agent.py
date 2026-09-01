@@ -231,7 +231,8 @@ class MpvController:
             "mpv", "--no-config", "--idle=yes", "--force-window=no", "--audio-display=no",
             f"--input-ipc-server={MPV_SOCKET}", "--ytdl=yes", "--ytdl-format=bestaudio/best",
             f"--log-file={MPV_LOG_FILE}",
-            f"--audio-device={audio_device}", "--audio-fallback=no", f"--volume={self.volume}",
+            f"--audio-device={audio_device}", "--audio-fallback-to-null=no", f"--volume={self.volume}",
+            f"--mute={'yes' if self.muted else 'no'}", "--network-timeout=10",
         ]
         self.process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True)
         for _ in range(30):
@@ -499,7 +500,12 @@ class MpvController:
     def act(self, action: str, value=None) -> dict:
         with self.lock:
             if action == "play":
-                if self.current_index < 0 and self.queue:
+                if self.source_mode == "radio" and self.radio_station:
+                    if bool(self.property("idle-active", True)):
+                        self.play_radio(self.radio_station)
+                    else:
+                        self.command("set_property", "pause", False)
+                elif self.current_index < 0 and self.queue:
                     self.current_index = 0
                     self.load_current()
                 elif self.current_index >= 0 and bool(self.property("idle-active", True)):
@@ -512,14 +518,15 @@ class MpvController:
                 self.command("set_property", "pause", True)
                 self.checkpoint_playback()
             elif action in {"next", "previous"}:
-                if self.queue:
+                if self.source_mode != "radio" and self.queue:
                     step = 1 if action == "next" else -1
                     self.current_index = (self.current_index + step) % len(self.queue)
                     self.load_current()
             elif action == "seek":
-                self.command("set_property", "time-pos", max(0, float(value)))
-                self.resume_position = max(0, float(value))
-                self.save_state()
+                if self.source_mode != "radio":
+                    self.command("set_property", "time-pos", max(0, float(value)))
+                    self.resume_position = max(0, float(value))
+                    self.save_state()
             elif action == "volume":
                 self.volume = max(0, min(100, int(value)))
                 self.command("set_property", "volume", self.volume)
@@ -647,6 +654,7 @@ class Handler(BaseHTTPRequestHandler):
                 if operation == "connect":
                     info = connect_bluetooth_device(address)
                     PLAYER.connected_speaker = address
+                    PLAYER.last_error = ""
                     PLAYER.save_state()
                     PLAYER.restore_session()
                     return self.reply(200, {"device": info})
