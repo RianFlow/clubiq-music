@@ -1131,7 +1131,8 @@ def bluetooth_scan():
 def bluetooth_action(operation: str, device: BluetoothDeviceAction):
     if operation not in {"connect", "disconnect", "forget"}:
         raise HTTPException(status_code=404, detail="Bluetooth-Aktion nicht gefunden.")
-    return player_agent("POST", f"/bluetooth/{operation}", device.model_dump(), timeout=40)
+    # Pairing, trust, connection and status are awaited sequentially by BlueZ.
+    return player_agent("POST", f"/bluetooth/{operation}", device.model_dump(), timeout=90)
 
 
 @app.get("/api/v1/music/player/soundboard")

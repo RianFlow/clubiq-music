@@ -186,6 +186,20 @@ class OfflineFrontendContractTests(unittest.TestCase):
         self.assertIn("UnixStreamServer", agent_source)
         self.assertNotIn("0.0.0.0", agent_source)
 
+    def test_bluetooth_errors_remain_visible_inside_admin_dialog(self):
+        html_source = (ROOT / "index.html").read_text(encoding="utf-8")
+        script_source = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+        admin_dialog = html_source.split('<dialog id="adminDialog"', 1)[1].split('</dialog>', 1)[0]
+        self.assertIn('id="speakerStatus"', admin_dialog)
+        self.assertIn('speakerMessage(error.message, true)', script_source)
+        self.assertIn('host.append(node)', script_source)
+        self.assertIn('dialog[open]', script_source)
+
+    def test_bluetooth_connection_waits_for_all_agent_steps(self):
+        with patch.object(main, "player_agent", return_value={"device": {}}) as agent:
+            main.bluetooth_action("connect", main.BluetoothDeviceAction(address="02:11:22:33:44:55"))
+        self.assertEqual(agent.call_args.kwargs["timeout"], 90)
+
     def test_activity_and_dj_queue_controls_are_present(self):
         html_source = (ROOT / "index.html").read_text(encoding="utf-8")
         script_source = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
