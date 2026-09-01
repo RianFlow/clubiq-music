@@ -27,30 +27,72 @@ MPV_SOCKET = Path(os.getenv("PLAYER_MPV_SOCKET", "/run/clubiq-music/mpv.sock"))
 MPV_LOG_FILE = Path(os.getenv("PLAYER_MPV_LOG", "/var/lib/clubiq-music/mpv.log"))
 STATE_FILE = Path(os.getenv("PLAYER_STATE_FILE", "/var/lib/clubiq-music/player.json"))
 MAC_RE = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$")
+ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+BLUETOOTH_LOCK = threading.RLock()
 
 
 def run(command: list[str], timeout: int = 15, check: bool = False) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=check)
+    return subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=check,
+                          env={**os.environ, "LC_ALL": "C"})
 
 
-def bluetoothctl(*commands: str, timeout: int = 20) -> str:
-    process = subprocess.Popen(
-        ["bluetoothctl"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT, text=True,
-    )
-    script = "\n".join((*commands, "quit", ""))
+def bluetoothctl(command: str, timeout: int = 5) -> str:
+    """Wait for BlueZ's command callback instead of piping commands plus quit.
+
+    Non-interactive bluetoothctl exits when the requested operation finishes.
+    The pairing agent stays alive for that entire operation, including devices
+    using Just Works (speakers with no keyboard/display).
+    """
+    arguments = command.split()
+    # BlueZ --timeout suppresses callback exit codes and keeps the process alive
+    # until its timer fires. Bound the process in Python instead, so a failed
+    # pair/trust/connect remains a failure and success can return immediately.
+    invocation = ["bluetoothctl"]
+    if arguments[0] == "pair":
+        invocation += ["--agent", "NoInputNoOutput"]
+    invocation += arguments
+    stage = {"power": "Einschalten", "pair": "Koppeln", "trust": "Vertrauen",
+             "connect": "Verbinden", "disconnect": "Trennen", "remove": "Vergessen"}.get(arguments[0], "Status")
     try:
-        output, _ = process.communicate(script, timeout=timeout)
-        return output
+        result = run(invocation, timeout=timeout)
     except subprocess.TimeoutExpired:
-        process.kill()
-        output, _ = process.communicate()
-        raise RuntimeError("Bluetooth hat nicht rechtzeitig geantwortet.") from None
+        raise RuntimeError(f"Bluetooth ({stage}): Zeitüberschreitung. Box im Kopplungsmodus lassen und erneut versuchen.") from None
+    output = ANSI_RE.sub("", "\n".join((result.stdout or "", result.stderr or ""))).strip()
+    if result.returncode:
+        errors = [line.strip() for line in output.splitlines()
+                  if re.search(r"failed|error|not available|not found|invalid|timeout", line, re.I)]
+        detail = "\n".join(errors[-3:]) or "Keine Bestätigung innerhalb der Wartezeit."
+        hint = ""
+        if "Authentication" in detail:
+            hint = " Box in den Kopplungsmodus setzen und eine bestehende Handy-Verbindung trennen."
+        elif "NotReady" in detail or "rfkill" in detail.lower():
+            hint = " Bluetooth am Raspberry ist ausgeschaltet oder gesperrt."
+        elif "br-connection-profile-unavailable" in detail:
+            hint = " Das Bluetooth-Audioprofil fehlt; den bluealsa-Dienst am Raspberry prüfen."
+        raise RuntimeError(f"Bluetooth ({stage}): {detail[:600]}{hint}")
+    return output
+
+
+def connect_bluetooth_device(address: str) -> dict:
+    with BLUETOOTH_LOCK:
+        bluetoothctl("power on")
+        info = device_info(address)
+        # Never re-pair a known device: this can invalidate its existing bond.
+        if not info["paired"]:
+            bluetoothctl(f"pair {address}", timeout=25)
+        bluetoothctl(f"trust {address}")
+        info = device_info(address)
+        if not info["connected"]:
+            bluetoothctl(f"connect {address}", timeout=15)
+            info = device_info(address)
+        if not info["connected"]:
+            raise RuntimeError("Bluetooth (Verbinden): Die Box meldet noch keine Verbindung. Bitte erneut versuchen.")
+        return info
 
 
 def scan_bluetooth_devices() -> list[dict]:
     """Run BlueZ discovery with a bounded timeout and return all visible devices."""
-    bluetoothctl("power on", "agent on", "default-agent", timeout=8)
+    bluetoothctl("power on", timeout=5)
     scan = run(["bluetoothctl", "--timeout", "8", "scan", "on"], timeout=12)
     output = "\n".join((scan.stdout, scan.stderr, bluetoothctl("devices", timeout=5)))
     return parse_devices(output)
@@ -584,7 +626,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/state":
                 return self.reply(200, PLAYER.state())
             if self.path == "/bluetooth/devices":
-                paired = parse_devices(bluetoothctl("paired-devices"))
+                paired = parse_devices(bluetoothctl("devices Paired"))
                 return self.reply(200, {"devices": [device_info(item["address"]) for item in paired]})
             self.reply(404, {"error": "Nicht gefunden."})
         except Exception as exc:
@@ -603,14 +645,11 @@ class Handler(BaseHTTPRequestHandler):
                     return self.reply(422, {"error": "Ungültige Bluetooth-Adresse."})
                 operation = self.path.rsplit("/", 1)[-1]
                 if operation == "connect":
-                    output = bluetoothctl("power on", "agent on", "default-agent", f"pair {address}", f"trust {address}", f"connect {address}", timeout=35)
-                    info = device_info(address)
-                    if not info["connected"]:
-                        raise RuntimeError("Die Box hat die Verbindung nicht angenommen. Bitte Kopplungsmodus aktivieren.")
+                    info = connect_bluetooth_device(address)
                     PLAYER.connected_speaker = address
                     PLAYER.save_state()
                     PLAYER.restore_session()
-                    return self.reply(200, {"device": info, "log": output[-500:]})
+                    return self.reply(200, {"device": info})
                 if operation == "disconnect":
                     PLAYER.stop_mpv()
                     bluetoothctl(f"disconnect {address}")
@@ -690,19 +729,22 @@ class Handler(BaseHTTPRequestHandler):
 def reconnect_loop(stop: threading.Event) -> None:
     while not stop.is_set():
         address = PLAYER.connected_speaker
-        if address:
+        if address and BLUETOOTH_LOCK.acquire(blocking=False):
             try:
                 connected = bool(device_info(address)["connected"])
                 if not connected:
                     PLAYER.checkpoint_playback()
                     PLAYER.stop_mpv()
-                    bluetoothctl("power on", f"connect {address}", timeout=12)
+                    bluetoothctl("power on")
+                    bluetoothctl(f"connect {address}", timeout=12)
                     connected = bool(device_info(address)["connected"])
                 if connected and not (PLAYER.process and PLAYER.process.poll() is None):
                     with PLAYER.lock:
                         PLAYER.restore_session()
             except Exception as exc:
                 PLAYER.last_error = f"Bluetooth-Wiederverbindung: {exc}"
+            finally:
+                BLUETOOTH_LOCK.release()
         stop.wait(10)
 
 

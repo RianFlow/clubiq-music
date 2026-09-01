@@ -78,13 +78,34 @@ Danach in **Verwaltung → Player & Box**:
 2. „Boxen suchen“ wählen.
 3. Bei der gewünschten Box „Verbinden“ wählen.
 
-ClubIQ vertraut der Box anschließend und versucht nach Abbrüchen oder Neustarts alle
-15 Sekunden automatisch, die Verbindung wiederherzustellen. Diagnose:
+ClubIQ wartet beim Koppeln, Vertrauen und Verbinden auf die jeweilige Rückmeldung
+von BlueZ. Bereits gekoppelte Boxen werden nicht erneut gekoppelt. Der Status und
+Fehler bleiben direkt unter der Boxenliste sichtbar, auch im Verwaltungsfenster.
+Währenddessen bitte keine zweite Verbindung starten und die Box nicht mit dem
+Handy verbinden. Bei einem Fehler steht dabei, welcher Schritt gescheitert ist.
+
+ClubIQ versucht nach Abbrüchen oder Neustarts regelmäßig, die Verbindung
+wiederherzustellen. Diagnose:
 
 ```bash
 sudo journalctl -u clubiq-music-player -n 100 --no-pager
-sudo bluetoothctl paired-devices
+sudo bluetoothctl devices Paired
 ```
+
+Bei `NotReady` zuerst `rfkill list bluetooth` prüfen. Eine Softwaresperre lässt sich
+mit `sudo rfkill unblock bluetooth` lösen; danach `sudo bluetoothctl power on`.
+Bei `AuthenticationFailed` den Kopplungsmodus der Box und eine bestehende
+Handy-Verbindung prüfen. Bei `br-connection-profile-unavailable` den Dienst mit
+`systemctl status bluealsa --no-pager` prüfen.
+
+Wenn ein Update `player_agent.py` ändert, reicht ein Docker-Neustart nicht:
+nach dem Aktualisieren auch `sudo ./scripts/install-player.sh` ausführen. Dieses
+installiert den Player-Dienst auf dem Raspberry erneut; gespeicherte Kopplungen
+und Einstellungen werden dabei nicht gelöscht.
+
+Technische Grundlage: [BlueZ bluetoothctl](https://github.com/bluez/bluez/blob/5.82/client/main.c)
+(Einzelbefehle mit Rückmeldung und zeitlich begrenztem Pairing-Agenten) und
+[modale Browser-Ebene](https://developer.mozilla.org/en-US/docs/Glossary/Top_layer).
 
 ## Aktualisieren
 

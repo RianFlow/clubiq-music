@@ -209,6 +209,8 @@ input:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px rgba(36,92,81,
 .sound-button.blue { background: #326b8c; }
 .sound-button.red { background: #9e3e37; }
 .player-device-list { margin-top: 16px; }
+.speaker-status { margin: 14px 0 0; padding: 12px 14px; border-radius: 10px; color: var(--green); background: var(--mint); white-space: pre-wrap; overflow-wrap: anywhere; }
+.speaker-status.error { color: #7e2e28; background: #fae7e3; border: 1px solid #ddb2aa; }
 .activity-panel { margin-top: 24px; padding: 20px; }
 .activity-explanation { margin: -5px 0 14px; font-size: .84rem; }
 .activity-list { display: grid; gap: 7px; }
@@ -237,7 +239,7 @@ input:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px rgba(36,92,81,
 .sound-upload { display: grid; grid-template-columns: 1fr 150px 1.4fr auto; gap: 10px; align-items: end; }
 .sound-upload h3, .sound-upload small { grid-column: 1 / -1; }
 
-.toast { position: fixed; left: 50%; bottom: 24px; z-index: 50; transform: translate(-50%, 18px); padding: 12px 18px; border-radius: 12px; color: white; background: var(--green); opacity: 0; pointer-events: none; box-shadow: var(--shadow); transition: .2s ease; }
+.toast { position: fixed; left: 50%; bottom: 24px; z-index: 50; width: max-content; max-width: min(620px, calc(100vw - 32px)); max-height: 40vh; overflow: auto; overflow-wrap: anywhere; transform: translate(-50%, 18px); padding: 12px 18px; border-radius: 12px; color: white; background: var(--green); opacity: 0; pointer-events: none; box-shadow: var(--shadow); transition: .2s ease; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .toast.error { background: var(--danger); }
 

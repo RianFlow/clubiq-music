@@ -28,10 +28,13 @@ let countdownTransition = "";
 let deferredInstallPrompt = null;
 function toast(message, error = false) {
   const node = $("#toast");
+  // A modal dialog lives in the browser's top layer, above every body z-index.
+  const host = $$("dialog[open]").at(-1) || document.body;
+  if (node.parentElement !== host) host.append(node);
   node.textContent = message;
   node.className = `toast show${error ? " error" : ""}`;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { node.className = "toast"; }, 2800);
+  toastTimer = setTimeout(() => { node.className = "toast"; }, error ? 10000 : 2800);
 }
 
 async function api(path, options = {}, admin = false) {
@@ -755,11 +758,27 @@ async function loadSpeakers(silent = false) {
     const data = await api("/api/v1/music/player/bluetooth/devices", {}, true);
     state.speakers = data.devices || [];
     renderSpeakers();
+    return true;
   } catch (error) {
     state.speakers = [];
     $("#speakerList").innerHTML = `<div class="empty">${esc(error.message)} Starte auf dem Raspberry einmal das Player-Installationsskript.</div>`;
+    speakerMessage(error.message, true);
     if (!silent) toast(error.message, true);
+    return false;
   }
+}
+
+function speakerMessage(message, error = false) {
+  const node = $("#speakerStatus");
+  node.textContent = message;
+  node.hidden = !message;
+  node.className = `speaker-status${error ? " error" : ""}`;
+}
+
+let speakerBusy = false;
+function setSpeakerBusy(busy) {
+  speakerBusy = busy;
+  $$("#scanSpeakers, [data-speaker-action]").forEach(button => { button.disabled = busy; });
 }
 
 function renderSpeakers() {
@@ -775,32 +794,47 @@ function renderSpeakers() {
       </div>
     </div>`).join("") : '<div class="empty">Noch keine Box gefunden. Box in den Kopplungsmodus setzen und „Boxen suchen“ wählen.</div>';
   $$('[data-speaker-action]', root).forEach(button => button.addEventListener("click", () => speakerAction(button)));
+  setSpeakerBusy(speakerBusy);
 }
 
 async function scanSpeakers() {
+  if (speakerBusy) return;
   const button = $("#scanSpeakers");
-  button.disabled = true;
+  setSpeakerBusy(true);
   button.textContent = "Suche läuft …";
+  speakerMessage("Bluetooth-Boxen werden gesucht …");
   try {
     const data = await api("/api/v1/music/player/bluetooth/scan", { method: "POST" }, true);
     state.speakers = data.devices || [];
     renderSpeakers();
-    toast(`${state.speakers.length} Bluetooth-Gerät${state.speakers.length === 1 ? "" : "e"} gefunden.`);
-  } catch (error) { toast(error.message, true); }
-  finally { button.disabled = false; button.textContent = "Boxen suchen"; }
+    const message = `${state.speakers.length} Bluetooth-Gerät${state.speakers.length === 1 ? "" : "e"} gefunden.`;
+    speakerMessage(message);
+    toast(message);
+  } catch (error) { speakerMessage(error.message, true); toast(error.message, true); }
+  finally { setSpeakerBusy(false); button.textContent = "Boxen suchen"; }
 }
 
 async function speakerAction(button) {
+  if (speakerBusy) return;
   const operation = button.dataset.speakerAction;
-  button.disabled = true;
+  const originalLabel = button.textContent;
+  setSpeakerBusy(true);
+  button.textContent = operation === "connect" ? "Verbinde …" : "Bitte warten …";
+  speakerMessage(operation === "connect"
+    ? "Die Box wird gekoppelt und verbunden. Bitte im Kopplungsmodus lassen; das kann bis zu einer Minute dauern."
+    : "Bluetooth-Verbindung wird aktualisiert …");
   try {
     await api(`/api/v1/music/player/bluetooth/${operation}`, {
       method: "POST", body: JSON.stringify({ address: button.dataset.address }),
     }, true);
-    await Promise.all([loadSpeakers(), loadPlayerState(true)]);
-    toast(operation === "connect" ? "Bluetooth-Box ist verbunden." : "Bluetooth-Box wurde aktualisiert.");
-  } catch (error) { toast(error.message, true); }
-  finally { button.disabled = false; }
+    const [refreshed] = await Promise.all([loadSpeakers(), loadPlayerState(true)]);
+    if (refreshed) {
+      const message = operation === "connect" ? "Bluetooth-Box ist verbunden." : "Bluetooth-Box wurde aktualisiert.";
+      speakerMessage(message);
+      toast(message);
+    }
+  } catch (error) { speakerMessage(error.message, true); toast(error.message, true); }
+  finally { setSpeakerBusy(false); button.textContent = originalLabel; }
 }
 
 async function uploadSound(event) {
