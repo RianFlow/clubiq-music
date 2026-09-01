@@ -35,6 +35,8 @@ class ArchivePostgresTests(unittest.TestCase):
             cur.execute("SELECT count(*) FROM music_cycle_playlists WHERE cycle_id=1 AND finalized_at IS NULL;")
             self.assertEqual(cur.fetchone()[0], 1)
             cur.execute("INSERT INTO music_suggestions (id, cycle_id, member_id, provider, external_id, title) VALUES (1, 1, 'dj', 'youtube', 'aaaaaaaaaaa', 'Titel A'), (2, 1, 'dj', 'youtube', 'bbbbbbbbbbb', 'Titel B');")
+            # Explicit fixture IDs do not advance PostgreSQL's serial sequence.
+            cur.execute("SELECT setval(pg_get_serial_sequence('music_suggestions', 'id'), (SELECT max(id) FROM music_suggestions));")
             cur.execute("INSERT INTO music_votes (cycle_id, suggestion_id, member_id, points) VALUES (1, 1, 'dj', 5), (1, 2, 'dj', 1);")
 
         # App commit calls intentionally remain inside this test's rollback boundary.
@@ -115,3 +117,19 @@ class ArchivePostgresTests(unittest.TestCase):
             cur.execute("UPDATE music_votes SET points=8 WHERE suggestion_id=2;")
         self.expire()
         self.assertEqual(self.ids(main.use_cycle_ranking(1, self.dj))[0], 'bbbbbbbbbbb')
+
+    def test_previous_songs_are_available_with_and_without_saved_playlist(self):
+        self.expire()
+        with self.conn.cursor() as cur:
+            cur.execute("INSERT INTO music_cycles (id, name, status, starts_at, closes_at) VALUES (2, 'Neue Runde', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '1 day');")
+        candidates = main.get_previous_playlist(2)
+        self.assertEqual(candidates["cycle"]["id"], 1)
+        self.assertEqual([song["external_id"] for song in candidates["songs"]], ['aaaaaaaaaaa', 'bbbbbbbbbbb'])
+        self.assertEqual(main.get_playlist(2, None)["playlist"], [])
+        main.use_cycle_ranking(1, self.dj)
+        candidates = main.get_previous_playlist(2)
+        self.assertEqual([song["external_id"] for song in candidates["songs"]], ['aaaaaaaaaaa', 'bbbbbbbbbbb', 'ccccccccccc'])
+        main.create_suggestion(2, main.SuggestionCreate(provider="youtube", external_id="aaaaaaaaaaa", title="Titel A"), self.dj)
+        new_song = main.get_playlist(2, self.dj)["playlist"][0]
+        self.assertEqual(new_song["total_points"], 0)
+        self.assertEqual(new_song["my_points"], 0)

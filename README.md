@@ -40,6 +40,29 @@ diese Reihenfolge, auch wenn inzwischen eine andere Abstimmung läuft. Eine vorh
 während des Votings erzeugte Vorschau wird dabei einmal mit den letzten Stimmen
 aktualisiert. Manuelle DJ-Änderungen betreffen nur die Player-Warteschlange.
 
+## Gespeicherte Box, vorige Songs und Hörproben
+
+- **Player → Gespeicherte Bluetooth-Box → Verbinden** verbindet eine bereits
+  gekoppelte Box ohne Suche. Nur freigegebene DJs haben diesen Knopf. Neue Boxen
+  koppelt weiterhin die Verwaltung. „Trennen“ behält die Box in der gespeicherten
+  Liste, „Vergessen“ entfernt ihre Kopplung.
+- Unter der neuen Rangliste zeigt **Aus der letzten Playlist** die Songs des
+  vorherigen Vereinsabends. **Wieder vorschlagen** nimmt einen Song ohne alte
+  Stimmen in die aktuelle Abstimmung auf. Gibt es noch keine erzeugte Playlist,
+  werden die freigegebenen Vorschläge der vorigen Abstimmung angezeigt.
+- **▶ Hörprobe** öffnet einen Dialog. Erst **YouTube laden & Hörprobe starten**
+  lädt den eingebetteten YouTube-Player für 30 Sekunden. Der Ton läuft auf dem
+  jeweiligen Handy/Tablet, nicht auf dem Raspberry. Beim Schließen stoppt er.
+  Manche Videos sperren Einbettungen; dafür gibt es **Auf YouTube öffnen**.
+  Es werden keine Hörproben heruntergeladen oder dauerhaft gespeichert.
+
+Der ASUS USB-BT500 ist laut [Hersteller](https://www.asus.com/networking-iot-servers/wireless-adapters/all-series/usb-bt500/techspec/)
+für klassisches Bluetooth mit bis zu 10 Metern im Freien angegeben; die
+40-Meter-Angabe betrifft BLE, nicht die A2DP-Musikverbindung. Für bessere
+Funkbedingungen den Stick möglichst frei und mit einer kurzen USB-Verlängerung
+weg von USB-3-Geräten platzieren. [ASUS beschreibt diese Störquelle](https://rog.asus.com/support/faq/1052901/).
+Die App verändert keine Funk-Sendeleistung und verspricht keinen Reichweiten-Boost.
+
 ## Voraussetzungen
 
 - Docker Engine mit Compose-Plugin

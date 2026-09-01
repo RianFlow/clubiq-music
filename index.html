@@ -8,9 +8,9 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/pics/logo.png">
   <link rel="apple-touch-icon" href="/pics/logo.png">
-  <link rel="stylesheet" href="/static/app.css?v=20260901-6">
-  <script defer src="/static/images.js?v=20260901-6"></script>
-  <script defer src="/static/app.js?v=20260901-6"></script>
+  <link rel="stylesheet" href="/static/app.css?v=20260901-7">
+  <script defer src="/static/images.js?v=20260901-7"></script>
+  <script defer src="/static/app.js?v=20260901-7"></script>
 </head>
 <body>
   <header class="topbar">
@@ -73,6 +73,12 @@
         <span class="muted">Ersetzt die aktuelle Warteschlange. Danach im Player mit ▶ starten.</span>
       </div>
       <div id="playlist" class="song-list" aria-live="polite"></div>
+      <section id="previousPlaylistPanel" class="previous-playlist" hidden>
+        <div class="section-head"><div><p class="eyebrow">Noch einmal hören?</p><h3>Aus der letzten Playlist</h3></div></div>
+        <p id="previousPlaylistMeta" class="muted"></p>
+        <p class="muted">Die Songs bleiben zur Auswahl erhalten. Mit „Wieder vorschlagen“ kommen sie ohne alte Stimmen in die neue Abstimmung.</p>
+        <div id="previousPlaylist" class="song-list"></div>
+      </section>
       <section class="activity-panel">
         <div class="section-head compact">
           <div><p class="eyebrow">Mitgemacht</p><h3>Aktivste Mitglieder</h3></div>
@@ -90,6 +96,14 @@
         <span id="speakerBadge" class="speaker-badge offline">Keine Box verbunden</span>
       </div>
       <p class="muted player-network-hint">YouTube-Songs benötigen Internet. Soundboard-Clips laufen lokal vom Raspberry.</p>
+      <section id="savedSpeakerPanel" class="panel-box saved-speaker-panel" data-player-control hidden>
+        <label for="savedSpeakerSelect">Gespeicherte Bluetooth-Box
+          <select id="savedSpeakerSelect"><option value="">Gespeicherte Boxen werden geladen …</option></select>
+        </label>
+        <button id="reconnectSpeaker" class="button primary" type="button" disabled>Verbinden</button>
+        <button id="refreshSavedSpeakers" class="button ghost" type="button">Liste aktualisieren</button>
+        <p id="savedSpeakerStatus" class="muted" role="status" aria-live="polite">Box einschalten und hier verbinden – eine neue Suche ist nicht nötig.</p>
+      </section>
       <section class="radio-panel panel-box">
         <div class="section-head compact"><div><p class="eyebrow">Alternative Wiedergabe</p><h3>Internetradio</h3></div><button id="stopRadio" class="button ghost small" data-player-control type="button" hidden>Zur Playlist</button></div>
         <div id="radioStations" class="radio-grid"><div class="empty">Noch keine Radiosender eingerichtet.</div></div>
@@ -323,6 +337,19 @@
           </div>
         </section>
       </div>
+    </div>
+  </dialog>
+
+  <dialog id="previewDialog" class="modal" aria-labelledby="previewTitle">
+    <div class="modal-card preview-card">
+      <button class="icon-button close" data-close type="button" aria-label="Hörprobe schließen">×</button>
+      <p class="eyebrow">Nur auf diesem Gerät</p>
+      <h2 id="previewTitle">Hörprobe</h2>
+      <p class="muted">30 Sekunden zum Kennenlernen. Die Musik auf der Vereinsbox läuft unverändert weiter.</p>
+      <p class="muted preview-privacy">Erst beim Laden wird eine Verbindung zu YouTube hergestellt und deine IP-Adresse übermittelt. Internet erforderlich.</p>
+      <button id="previewStart" class="button primary" type="button">YouTube laden &amp; Hörprobe starten</button>
+      <div id="previewFrame"></div>
+      <p class="muted">Falls die Einbettung gesperrt ist oder nicht startet: <a id="previewYoutubeLink" target="_blank" rel="noopener">Auf YouTube öffnen</a>. Beim Schließen endet die Hörprobe.</p>
     </div>
   </dialog>
 
