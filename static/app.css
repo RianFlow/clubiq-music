@@ -215,7 +215,14 @@ input:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px rgba(36,92,81,
 .volume-row strong { color: var(--muted); font-size: .82rem; text-align: right; }
 .player-actions { display: flex; gap: 9px; margin-top: 18px; }
 .player-login { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; padding: 12px; border-radius: 12px; background: var(--mint); }
-.player-queue { display: grid; gap: 6px; max-height: 410px; overflow: auto; }
+.player-queue { display: grid; gap: 6px; max-height: 410px; overflow: auto; overflow-anchor: none; }
+.list-filter { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; margin: 16px 0; }
+.list-filter > label:not(.filter-check) { flex: 1 1 240px; }
+.list-filter input[type="search"] { margin-top: 6px; }
+.list-filter > .muted { align-self: center; font-size: .82rem; }
+.filter-check { display: flex; flex: 1 0 100%; align-items: center; gap: 8px; font-size: .85rem; }
+.filter-check input { width: 18px; min-height: 18px; margin: 0; accent-color: var(--green); }
+.queue-filter > label { font-size: .82rem; }
 .queue-row { display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: center; padding: 10px; border-radius: 11px; }
 .queue-row.current { color: var(--green); background: var(--mint); }
 .queue-row.played { opacity: .48; }
