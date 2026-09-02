@@ -10,18 +10,31 @@ import wave
 from fastapi import HTTPException
 
 import main
-from soundboard_pack import CATEGORIES, PACK_DIR, seed_soundboard
+from soundboard_pack import CATEGORIES, PACK_DIR, RETIRED_KEYS, seed_soundboard
 
 
 class SoundPackTests(unittest.TestCase):
-    def test_pack_has_32_unique_complete_bounded_audio_clips(self):
+    def test_pack_has_13_unique_real_recordings_with_provenance_and_bounded_audio(self):
         items = json.loads((PACK_DIR / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual(len(items), 32)
-        self.assertEqual(len({item["key"] for item in items}), 32)
-        self.assertEqual(len({item["name"] for item in items}), 32)
+        self.assertEqual(len(items), 13)
+        self.assertEqual(len({item["key"] for item in items}), 13)
+        self.assertEqual(len({item["name"] for item in items}), 13)
+        self.assertEqual({p.name for p in PACK_DIR.glob("*.wav")}, {item["file"] for item in items})
+        credits = (PACK_DIR.parent / "static" / "soundboard-credits.html").read_text(encoding="utf-8")
         for item in items:
             with self.subTest(sound=item["key"]):
                 self.assertIn(item["category"], CATEGORIES)
+                self.assertNotIn(item["key"], RETIRED_KEYS)
+                self.assertNotIn("voice", item)
+                source = item["source"]
+                self.assertEqual(source["kind"], "recording")
+                self.assertIn(source["license"], ("CC0-1.0", "CC-BY-4.0"))
+                self.assertRegex(source["download_sha256"], r"^[a-f0-9]{64}$")
+                self.assertTrue(source["recording_evidence"])
+                self.assertTrue(source["edits"])
+                self.assertIn(source["url"], credits)
+                self.assertIn(source["author"], credits)
+                self.assertIn(source["license_url"], credits)
                 path = PACK_DIR / item["file"]
                 self.assertEqual(path.parent, PACK_DIR)
                 self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), item["sha256"])
@@ -30,7 +43,7 @@ class SoundPackTests(unittest.TestCase):
                     self.assertEqual((wav.getnchannels(), wav.getsampwidth(), wav.getframerate()), (1, 2, 22050))
                     duration = wav.getnframes() / wav.getframerate()
                     self.assertGreater(duration, .2)
-                    self.assertLess(duration, 8)
+                    self.assertLess(duration, 10)
                     self.assertAlmostEqual(item["duration_ms"], duration * 1000, delta=1)
                     pcm = array("h", wav.readframes(wav.getnframes()))
                 if sys.byteorder != "little":
@@ -44,19 +57,35 @@ class SoundPackTests(unittest.TestCase):
         cursor.fetchall.return_value = []
         seed_soundboard(cursor)
         inserts = [call for call in cursor.execute.call_args_list if "INSERT" in call.args[0]]
-        self.assertEqual(len(inserts), 32)
+        self.assertEqual(len(inserts), 13)
         self.assertTrue(all("ON CONFLICT (builtin_key) DO NOTHING" in call.args[0] for call in inserts))
         installed = [(call.args[1][0],) for call in inserts]
         cursor.reset_mock()
         cursor.fetchall.return_value = installed
         seed_soundboard(cursor)
-        cursor.execute.assert_called_once()
-        self.assertNotIn("active = TRUE", cursor.execute.call_args.args[0])
+        self.assertEqual(cursor.execute.call_count, 2)  # SELECT + retirement only
+        self.assertNotIn("active = TRUE", cursor.execute.call_args_list[0].args[0])
+        retirement, params = cursor.execute.call_args.args
+        self.assertIn("SET active = FALSE", retirement)
+        self.assertIn("builtin_key = ANY(%s)", retirement)
+        self.assertEqual(params, (list(RETIRED_KEYS),))
+        self.assertEqual(len(RETIRED_KEYS), 32)
 
     def test_checksum_failure_does_not_insert_bad_audio(self):
         cursor = MagicMock()
         cursor.fetchall.return_value = []
         with patch.object(Path, "read_bytes", return_value=b"corrupted"):
+            with self.assertRaisesRegex(ValueError, "checksum"):
+                seed_soundboard(cursor)
+        cursor.execute.assert_called_once()
+
+    def test_later_checksum_failure_does_not_partially_install_or_retire(self):
+        cursor = MagicMock()
+        cursor.fetchall.return_value = []
+        original = Path.read_bytes
+        def read(path):
+            return b"bad" if path.name == "recorded-trombone.wav" else original(path)
+        with patch.object(Path, "read_bytes", read):
             with self.assertRaisesRegex(ValueError, "checksum"):
                 seed_soundboard(cursor)
         cursor.execute.assert_called_once()

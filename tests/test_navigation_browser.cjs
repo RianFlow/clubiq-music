@@ -7,7 +7,8 @@ const http = require('node:http');
 const { chromium } = require('playwright');
 
 const root = path.resolve(__dirname, '..');
-const mime = { '.html':'text/html', '.js':'text/javascript', '.css':'text/css', '.png':'image/png', '.svg':'image/svg+xml', '.webmanifest':'application/manifest+json' };
+const mime = { '.html':'text/html', '.js':'text/javascript', '.css':'text/css', '.png':'image/png', '.svg':'image/svg+xml', '.webmanifest':'application/manifest+json', '.wav':'audio/wav' };
+const soundpack = JSON.parse(fs.readFileSync(path.join(root, 'soundpack/manifest.json'), 'utf8'));
 const server = http.createServer((req, res) => {
   const requested = new URL(req.url, 'http://localhost').pathname;
   const file = path.resolve(root, `.${requested === '/' ? '/index.html' : requested}`);
@@ -50,6 +51,7 @@ const server = http.createServer((req, res) => {
       else if (p.endsWith('/members')) data = {members:['Test-DJ']};
       else if (p.endsWith('/auth/login') || p.endsWith('/auth/me')) data = {token:'fixture-session',member,budget:{maximum:10,remaining:8},active_cycle_id:2};
       else if (p.endsWith('/state')) data = player;
+      else if (p.endsWith('/soundboard')) data = {items:soundpack.map((item, i) => ({...item,id:i+1,builtin:true}))};
       else if (p.endsWith('/bluetooth/saved')) data = {devices:[]};
       else if (p.endsWith('/previous-playlist')) data = {cycle:closed,songs:oldSongs};
       else if (p.endsWith('/playlist')) {
@@ -108,6 +110,7 @@ const server = http.createServer((req, res) => {
     await nav.getByRole('button',{name:'Playlists',exact:true}).click();
     await page.locator('#resultSongs').getByText('Bohemian Rhapsody',{exact:true}).waitFor();
     await page.getByLabel('In dieser Playlist suchen').fill('ABBA');
+    await page.locator('#resultSongs').getByText('Dancing Queen',{exact:true}).waitFor();
     assert.equal(await page.locator('#resultSongs .song-card').count(),1);
     await page.getByLabel('Playlist auswählen',{exact:true}).selectOption('2');
     await page.locator('#resultPhase').getByText('Zwischenstand',{exact:true}).waitFor();
@@ -122,6 +125,34 @@ const server = http.createServer((req, res) => {
     await page.locator('#tab-player').waitFor({state:'visible'});
     assert.equal(writes.filter(p => p.includes('/player/queue/')).at(-1),'/api/v1/music/player/queue/cycles/1');
     assert.equal(await page.locator('#budgetCard').isVisible(),false);
+    await page.locator('#soundboard [data-play-sound]').first().waitFor();
+    assert.equal(await page.locator('#soundboard [data-play-sound]').count(),13);
+    await page.locator('#soundboardFilters').getByRole('button',{name:/^Darts /}).click();
+    assert.equal(await page.locator('#soundboard [data-play-sound]').count(),2);
+    await page.locator('#soundboardFilters').getByRole('button',{name:/^Spaß /}).click();
+    assert.equal(await page.locator('#soundboard [data-play-sound]').count(),7);
+    assert.equal(await page.locator('#soundboard').getByText('Pech gehabt!',{exact:true}).isVisible(),true);
+    const creditsPromise = context.waitForEvent('page');
+    await page.locator('.soundboard-panel').getByRole('link',{name:'Sound-Quellen & Lizenzen'}).click();
+    const credits = await creditsPromise;
+    await credits.getByRole('heading',{name:'Echte Aufnahmen · Sound-Quellen'}).waitFor();
+    assert.equal(await credits.getByRole('link',{name:'CC-BY-4.0',exact:true}).count(),1);
+    assert.ok((await credits.locator('body').textContent()).includes('Benboncan'));
+    await credits.setViewportSize({width:390,height:844});
+    assert.equal(await credits.evaluate(() => document.documentElement.scrollWidth <= innerWidth),true);
+    await credits.close();
+    // Decode the actual bundled recordings without playing anything audibly.
+    const durations = await page.evaluate(async files => {
+      const audio = new AudioContext();
+      try {
+        return await Promise.all(files.map(async file => {
+          const response = await fetch(`/soundpack/${file}`);
+          const decoded = await audio.decodeAudioData(await response.arrayBuffer());
+          return decoded.duration;
+        }));
+      } finally { await audio.close(); }
+    }, soundpack.map(item => item.file));
+    durations.forEach((duration,i) => assert.ok(Math.abs(duration*1000-soundpack[i].duration_ms)<2));
     await page.getByRole('button',{name:'Playlist auswählen',exact:true}).click();
     await page.locator('#resultSongs').getByText('Bohemian Rhapsody',{exact:true}).waitFor();
     failResults = true;
@@ -161,6 +192,6 @@ const server = http.createServer((req, res) => {
       assert.equal(await page.locator('#cycleSelect').isDisabled(),true);
     }
     assert.deepEqual(errors,[]);
-    console.log('Browser navigation OK: independent voting/results, suggestion dialog, role gates, queue confirmation, mobile layout, expiry, empty and planned states.');
+    console.log('Browser navigation OK: voting/results, role gates, mobile layout, 13 recorded sounds, category filters, credits and silent audio decoding.');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode=1; }).finally(() => server.close());

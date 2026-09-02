@@ -242,12 +242,17 @@ Bedienoberfläche zwischengespeichert, keine Online-Musik.
 
 ### Darts-Soundboard
 
-Im Player stehen 32 kurze Sounds bereit: Darts-Ansagen wie **180**, **Bullseye**,
-**Game Shot** und **Matchdart**, dazu Jubel und Spaß-Effekte. Über die Kategorien
+Im Player stehen 13 echte Aufnahmen bereit: **Dart-Treffer**, **Jubel & Applaus**,
+**Trommelwirbel**, **Pech gehabt!** (echte Posaune), Lachen, Buh-Rufe,
+Rutsch-Pfeife, Hupe und Grillenzirpen. Über die Kategorien
 **Darts**, **Jubel**, **Spaß** und **Eigene** bleibt das Board übersichtlich.
 Die angezeigte Sekundenangabe ist die Länge des jeweiligen mitgelieferten Clips.
-Die synthetischen Ansagen und Arcade-Effekte werden lokal mitgeliefert, ohne
-Internetabruf und ohne TV-/Musiksamples (Details unter `soundpack/README.md`).
+Die Aufnahmen werden lokal mitgeliefert, ohne Internetabruf beim Abspielen.
+Keine Sprachsynthese, zufällig erzeugten Effekte oder TV-Kommentatoren.
+Quellen, Bearbeitungen und CC0-/CC-BY-Lizenzen stehen unter **Sound-Quellen &
+Lizenzen** direkt am Board und in `soundpack/README.md`.
+Das alte synthetische Paket wird beim Update nur ausgeblendet, nicht aus der
+Datenbank gelöscht. Eigene Uploads bleiben unberührt.
 
 Nur freigeschaltete Player-Mitglieder können Sounds auf der Box auslösen.
 Ein Sound unterbricht die Musik kurz; danach setzt der Player die Playlist fort
@@ -258,6 +263,9 @@ Unter **Verwaltung → Player & Box** können Admins eigene Sounds hochladen und
 Kategorie zuordnen oder unerwünschte Buttons entfernen. Entfernte Sounds bleiben
 nach Neustarts und Updates ausgeblendet. Eigene Uploads werden beim Installieren
 des Pakets nicht verändert. Die Audio-Dateien liegen mit in der Datenbank-Sicherung.
+Für eigene „180!“- oder Vereinsansagen können Mitglieder echte Aufnahmen machen;
+Admins laden sie als MP3, WAV, OGG, M4A oder WebM (maximal 3 MB) hoch.
+Keine fremden TV-/Kommentatoren-Ausschnitte ohne passende Nutzungsrechte verwenden.
 
 ### Freigaben und Radiosender
 

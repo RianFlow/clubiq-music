@@ -108,9 +108,27 @@ nicht erreichbar, bleiben die ersten beiden Stufen funktionsfähig.
 Die Warteschlange wird auf dem Raspberry gespeichert und bleibt deshalb bei einem
 Neuladen des Tablets erhalten.
 
-## Update auf dem Raspberry
+## Echte Sounds statt Roboter-Ansagen
 
-Da sich Web-App und lokaler Player-Dienst ändern, müssen beide aktualisiert werden:
+Unter **Player → Soundboard** stehen echte Aufnahmen von Dart-Treffern,
+Applaus/Jubel, Trommelwirbel, Lachen, Buh-Rufen und Instrumenten bereit.
+**Pech gehabt!** ist beispielsweise eine von einem Musiker eingespielte Posaune.
+**Sound-Quellen & Lizenzen** nennt alle Urheber und die Bearbeitungen.
+Die alten synthetischen Buttons werden beim Update ausgeblendet; eigene Sounds
+bleiben erhalten. Die Sounds laufen lokal, auch ohne Internet.
+
+Für eine eigene echte „180!“- oder Barver-Ansage eine kurze Aufnahme erstellen
+und unter **Verwaltung → Player & Box → Soundboard-Sound hinzufügen** hochladen
+(MP3, WAV, OGG, M4A oder WebM, maximal 3 MB). Nur eigene oder entsprechend
+lizenzierte Aufnahmen verwenden. Zum Testen die Box zunächst leise stellen.
+Ein Sound unterbricht die Musik kurz; anschließend wird die Musik fortgesetzt.
+
+Das Update dieses Soundpakets betrifft nur die Web-App/gespeicherten Clips.
+Der native Bluetooth-Player muss dafür nicht neu installiert oder gestartet werden.
+
+## Vollständiges Update auf dem Raspberry
+
+Wenn sich auch der lokale Player-Dienst geändert hat, werden beide aktualisiert:
 
 ```bash
 cd ~/clubiq_music_release
