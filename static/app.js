@@ -34,6 +34,29 @@ let deferredInstallPrompt = null;
 let queueRankingPending = false;
 let reconnectPending = false;
 let previewVideoId = "";
+let votePending = false;
+let playlistLoadGeneration = 0;
+let playerLoadGeneration = 0;
+let playerMutationVersion = 0;
+let playerMutationsPending = 0;
+let playerStale = false;
+let playerRangeControls = null;
+
+function matchesSong(song, query) {
+  const normalize = value => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("de");
+  const text = normalize(`${song.title || ""} ${song.channel_title || song.artist || ""}`);
+  return normalize(query).trim().split(/\s+/).filter(Boolean).every(word => text.includes(word));
+}
+
+function setListHtml(root, html) {
+  // Identical poll responses must not replace focused controls or reset scroll.
+  if (root._listHtml === html) return false;
+  const scroll = root.scrollTop;
+  root.innerHTML = html;
+  root._listHtml = html;
+  root.scrollTop = scroll;
+  return true;
+}
 function toast(message, error = false) {
   const node = $("#toast");
   // A modal dialog lives in the browser's top layer, above every body z-index.
@@ -217,6 +240,7 @@ function renderSession() {
     : 0;
   $("#budgetBar").style.width = `${Math.min(100, percent)}%`;
   $("#loginHint").hidden = loggedIn || !canVoteInDisplayedCycle();
+  renderPlayer();
   if (canControlPlayer) loadSavedSpeakers().catch(error => toast(error.message, true));
 }
 
@@ -270,6 +294,7 @@ async function restoreMember() {
 }
 
 async function loadPlaylist() {
+  const generation = ++playlistLoadGeneration;
   const cycleId = state.displayedCycle?.id;
   if (!cycleId) {
     state.playlist = [];
@@ -282,7 +307,7 @@ async function loadPlaylist() {
       api(`/api/v1/music/cycles/${cycleId}/playlist`),
       api(`/api/v1/music/cycles/${cycleId}/previous-playlist`),
     ]);
-    if (state.displayedCycle?.id !== cycleId) return;
+    if (state.displayedCycle?.id !== cycleId || generation !== playlistLoadGeneration) return;
     state.playlist = data.playlist || [];
     state.previousPlaylist = previous;
     renderPlaylist();
@@ -294,9 +319,9 @@ async function loadPlaylist() {
 function songCard(song, mine = false) {
   const controls = !canVoteInDisplayedCycle() ? (mine ? `<span class="muted">${song.my_points} Punkte von dir</span>` : "") : state.member ? `
     <div class="points">
-      <button type="button" data-vote="-1" aria-label="Einen Punkt entfernen">−</button>
+      <button type="button" data-vote="-1" aria-label="Einen Punkt entfernen"${votePending || song.my_points <= 0 ? " disabled" : ""}>−</button>
       <strong>${song.my_points}</strong>
-      <button type="button" data-vote="1" aria-label="Einen Punkt hinzufügen">+</button>
+      <button type="button" data-vote="1" aria-label="Einen Punkt hinzufügen"${votePending || state.budget.remaining < 1 ? " disabled" : ""}>+</button>
     </div>` : '<button class="button ghost small login-to-vote" type="button" data-login-to-vote>Zum Abstimmen anmelden</button>';
   return `
     <article class="song-card" data-song-id="${song.suggestion_id}">
@@ -316,50 +341,59 @@ function wireVoteButtons(root) {
   wirePreviewButtons(root);
   $$('[data-login-to-vote]', root).forEach(button => button.addEventListener("click", () => openMemberDialog()));
   $$('[data-vote]', root).forEach(button => button.addEventListener("click", async () => {
-    if (!canVoteInDisplayedCycle()) return toast("Diese Abstimmung ist nicht mehr geöffnet.", true);
     const card = button.closest("[data-song-id]");
-    const song = state.playlist.find(item => item.suggestion_id === Number(card.dataset.songId));
-    const next = song.my_points + Number(button.dataset.vote);
-    if (next < 0) return;
-    if (next > song.my_points && state.budget.remaining < 1) {
-      toast("Du hast bereits alle Punkte vergeben.", true);
-      return;
-    }
-    button.disabled = true;
-    try {
-      const result = await api(`/api/v1/music/cycles/${state.activeCycle.id}/votes`, {
-        method: "POST",
-        body: JSON.stringify({ suggestion_id: song.suggestion_id, points: next }),
-      });
-      state.budget.remaining = result.budget_remaining;
-      await loadPlaylist();
-      renderSession();
-      toast(next ? `${next} Punkt${next === 1 ? "" : "e"} für „${song.title}“` : "Stimme entfernt");
-    } catch (error) {
-      toast(error.message, true);
-    } finally {
-      button.disabled = false;
-    }
+    await changeVote(Number(card.dataset.songId), Number(button.dataset.vote));
   }));
+}
+
+async function changeVote(songId, delta) {
+  if (votePending || !state.member) return;
+  if (!canVoteInDisplayedCycle()) return toast("Diese Abstimmung ist nicht mehr geöffnet.", true);
+  const song = state.playlist.find(item => item.suggestion_id === songId);
+  if (!song || ![-1, 1].includes(delta)) return;
+  const next = song.my_points + delta;
+  if (next < 0) return;
+  if (delta > 0 && state.budget.remaining < 1) return toast("Du hast bereits alle Punkte vergeben.", true);
+  const cycleId = state.activeCycle.id;
+  const token = state.token;
+  votePending = true;
+  renderPlaylist();
+  try {
+    const result = await api(`/api/v1/music/cycles/${cycleId}/votes`, {
+      method: "POST", body: JSON.stringify({ suggestion_id: songId, points: next }),
+    });
+    if (state.token !== token || !state.member) return;
+    if (state.activeCycle?.id === cycleId) state.budget.remaining = result.budget_remaining;
+    if (state.displayedCycle?.id === cycleId) await loadPlaylist();
+    renderSession();
+    toast(next ? `${next} Punkt${next === 1 ? "" : "e"} für „${song.title}“` : "Stimme entfernt");
+  } catch (error) { toast(error.message, true); }
+  finally { votePending = false; renderPlaylist(); }
 }
 
 function renderPlaylist() {
   const root = $("#playlist");
   const cycle = state.displayedCycle;
   const phase = cyclePhase(cycle);
+  const query = $("#playlistFilter").value || "";
+  const visible = state.playlist.filter(song => matchesSong(song, query));
+  $("#playlistFilterCount").textContent = query.trim() ? `${visible.length} von ${state.playlist.length} Songs` : "";
+  $("#clearPlaylistFilter").hidden = !query;
   if (!cycle || phase === "planned") {
+    root._listHtml = null;
     root.innerHTML = cycle
       ? `<div class="empty">Die Rangliste öffnet am ${formatDate(cycle.starts_at)}.</div>`
       : '<div class="empty">Derzeit ist keine Abstimmung vorhanden.</div>';
   } else if (!state.playlist.length) {
+    root._listHtml = null;
     root.innerHTML = phase === "closed"
       ? '<div class="empty">Für diese Abstimmung wurden keine Songs vorgeschlagen. Beim Laden der Playlist gelten weiterhin die eingestellten Auffüllregeln.</div>'
       : state.previousPlaylist?.songs?.length
         ? '<div class="empty">Noch keine neuen Vorschläge. Wähle unten einen Song aus der letzten Playlist oder suche unter „Song vorschlagen“.</div>'
         : '<div class="empty">Noch keine Songs vorhanden. Mach den ersten Vorschlag.</div>';
   } else {
-    root.innerHTML = state.playlist.map(song => songCard(song)).join("");
-    wireVoteButtons(root);
+    const html = visible.map(song => songCard(song)).join("") || '<div class="empty">Kein passender Song. Suche zurücksetzen oder einen anderen Titel eingeben.</div>';
+    if (setListHtml(root, html)) wireVoteButtons(root);
   }
   $("#mineCount").textContent = state.playlist.filter(song => song.my_points > 0).length;
   $("#playlistSummary").textContent = cycle
@@ -403,14 +437,21 @@ function renderPreviousPlaylist() {
   if (panel.hidden) return;
   $("#previousPlaylistMeta").textContent = `Aus „${cycle.name}“ · ${songs.length} Songs`;
   const root = $("#previousPlaylist");
-  root.innerHTML = songs.map((song, index) => {
+  const query = $("#previousFilter").value || "";
+  const onlyNew = $("#previousOnlyNew").checked;
+  const visible = songs.map((song, index) => ({ song, index })).filter(({song}) =>
+    matchesSong(song, query) && (!onlyNew || !state.playlist.some(item => item.external_id === song.external_id)));
+  $("#previousFilterCount").textContent = `${visible.length} von ${songs.length} Songs`;
+  $("#clearPreviousFilter").hidden = !query && !onlyNew;
+  const html = visible.map(({song, index}) => {
     const present = state.playlist.some(item => item.external_id === song.external_id);
     return `<article class="song-card">
       <div class="song-visual"><img class="song-cover" src="${esc(song.thumbnail_url)}" alt="" loading="lazy"><span class="song-rank">${index + 1}</span></div>
       <div class="song-copy"><strong>${esc(song.title)}</strong><span>${esc(song.channel_title || "")}</span>${previewButton(song)}</div>
       <button class="button ghost small" type="button" data-reuse-song="${index}"${present || !canVoteInDisplayedCycle() ? " disabled" : ""}>${present ? "Schon in Abstimmung" : "Wieder vorschlagen"}</button>
     </article>`;
-  }).join("") || '<div class="empty">In der letzten Abstimmung waren noch keine Songs vorhanden.</div>';
+  }).join("") || `<div class="empty">${songs.length ? "Keine passenden Songs. Setze die Filter zurück." : "In der letzten Abstimmung waren noch keine Songs vorhanden."}</div>`;
+  if (!setListHtml(root, html)) return;
   wirePreviewButtons(root);
   $$('[data-reuse-song]', root).forEach(button => button.addEventListener("click", async () => {
     if (!state.member) return openMemberDialog();
@@ -426,12 +467,13 @@ function renderMyVotes() {
   const root = $("#myVotes");
   const mine = state.playlist.filter(song => song.my_points > 0);
   if (!state.member) {
+    root._listHtml = null;
     root.innerHTML = '<div class="empty">Melde dich an, um deine Auswahl zu sehen.</div>';
   } else if (!mine.length) {
+    root._listHtml = null;
     root.innerHTML = '<div class="empty">Du hast noch keine Punkte vergeben.</div>';
   } else {
-    root.innerHTML = mine.map(song => songCard(song, true)).join("");
-    wireVoteButtons(root);
+    if (setListHtml(root, mine.map(song => songCard(song, true)).join(""))) wireVoteButtons(root);
   }
 }
 
@@ -629,56 +671,76 @@ function renderPlayer() {
   const current = player.current;
   const speaker = player.speaker;
   const connected = Boolean(speaker?.connected);
-  $("#speakerBadge").textContent = connected ? `🔊 ${speaker.name}` : "Keine Box verbunden";
-  $("#speakerBadge").classList.toggle("offline", !connected);
-  $("#playerIndicator").textContent = connected ? (player.playing ? "▶" : "✓") : "–";
+  $("#speakerBadge").textContent = playerStale ? "Player nicht erreichbar" : connected ? `🔊 ${speaker.name}` : "Keine Box verbunden";
+  $("#speakerBadge").classList.toggle("offline", !connected || playerStale);
+  $("#playerIndicator").textContent = !playerStale && connected ? (player.playing ? "▶" : "✓") : "–";
   $("#playerTitle").textContent = player.sound_active ? "Soundboard läuft" : current?.title || "Noch kein Song gewählt";
   $("#playerArtist").textContent = player.sound_active ? "Danach wird der Song automatisch fortgesetzt" : current?.artist || (connected
     ? "Playlist aus Abstimmung und Fallback-Regeln erstellen"
     : "Die Verwaltung verbindet zuerst eine Bluetooth-Box");
   const playbackStatus = $("#playerPlaybackStatus");
-  playbackStatus.textContent = player.last_error || (player.loading ? "Titel wird geladen …"
+  playbackStatus.textContent = playerStale ? "Verbindung zum Player unterbrochen. Letzter bekannter Stand – die Musik kann weiterhin laufen. Es wird automatisch erneut versucht."
+    : player.last_error || (player.loading ? "Titel wird geladen …"
     : player.buffering ? "Audio wird gepuffert …"
     : player.next_prepared ? "Nächster Titel ist vorbereitet." : "");
   playbackStatus.hidden = !playbackStatus.textContent;
-  playbackStatus.classList.toggle("error", Boolean(player.last_error));
+  playbackStatus.classList.toggle("error", playerStale || Boolean(player.last_error));
   setMediaImage($("#playerCover"), current?.thumbnail, player.source_mode === "radio");
-  $("#playerProgress").max = Math.max(1, Number(player.duration) || 1);
-  if (!$("#playerProgress").matches(":active")) $("#playerProgress").value = Number(player.position) || 0;
-  $("#playerPosition").textContent = mediaTime(player.position);
+  const canControl = Boolean(state.member?.can_control_player) && !playerStale;
+  const radioMode = player.source_mode === "radio";
+  playerRangeControls?.progress.update(player.position, {
+    disabled: radioMode || !canControl || !Number(player.duration), max: Math.max(1, Number(player.duration) || 1),
+  });
   $("#playerDuration").textContent = mediaTime(player.duration);
   $("#playerPlay").textContent = player.playing || player.loading ? "❚❚" : "▶";
   $("#playerPlay").title = player.playing || player.loading ? "Pause" : "Wiedergabe";
-  $("#playerVolume").value = Number(player.volume ?? 70);
-  $("#playerVolumeValue").textContent = `${Number(player.volume ?? 70)} %`;
+  playerRangeControls?.volume.update(player.volume ?? 70, { disabled: !canControl });
   $("#playerMute").textContent = player.muted ? "🔇" : "🔊";
   $('[data-player-action="shuffle"]').classList.toggle("active", Boolean(player.shuffle));
   $("#playerRepeat").classList.toggle("active", player.repeat !== "off");
   $("#playerRepeat").textContent = player.repeat === "one" ? "↻¹" : "↻";
 
-  const queue = player.queue || [];
-  const remaining = queue.filter((_, index) => index >= player.current_index).length;
-  $("#queueCount").textContent = `${remaining} offen · ${queue.length} gesamt`;
-  $("#playerQueue").innerHTML = queue.length ? queue.map((item, index) => `
-    <div class="queue-row${index === player.current_index ? " current" : ""}${index < player.current_index ? " played" : ""}">
-      <span>${index === player.current_index && player.playing ? "▶" : index + 1}</span>
-      <div><strong>${esc(item.title)}</strong><small>${index < player.current_index ? "Gespielt · " : index === player.current_index ? "Jetzt · " : index === player.current_index + 1 ? "Als Nächstes · " : ""}${esc(item.artist || "Unbekannter Interpret")} · ${queueSourceLabel(item.source)}</small></div>
-    </div>`).join("") : '<div class="empty">Noch keine Songs geladen.</div>';
+  renderPlayerQueue();
   renderDjQueue();
-  $("#stopRadio").hidden = player.source_mode !== "radio" || !state.member?.can_control_player;
-  const radioMode = player.source_mode === "radio";
-  const canControl = Boolean(state.member?.can_control_player);
-  $("#playerProgress").disabled = radioMode || !canControl;
+  $("#stopRadio").hidden = !radioMode || !state.member?.can_control_player;
+  $$('[data-player-action]').forEach(button => { button.disabled = !canControl || playerMutationsPending > 0; });
   $$('[data-player-action="next"], [data-player-action="previous"]').forEach(button => {
-    button.disabled = radioMode || !canControl;
+    button.disabled = radioMode || !canControl || playerMutationsPending > 0;
   });
   $$(".radio-playback-status").forEach(node => {
     node.hidden = !radioMode;
-    node.textContent = player.last_error || (player.playing
+    node.textContent = playerStale ? "Player nicht erreichbar – letzter bekannter Sender."
+      : player.last_error || (player.playing
       ? `Live: ${player.radio_station?.name || "Internetradio"}`
       : player.paused ? "Internetradio pausiert." : "Sender wird verbunden …");
   });
   if (state.radioStations.length) renderRadioStations();
+}
+
+function renderPlayerQueue() {
+  const player = state.player || {};
+  const queue = player.queue || [];
+  const remaining = Math.max(0, queue.length - Math.max(0, player.current_index));
+  $("#queueCount").textContent = `${remaining} offen · ${queue.length} gesamt`;
+  const query = $("#queueFilter").value || "";
+  const visible = queue.map((item, index) => ({item, index})).filter(({item}) => matchesSong(item, query));
+  $("#queueFilterCount").textContent = query.trim() ? `${visible.length} von ${queue.length} Songs` : "";
+  $("#showCurrentSong").disabled = player.current_index < 0 || !queue[player.current_index];
+  setListHtml($("#playerQueue"), queue.length ? visible.map(({item, index}) => `
+    <div class="queue-row${index === player.current_index ? " current" : ""}${index < player.current_index ? " played" : ""}">
+      <span>${index === player.current_index && player.playing ? "▶" : index + 1}</span>
+      <div><strong>${esc(item.title)}</strong><small>${index < player.current_index ? "Gespielt · " : index === player.current_index ? "Jetzt · " : index === player.current_index + 1 ? "Als Nächstes · " : ""}${esc(item.artist || "Unbekannter Interpret")} · ${queueSourceLabel(item.source)}</small></div>
+    </div>`).join("") || '<div class="empty">Kein Treffer in der Warteschlange.</div>' : '<div class="empty">Noch keine Songs geladen.</div>');
+}
+
+function showCurrentSong() {
+  $("#queueFilter").value = "";
+  renderPlayerQueue();
+  const row = $(".queue-row.current", $("#playerQueue"));
+  if (row) {
+    const root = $("#playerQueue");
+    root.scrollTop += row.getBoundingClientRect().top - root.getBoundingClientRect().top;
+  }
 }
 
 async function loadRadioStations() {
@@ -895,11 +957,18 @@ async function djQueueAction(action, index) {
 }
 
 async function loadPlayerState(silent = false) {
+  if (playerMutationsPending) return;
+  const generation = ++playerLoadGeneration;
+  const mutation = playerMutationVersion;
   try {
-    state.player = await api("/api/v1/music/player/state");
+    const player = await api("/api/v1/music/player/state");
+    if (generation !== playerLoadGeneration || mutation !== playerMutationVersion) return;
+    state.player = player;
+    playerStale = false;
     renderPlayer();
   } catch (error) {
-    state.player = { available: false, queue: [], current_index: -1, volume: 70, repeat: "off", shuffle: false };
+    if (generation !== playerLoadGeneration || mutation !== playerMutationVersion) return;
+    playerStale = true;
     renderPlayer();
     if (!silent) toast(error.message, true);
   }
@@ -908,15 +977,23 @@ async function loadPlayerState(silent = false) {
 async function playerCommand(action, value = null) {
   if (!state.member) return openMemberDialog();
   if (!state.member.can_control_player) return toast("Du bist für die Player-Bedienung nicht freigegeben.", true);
+  if (playerStale) return toast("Bitte warten, bis der Player wieder erreichbar ist.", true);
+  const mutation = ++playerMutationVersion;
+  playerMutationsPending++;
+  renderPlayer();
   try {
-    state.player = await api("/api/v1/music/player/command", {
+    const player = await api("/api/v1/music/player/command", {
       method: "POST", body: JSON.stringify({ action, value }),
     });
+    if (mutation === playerMutationVersion) state.player = player;
+    playerStale = false;
     renderPlayer();
   } catch (error) { toast(error.message, true); }
+  finally { playerMutationsPending--; renderPlayer(); }
 }
 
 async function handlePlayerAction(button) {
+  if (playerMutationsPending) return;
   let action = button.dataset.playerAction;
   let value = null;
   if (action === "play" && (state.player.playing || state.player.loading)) action = "pause";
@@ -928,15 +1005,32 @@ async function handlePlayerAction(button) {
   await playerCommand(action, value);
 }
 
+function confirmQueueReplacement(cycle) {
+  const dialog = $("#queueConfirmDialog");
+  $("#queueConfirmText").textContent = `„${cycle.name}“ laden und die aktuelle Warteschlange mit ${state.player.queue.length} Songs ersetzen?`;
+  dialog.returnValue = "cancel";
+  return new Promise(resolve => {
+    dialog.addEventListener("close", () => resolve(dialog.returnValue === "replace"), { once: true });
+    dialog.showModal();
+  });
+}
+
 async function queueRanking() {
   if (!state.member) return openMemberDialog();
   if (!state.member.can_control_player) return toast("Du bist für die Player-Bedienung nicht freigegeben.", true);
+  if (playerStale) return toast("Bitte zuerst den Player-Status aktualisieren. Die vorhandene Warteschlange ist gerade nicht sicher bekannt.", true);
   const cycle = state.displayedCycle;
   if (!cycle || cyclePhase(cycle) === "planned") return toast("Bitte eine laufende oder abgeschlossene Abstimmung auswählen.", true);
   if (queueRankingPending) return;
   queueRankingPending = true;
   renderCycleSelection();
+  let mutationStarted = false;
   try {
+    if (state.player.queue?.length && !await confirmQueueReplacement(cycle)) return;
+    if (!state.member?.can_control_player || playerStale) return;
+    playerMutationVersion++;
+    playerMutationsPending++;
+    mutationStarted = true;
     state.player = await api(`/api/v1/music/player/queue/cycles/${cycle.id}`, { method: "POST" });
     renderPlayer();
     const build = state.player.playlist_build;
@@ -945,7 +1039,12 @@ async function queueRanking() {
       ? `„${cycle.name}“: ${build.total} Songs geladen. Mit ▶ starten.`
       : `${state.player.queue.length} Songs sind im Player bereit. Mit ▶ starten.`);
   } catch (error) { toast(error.message, true); }
-  finally { queueRankingPending = false; renderCycleSelection(); }
+  finally {
+    if (mutationStarted) playerMutationsPending--;
+    queueRankingPending = false;
+    renderCycleSelection();
+    renderPlayer();
+  }
 }
 
 async function loadSoundboard() {
@@ -1336,6 +1435,24 @@ async function loadVoteHistory() {
 }
 
 function bindEvents() {
+  playerRangeControls = {
+    volume: createRangeControl({ input: $("#playerVolume"), label: $("#playerVolumeValue"),
+      format: value => `${Math.round(value)} %`, commit: value => playerCommand("volume", value) }),
+    progress: createRangeControl({ input: $("#playerProgress"), label: $("#playerPosition"),
+      format: mediaTime, commit: value => playerCommand("seek", value) }),
+  };
+  $("#playlistFilter").addEventListener("input", renderPlaylist);
+  $("#previousFilter").addEventListener("input", renderPreviousPlaylist);
+  $("#previousOnlyNew").addEventListener("change", renderPreviousPlaylist);
+  $("#queueFilter").addEventListener("input", renderPlayerQueue);
+  $("#showCurrentSong").addEventListener("click", showCurrentSong);
+  $("#clearPlaylistFilter").addEventListener("click", () => {
+    $("#playlistFilter").value = ""; renderPlaylist(); $("#playlistFilter").focus();
+  });
+  $("#clearPreviousFilter").addEventListener("click", () => {
+    $("#previousFilter").value = ""; $("#previousOnlyNew").checked = false;
+    renderPreviousPlaylist(); $("#previousFilter").focus();
+  });
   $$(".tab").forEach(button => button.addEventListener("click", () => setTab(button.dataset.tab)));
   $$(".subtab").forEach(button => button.addEventListener("click", () => setAdminTab(button.dataset.adminTab)));
   $$('[data-open-member]').forEach(button => button.addEventListener("click", () => openMemberDialog()));
@@ -1373,8 +1490,6 @@ function bindEvents() {
   $("#refreshPlayer").addEventListener("click", () => loadPlayerState());
   $("#reconnectSpeaker").addEventListener("click", reconnectSpeaker);
   $("#refreshSavedSpeakers").addEventListener("click", () => loadSavedSpeakers().catch(error => toast(error.message, true)));
-  $("#playerProgress").addEventListener("change", event => playerCommand("seek", Number(event.target.value)));
-  $("#playerVolume").addEventListener("change", event => playerCommand("volume", Number(event.target.value)));
   $("#scanSpeakers").addEventListener("click", scanSpeakers);
   $("#soundUploadForm").addEventListener("submit", uploadSound);
   $("#djSearchForm").addEventListener("submit", searchDjSongs);

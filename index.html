@@ -8,9 +8,10 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/pics/logo.png">
   <link rel="apple-touch-icon" href="/pics/logo.png">
-  <link rel="stylesheet" href="/static/app.css?v=20260901-7">
-  <script defer src="/static/images.js?v=20260901-7"></script>
-  <script defer src="/static/app.js?v=20260901-7"></script>
+  <link rel="stylesheet" href="/static/app.css?v=20260902-1">
+  <script defer src="/static/images.js?v=20260902-1"></script>
+  <script defer src="/static/range-control.js?v=20260902-1"></script>
+  <script defer src="/static/app.js?v=20260902-1"></script>
 </head>
 <body>
   <header class="topbar">
@@ -72,11 +73,22 @@
         <button id="queueSelectedPlaylist" class="button primary" type="button">Diese Playlist in den Player laden</button>
         <span class="muted">Ersetzt die aktuelle Warteschlange. Danach im Player mit ▶ starten.</span>
       </div>
+      <div class="list-filter">
+        <label for="playlistFilter">In dieser Abstimmung suchen<input id="playlistFilter" type="search" placeholder="Titel oder Interpret" autocomplete="off"></label>
+        <button id="clearPlaylistFilter" class="button ghost small" type="button" hidden>Suche zurücksetzen</button>
+        <span id="playlistFilterCount" class="muted" role="status"></span>
+      </div>
       <div id="playlist" class="song-list" aria-live="polite"></div>
       <section id="previousPlaylistPanel" class="previous-playlist" hidden>
         <div class="section-head"><div><p class="eyebrow">Noch einmal hören?</p><h3>Aus der letzten Playlist</h3></div></div>
         <p id="previousPlaylistMeta" class="muted"></p>
         <p class="muted">Die Songs bleiben zur Auswahl erhalten. Mit „Wieder vorschlagen“ kommen sie ohne alte Stimmen in die neue Abstimmung.</p>
+        <div class="list-filter">
+          <label for="previousFilter">In der letzten Playlist suchen<input id="previousFilter" type="search" placeholder="Titel oder Interpret" autocomplete="off"></label>
+          <button id="clearPreviousFilter" class="button ghost small" type="button" hidden>Filter zurücksetzen</button>
+          <span id="previousFilterCount" class="muted" role="status"></span>
+          <label class="filter-check"><input id="previousOnlyNew" type="checkbox">Nur noch nicht vorgeschlagene Songs</label>
+        </div>
         <div id="previousPlaylist" class="song-list"></div>
       </section>
       <section class="activity-panel">
@@ -146,6 +158,11 @@
         </article>
         <aside class="queue-panel">
           <div class="section-head compact"><div><p class="eyebrow">Tatsächliche Reihenfolge</p><h3>Warteschlange</h3></div><span id="queueCount" class="muted">0 Songs</span></div>
+          <div class="list-filter queue-filter">
+            <label for="queueFilter">Song in der Warteschlange finden<input id="queueFilter" type="search" placeholder="Titel oder Interpret" autocomplete="off"></label>
+            <button id="showCurrentSong" class="button ghost small" type="button">Zum aktuellen Song</button>
+            <span id="queueFilterCount" class="muted" role="status"></span>
+          </div>
           <div id="playerQueue" class="player-queue"><div class="empty">Noch keine Songs geladen.</div></div>
         </aside>
       </div>
@@ -338,6 +355,19 @@
         </section>
       </div>
     </div>
+  </dialog>
+
+  <dialog id="queueConfirmDialog" class="modal" aria-labelledby="queueConfirmTitle" aria-describedby="queueConfirmText">
+    <form method="dialog" class="modal-card preview-card">
+      <p class="eyebrow">Warteschlange ändern</p>
+      <h2 id="queueConfirmTitle">Playlist ersetzen?</h2>
+      <p id="queueConfirmText" class="muted"></p>
+      <p class="muted">Die Wiedergabe wird angehalten. Danach kannst du mit ▶ starten. Deine Stimmen bleiben unverändert.</p>
+      <div class="row-actions">
+        <button class="button ghost" value="cancel" autofocus>Abbrechen</button>
+        <button class="button primary" value="replace">Playlist ersetzen</button>
+      </div>
+    </form>
   </dialog>
 
   <dialog id="previewDialog" class="modal" aria-labelledby="previewTitle">

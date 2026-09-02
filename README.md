@@ -14,7 +14,7 @@ ClubIQ Music ist die lokale Musikwunsch- und Abstimmungs-App für den Vereinsbet
 - YouTube-Suchergebnisse und gespeicherte YouTube-Songs erhalten Vorschaubilder, wenn Internet verfügbar ist.
 - Die Verwaltung trennt Abstimmungen, Mitglieder und den aktuellen Stimmenstand.
 - Der zentrale Raspberry-Player spielt die Rangliste über eine verbundene Bluetooth-Box ab.
-- Angemeldete Mitglieder können Wiedergabe, Lautstärke, Warteschlange und Soundboard bedienen.
+- Nur von der Verwaltung freigegebene Mitglieder können Wiedergabe, Lautstärke und Soundboard bedienen; Änderungen an der Warteschlange bleiben in der Verwaltung.
 - Bluetooth-Boxen werden ausschließlich in der geschützten ClubIQ-Oberfläche gesucht, gekoppelt und getrennt.
 
 Bestehende Mitglieder ohne PIN können beim ersten Login nach dem Update einmalig ihre PIN festlegen. Bei einer neuen Registrierung muss die PIN zur Kontrolle zweimal eingegeben werden. Danach wird nur noch der gesalzene PBKDF2-Hash gespeichert. Anmeldesitzungen laufen standardmäßig nach 30 Tagen ab und werden serverseitig validiert.
@@ -62,6 +62,26 @@ für klassisches Bluetooth mit bis zu 10 Metern im Freien angegeben; die
 Funkbedingungen den Stick möglichst frei und mit einer kurzen USB-Verlängerung
 weg von USB-3-Geräten platzieren. [ASUS beschreibt diese Störquelle](https://rog.asus.com/support/faq/1052901/).
 Die App verändert keine Funk-Sendeleistung und verspricht keinen Reichweiten-Boost.
+
+## Komfort im Vereinsbetrieb
+
+- Die Suchfelder in Abstimmung, letzter Playlist und Player-Warteschlange filtern
+  sofort nach Titel oder Interpret. Dafür ist keine Internetsuche nötig. Stimmen
+  und die echte Reihenfolge bleiben unverändert.
+- **Nur noch nicht vorgeschlagene Songs** blendet bereits übernommene Titel der
+  letzten Playlist aus. **Filter zurücksetzen** zeigt wieder alle Titel.
+- **Zum aktuellen Song** entfernt den Warteschlangenfilter und springt innerhalb
+  der Liste zur aktuellen Position.
+- Lautstärke und Zeitleiste zeigen beim Ziehen sofort den gewählten Wert. Erst
+  beim Loslassen wird er gesendet; kurze Statusabfragen bewegen den Regler nicht.
+  Das gilt auch für die DJ-Fernbedienung. Bei Internetradio ist Spulen gesperrt.
+- Während eine Stimme gespeichert wird, sind weitere Punktänderungen kurz
+  gesperrt. So erzeugt ein schneller Doppeltipp keine konkurrierenden Änderungen.
+- Vor dem Ersetzen einer gefüllten Warteschlange fragt die App nach. Abbrechen
+  lässt Liste und Wiedergabe unverändert.
+- Ist der Player kurz nicht erreichbar, bleibt der letzte bekannte Stand sichtbar
+  und wird als veraltet markiert. Wiedergabe- und Lautstärketasten sind bis zur nächsten erfolgreichen
+  Statusabfrage gesperrt. Die Oberfläche setzt keine Lautstärke auf 70 % zurück.
 
 ## Voraussetzungen
 
