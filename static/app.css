@@ -63,6 +63,19 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .hero > div { min-width: 0; }
 .cycle-picker { margin-top: 18px; max-width: 580px; }
 .cycle-picker select:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.voting-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; margin: 14px 0; }
+.vote-views { display: flex; flex-wrap: wrap; gap: 6px; }
+.vote-views .active { color: var(--green); background: var(--mint); border-color: #aac8bb; }
+.vote-views span { display: inline-block; min-width: 22px; padding: 2px 5px; border-radius: 8px; background: var(--mint); }
+.muted.section-description { margin: 12px 0 22px; font-size: .9rem; }
+.modal-card.suggest-card { width: min(900px, 100%); }
+.suggest-card h2 { padding-right: 32px; }
+.suggest-card .search-box { margin-top: 20px; }
+.result-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 28px; }
+.result-phase { padding: 6px 10px; border-radius: 8px; background: var(--mint); color: var(--green); font-size: .85rem; font-weight: 700; }
+#tab-playlists > .section-head { align-items: center; flex-wrap: wrap; }
+#refreshResults { margin-left: auto; }
+.song-card.result-song { grid-template-columns: 112px minmax(0, 1fr) auto; }
 .archive-player-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 20px; }
 .archive-player-actions .muted { font-size: .85rem; flex: 1 1 230px; }
 #queueCycleName { flex-basis: 100%; font-size: .85rem; }
@@ -119,6 +132,7 @@ h3 { margin: 0; font-size: 1.05rem; }
 .tab-panel, .admin-panel { display: none; }
 .tab-panel.active, .admin-panel.active { display: block; }
 .tab-panel { min-height: 320px; padding-top: 28px; }
+#tab-voting { padding-top: 0; }
 .section-head { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .branded-heading { justify-content: flex-start; }
 .branded-heading .list-actions, .branded-heading .speaker-badge { margin-left: auto; }
@@ -281,6 +295,14 @@ input:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px rgba(36,92,81,
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .toast.error { background: var(--danger); }
 
+@media (max-width: 480px) {
+  .topbar { gap: 10px; }
+  .topbar .brand-copy, .topbar .club-signature { display: none; }
+  .topbar .brand .app-logo { width: 40px; height: 40px; }
+  .top-actions { min-width: 0; gap: 6px; }
+  #memberOpen { max-width: 145px; overflow-wrap: anywhere; }
+}
+
 .site-footer {
   z-index: 1; width: min(1040px, calc(100% - 32px)); margin: -40px auto 24px; padding: 14px 0 4px;
   display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--line); color: var(--muted);
@@ -292,7 +314,7 @@ input:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px rgba(36,92,81,
 .site-footer .footer-club { margin-left: auto; color: var(--green); font-weight: 750; }
 
 @media (max-width: 720px) {
-  .topbar { align-items: flex-start; }
+  .topbar { align-items: center; min-height: 71px; }
   .brand-copy small, .status-pill, .club-signature small { display: none; }
   .club-signature { margin-left: 0; padding-left: 8px; }
   .club-logo { width: 39px; height: 39px; }
@@ -308,7 +330,8 @@ input:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px rgba(36,92,81,
   .section-head { align-items: flex-start; }
   .section-brand-mark { width: 29px; height: 29px; }
   .list-actions { align-items: flex-end; flex-direction: column; }
-  .song-card { grid-template-columns: 92px minmax(0, 1fr); gap: 12px; }
+  .song-card, .song-card.result-song { grid-template-columns: 92px minmax(0, 1fr); gap: 12px; }
+  .voting-toolbar > .button { width: 100%; }
   .song-visual, .song-cover { width: 92px; height: 54px; }
   .points, .total, .login-to-vote { grid-column: 2; justify-self: start; text-align: left; }
   .search-box > div, .compact-form > div { grid-template-columns: 1fr; }

@@ -69,6 +69,7 @@ async function testApp() {
   run(`let messages=[],requests=[];toast=message=>messages.push(message);
     state.member={can_control_player:true};state.token='test-session';state.budget={remaining:2,maximum:10};
     state.displayedCycle=state.activeCycle={id:2,status:'active',name:'Training',max_budget:10,starts_at:new Date(Date.now()-1000).toISOString(),closes_at:new Date(Date.now()+60000).toISOString()};
+    state.playlistCycle=state.displayedCycle;
     state.playlist=[{suggestion_id:1,rank:1,external_id:'aaaaaaaaaaa',title:'Über den Wolken',channel_title:'Müller',my_points:0,total_points:7},
       {suggestion_id:2,rank:2,external_id:'bbbbbbbbbbb',title:'Achterbahn',channel_title:'Helene',my_points:2,total_points:8}];
     state.previousPlaylist={cycle:{name:'Vorwoche'},songs:[...state.playlist,{external_id:'ccccccccccc',title:'Queen & Freunde',channel_title:'Queen'}]};`);

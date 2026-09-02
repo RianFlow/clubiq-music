@@ -2,7 +2,7 @@
 
 ## Aktivste Mitglieder
 
-Unter **Voting → Aktivste Mitglieder** zeigt ClubIQ, wer sich in der laufenden
+Unter **Abstimmen → Aktivste Mitglieder** zeigt ClubIQ, wer sich in der laufenden
 Abstimmung beteiligt. Die Liste ist bewusst keine reine Punkteliste:
 
 - 2 Aktivitätspunkte je bewertetem Song
@@ -22,20 +22,21 @@ abgespielt wird:
 - Bereits gespielte Titel bleiben abgeblendet als kurzer Verlauf sichtbar.
 - Manuell ergänzte Titel sind mit **DJ** gekennzeichnet.
 
-Ein von der Verwaltung freigegebenes Mitglied kann mit **Ausgewählte Playlist laden**
-die oben ausgewählte Abstimmung in den Player übernehmen. Dadurch wird eine
+Ein von der Verwaltung freigegebenes Mitglied kann unter **Playlists** ein Ergebnis
+auswählen und mit **Diese Playlist in den Player laden** übernehmen. Dadurch wird eine
 vorhandene Warteschlange ersetzt. Anschließend startet **▶** die Wiedergabe.
 
 ## Nach dem Abstimmungsende
 
-1. Oben **Abstimmung / Playlist auswählen** öffnen.
+1. **Playlists → Playlist auswählen** öffnen.
 2. Unter **Abgeschlossene Abstimmungen** den gewünschten Vereinsabend auswählen.
 3. Das Endergebnis ansehen. Stimmen können jetzt nicht mehr verändert werden.
 4. Als freigegebener DJ **Diese Playlist in den Player laden** drücken.
 5. Im Player **▶** drücken. Die Box ist weiterhin mit dem Raspberry verbunden.
 
-Auch beim Ablauf des Countdowns bleibt die gerade geöffnete Liste sichtbar.
-Eine neue Abstimmung verdrängt das gewählte Archiv nicht. Die endgültige Playlist
+Beim Ablauf des Countdowns verweist **Abstimmen** auf die Ergebnisse unter **Playlists**.
+Eine neue Abstimmung verdrängt das dort gewählte Archiv nicht. **Abstimmen** folgt
+unabhängig davon der neuen Runde. Die endgültige Playlist
 wird beim ersten Laden nach Ende aus den letzten Stimmen und den Auffüllregeln
 gespeichert; danach bleibt sie beim erneuten Laden gleich. Wird eine Abstimmung
 von der Verwaltung ausdrücklich wieder geöffnet, wird sie anschließend erneut
@@ -53,7 +54,8 @@ einmal neu koppeln. Der Verbinden-Knopf ist nur für freigegebene DJs sichtbar.
 
 ## Songs wiederverwenden und vorher anhören
 
-Bei einer neuen Abstimmung steht unter der Rangliste **Aus der letzten Playlist**.
+Bei einer neuen Abstimmung öffnest du **Abstimmen → + Song vorschlagen**.
+Im Dialog kannst du nach neuen Songs suchen oder **Aus der letzten Playlist** wählen.
 Mit **Wieder vorschlagen** kann jedes angemeldete Mitglied einen Titel erneut
 zur Wahl stellen. Seine Punkte beginnen bei null. Bereits enthaltene Songs
 werden als **Schon in Abstimmung** markiert.

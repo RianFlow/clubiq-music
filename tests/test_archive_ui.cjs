@@ -46,35 +46,42 @@ async function test() {
   assert.equal(run('canVoteInDisplayedCycle()'), true);
   assert.match(node('#cycleSelect').innerHTML, /Abgeschlossene Abstimmungen/);
   assert.match(node('#cycleSelect').innerHTML, /&lt;alt&gt;/);
-  // Once this voting ends, stay on exactly that list, even with a new active one.
+  assert.equal(run('state.playlistCycle.id'), 1, 'results default to the latest closed round');
+  assert.doesNotMatch(node('#cycleSelect').innerHTML, /Morgen/, 'future votings are not playlists yet');
+  // Voting follows the new round, while the independently selected archive stays.
   run(`active.status = 'closed'; cycles = [{...planned, status: 'active', starts_at: new Date(now-1000).toISOString()}, active, closed];`);
   await run('loadCycles()');
-  assert.equal(run('state.displayedCycle.id'), 2);
+  assert.equal(run('state.displayedCycle.id'), 3);
   assert.equal(run('state.activeCycle.id'), 3);
-  assert.equal(run('canVoteInDisplayedCycle()'), false);
-  assert.equal(node('#budgetCard').hidden, true);
+  assert.equal(run('state.playlistCycle.id'), 1);
+  assert.equal(run('canVoteInDisplayedCycle()'), true);
+  assert.equal(node('#budgetCard').hidden, false);
   await run('selectCycle(1)');
-  assert.equal(run('requests.at(-2)'), '/api/v1/music/cycles/1/playlist');
-  assert.match(node('#playlist').innerHTML, /Archivsong/);
-  assert.match(node('#playlistSummary').textContent, /Endergebnis/);
-  assert.doesNotMatch(run('songCard(song)'), /data-vote|data-login-to-vote/);
+  assert.equal(run('requests.at(-1)'), '/api/v1/music/cycles/1/playlist');
+  assert.match(node('#resultSongs').innerHTML, /Archivsong/);
+  assert.equal(node('#resultPhase').textContent, 'Abgeschlossen');
+  assert.doesNotMatch(node('#resultSongs').innerHTML, /data-vote|data-login-to-vote/);
+  assert.equal(run('state.displayedCycle.id'), 3, 'archive selection never moves voting');
   run('state.member = {can_control_player: true};');
-  assert.doesNotMatch(run('songCard(song)'), /data-vote/);
+  assert.doesNotMatch(run('songCard(song, false, true)'), /data-vote/);
   await run('queueRanking()');
   assert.equal(run('requests.at(-1)'), '/api/v1/music/player/queue/cycles/1');
   assert.match(run('messages.at(-1)'), /Vereinsabend/);
   // A slow response for an older selection must not overwrite the chosen list.
   run('let resolveOld; api = path => path.endsWith("/previous-playlist") ? Promise.resolve({cycle: null, songs: []}) : new Promise(resolve => {resolveOld = resolve;});');
-  const pending = run('loadPlaylist()');
-  run('state.displayedCycle = active; state.playlist = []; resolveOld({playlist: [song]});');
+  const pending = run('loadResults()');
+  run('state.playlistCycle = active; state.resultSongs = []; resolveOld({playlist: [song]});');
   await pending;
-  assert.equal(run('state.playlist.length'), 0);
-  // No active voting: newest archived list is the default, ahead of future events.
-  run('state.selectedCycleId = null; cycles = [planned, active, closed]; api = async () => ({cycles});');
+  assert.equal(run('state.resultSongs.length'), 0);
+  // No active voting: voting shows the next start, playlists default to newest archive.
+  run('state.selectedPlaylistCycleId = null; cycles = [planned, active, closed]; api = async () => ({cycles});');
   await run('loadCycles()');
-  assert.equal(run('state.displayedCycle.id'), 2);
+  assert.equal(run('state.displayedCycle.id'), 3);
+  assert.equal(run('state.playlistCycle.id'), 2);
+  assert.equal(node('#budgetCard').hidden, true);
+  assert.equal(node('#openSuggest').disabled, true);
   // Planned cycles and users without DJ rights never submit a queue command.
-  run('state.displayedCycle = planned; requests = []; api = async path => requests.push(path);');
+  run('state.playlistCycle = planned; requests = []; api = async path => requests.push(path);');
   await run('queueRanking()');
   assert.equal(run('requests.length'), 0);
   // Preview uses only a user-started local iframe, never the shared player API.
