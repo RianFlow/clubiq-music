@@ -7,8 +7,15 @@ const state = {
   cycles: [],
   activeCycle: null,
   upcomingCycle: null,
+  // Voting always follows the current round; browsing results is independent.
   displayedCycle: null,
-  selectedCycleId: null,
+  playlistCycle: null,
+  selectedPlaylistCycleId: null,
+  resultSongs: [],
+  resultLoading: false,
+  resultError: "",
+  tab: "voting",
+  voteView: "all",
   budget: { remaining: 0, maximum: 0 },
   playlist: [],
   previousPlaylist: { cycle: null, songs: [] },
@@ -36,6 +43,9 @@ let reconnectPending = false;
 let previewVideoId = "";
 let votePending = false;
 let playlistLoadGeneration = 0;
+let resultLoadGeneration = 0;
+let suggestionPending = false;
+let searchGeneration = 0;
 let playerLoadGeneration = 0;
 let playerMutationVersion = 0;
 let playerMutationsPending = 0;
@@ -113,34 +123,115 @@ function renderCycleSelection() {
   $("#cycleMeta").textContent = !cycle ? "Die Verwaltung kann eine neue Abstimmung planen."
     : phase === "active" ? `Geöffnet bis ${formatDate(cycle.closes_at)} · ${cycle.max_budget} Punkte pro Mitglied`
     : phase === "planned" ? `Voting von ${formatDate(cycle.starts_at)} bis ${formatDate(cycle.closes_at)}`
-    : "Abstimmung beendet · Ergebnis bleibt sichtbar und die Playlist kann weiter abgespielt werden.";
-  const groups = [["active", "Laufende Abstimmung"], ["closed", "Abgeschlossene Abstimmungen"], ["planned", "Geplante Abstimmungen"]];
-  $("#cycleSelect").innerHTML = groups.map(([value, label]) => {
+    : "Zurzeit läuft keine Abstimmung. Die Ergebnisse findest du unter „Playlists“.";
+  $("#budgetCard").hidden = !canVoteInDisplayedCycle();
+  $("#loginHint").hidden = Boolean(state.member) || !canVoteInDisplayedCycle();
+  $("#openSuggest").disabled = !canVoteInDisplayedCycle();
+  $("#suggestAvailability").textContent = canVoteInDisplayedCycle()
+    ? "Ein Song fehlt? Schlage ihn vor oder hole einen Favoriten aus der letzten Runde zurück."
+    : "Songs vorschlagen und Punkte vergeben ist möglich, sobald eine Abstimmung geöffnet ist.";
+  const hasResults = state.cycles.some(item => cyclePhase(item) === "closed");
+  $("#votingClosedNotice").hidden = canVoteInDisplayedCycle() || !hasResults;
+  $("#votingClosedTitle").textContent = phase === "planned" ? "Bis zum Start: die letzte Playlist hören." : "Die letzte Abstimmung ist beendet.";
+  $("#suggestCycleName").textContent = cycle ? `Für „${cycle.name}“` : "Keine laufende Abstimmung";
+  if (!canVoteInDisplayedCycle() && $("#suggestDialog").open) $("#suggestDialog").close();
+  // Selecting a playlist must not change the voting countdown.
+  countdownTransition = cycle ? `${cycle.id}:${phase}` : "";
+  updateCountdown();
+  renderResultSelection();
+}
+
+function renderResultSelection() {
+  const cycle = state.playlistCycle;
+  const phase = cyclePhase(cycle);
+  const groups = [["closed", "Abgeschlossene Abstimmungen"], ["active", "Laufende Abstimmung · Zwischenstand"]];
+  setListHtml($("#cycleSelect"), groups.map(([value, label]) => {
     const cycles = state.cycles.filter(item => cyclePhase(item) === value);
     return cycles.length ? `<optgroup label="${label}">${cycles.map(item =>
       `<option value="${item.id}"${item.id === cycle?.id ? " selected" : ""}>${esc(item.name)} · ${esc(formatDate(item.closes_at))}</option>`
     ).join("")}</optgroup>` : "";
-  }).join("") || '<option value="">Keine Abstimmung vorhanden</option>';
-  $("#cycleSelect").disabled = !state.cycles.length;
-  $("#budgetCard").hidden = !canVoteInDisplayedCycle();
-  $("#loginHint").hidden = Boolean(state.member) || !canVoteInDisplayedCycle();
-  $("#queueCycleName").textContent = cycle ? `Ausgewählte Abstimmung: ${cycle.name}` : "Oben eine Abstimmung auswählen.";
-  [$("#queueFromRanking"), $("#queueSelectedPlaylist")].forEach(button => {
-    button.disabled = queueRankingPending || !cycle || phase === "planned";
-  });
-  // Selecting a different archive is not a countdown transition.
-  countdownTransition = cycle ? `${cycle.id}:${phase}` : "";
-  updateCountdown();
+  }).join("") || '<option value="">Noch keine Playlist vorhanden</option>');
+  $("#cycleSelect").disabled = !cycle;
+  $("#resultName").textContent = cycle?.name || "Noch keine Playlist";
+  $("#resultPhase").textContent = !cycle ? "" : phase === "closed" ? "Abgeschlossen" : "Zwischenstand";
+  $("#resultPhase").hidden = !cycle;
+  $("#resultMeta").textContent = !cycle ? "Nach dem Start einer Abstimmung erscheinen hier ihre Vorschläge und später das Endergebnis."
+    : phase === "closed" ? `Abstimmung beendet am ${formatDate(cycle.closes_at)} · Stimmen sind abgeschlossen.`
+    : `Die Abstimmung läuft noch bis ${formatDate(cycle.closes_at)}. Diese Auswahl ist noch nicht endgültig.`;
+  $("#queueSelectedPlaylist").disabled = queueRankingPending || playerStale || !state.member?.can_control_player || !cycle || phase === "planned";
+  $("#resultPlayerHint").hidden = Boolean(state.member?.can_control_player);
 }
 
 async function selectCycle(cycleId) {
-  state.displayedCycle = state.cycles.find(cycle => cycle.id === cycleId) || null;
-  state.selectedCycleId = state.displayedCycle?.id ?? null;
-  state.playlist = [];
-  state.previousPlaylist = { cycle: null, songs: [] };
-  renderCycleSelection();
-  renderPlaylist();
-  await loadPlaylist();
+  state.playlistCycle = state.cycles.find(cycle => cycle.id === cycleId && cyclePhase(cycle) !== "planned") || null;
+  state.selectedPlaylistCycleId = state.playlistCycle?.id ?? null;
+  state.resultSongs = [];
+  state.resultError = "";
+  $("#resultFilter").value = "";
+  renderResultSelection();
+  await loadResults();
+}
+
+async function loadResults() {
+  const generation = ++resultLoadGeneration;
+  const cycleId = state.playlistCycle?.id;
+  state.resultError = "";
+  state.resultLoading = Boolean(cycleId);
+  if (!cycleId) state.resultSongs = [];
+  renderResults();
+  if (!cycleId) return;
+  try {
+    const data = await api(`/api/v1/music/cycles/${cycleId}/playlist`);
+    if (state.playlistCycle?.id !== cycleId || generation !== resultLoadGeneration) return;
+    state.resultSongs = data.playlist || [];
+  } catch (error) {
+    if (state.playlistCycle?.id !== cycleId || generation !== resultLoadGeneration) return;
+    state.resultError = error.message;
+  } finally {
+    if (generation === resultLoadGeneration) {
+      state.resultLoading = false;
+      renderResults();
+    }
+  }
+}
+
+function renderResults() {
+  const root = $("#resultSongs");
+  const query = $("#resultFilter").value || "";
+  const visible = state.resultSongs.filter(song => matchesSong(song, query));
+  $("#clearResultFilter").hidden = !query;
+  $("#resultSummary").textContent = state.resultLoading || state.resultError || !state.playlistCycle ? ""
+    : `${visible.length} von ${state.resultSongs.length} Songs · ${state.resultSongs.reduce((sum, song) => sum + song.total_points, 0)} Punkte`;
+  const html = state.resultLoading ? '<div class="empty">Playlist wird geladen …</div>'
+    : state.resultError ? `<div class="empty">${esc(state.resultError)} Bitte erneut aktualisieren.</div>`
+    : !state.playlistCycle ? '<div class="empty">Hier erscheinen eure Playlists, sobald eine Abstimmung gestartet ist.</div>'
+    : !state.resultSongs.length ? '<div class="empty">Keine Songs vorgeschlagen. Beim Laden in den Player gelten trotzdem die eingestellten Auffüllregeln.</div>'
+    : visible.map(song => songCard(song, false, true)).join("") || '<div class="empty">Kein passender Song. Setze die Suche zurück.</div>';
+  if (setListHtml(root, html)) wirePreviewButtons(root);
+}
+
+async function refreshResults() {
+  await refreshVotingState();
+  await loadResults();
+}
+
+function setVoteView(name) {
+  state.voteView = name === "mine" ? "mine" : "all";
+  $("#allVotesView").hidden = state.voteView !== "all";
+  $("#myVotesView").hidden = state.voteView !== "mine";
+  $$('[data-vote-view]').forEach(button => {
+    const active = button.dataset.voteView === state.voteView;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+function openSuggest() {
+  if (!canVoteInDisplayedCycle()) return toast("Zurzeit ist keine Abstimmung geöffnet.", true);
+  if (!state.member) return openMemberDialog();
+  renderPreviousPlaylist();
+  $("#suggestDialog").showModal();
+  $("#searchInput").focus();
 }
 
 function durationParts(milliseconds) {
@@ -205,10 +296,17 @@ function setCycleFormDefaults() {
 }
 
 function setTab(name) {
-  $$(".tab").forEach(button => button.classList.toggle("active", button.dataset.tab === name));
+  if (!["voting", "playlists", "player"].includes(name)) return;
+  state.tab = name;
+  $$(".tab").forEach(button => {
+    const active = button.dataset.tab === name;
+    button.classList.toggle("active", active);
+    if (active) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  });
   $$(".tab-panel").forEach(panel => panel.classList.toggle("active", panel.id === `tab-${name}`));
-  if (name === "mine") renderMyVotes();
   if (name === "voting") loadActivity(true).catch(() => {});
+  if (name === "playlists") refreshResults().catch(error => toast(error.message, true));
   if (name === "player") Promise.all([loadPlayerState(), loadSoundboard(), loadRadioStations(), loadSavedSpeakers()]).catch(error => toast(error.message, true));
 }
 
@@ -240,6 +338,8 @@ function renderSession() {
     : 0;
   $("#budgetBar").style.width = `${Math.min(100, percent)}%`;
   $("#loginHint").hidden = loggedIn || !canVoteInDisplayedCycle();
+  if (!loggedIn && $("#suggestDialog").open) $("#suggestDialog").close();
+  renderResultSelection();
   renderPlayer();
   if (canControlPlayer) loadSavedSpeakers().catch(error => toast(error.message, true));
 }
@@ -273,10 +373,29 @@ async function loadCycles() {
     .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at))[0] || null;
   const latestClosed = state.cycles.filter(cycle => cyclePhase(cycle) === "closed")
     .sort((a, b) => new Date(b.closes_at) - new Date(a.closes_at) || b.id - a.id)[0];
-  state.displayedCycle = state.cycles.find(cycle => cycle.id === state.selectedCycleId)
-    || state.activeCycle || latestClosed || state.upcomingCycle || null;
-  state.selectedCycleId = state.displayedCycle?.id ?? null;
+  const previousVotingId = state.displayedCycle?.id;
+  state.displayedCycle = state.activeCycle || state.upcomingCycle || latestClosed || null;
+  if (previousVotingId !== state.displayedCycle?.id) {
+    state.playlist = [];
+    state.previousPlaylist = { cycle: null, songs: [] };
+    $("#playlistFilter").value = "";
+    $("#searchResults").innerHTML = "";
+    searchGeneration++;
+    if ($("#suggestDialog").open) $("#suggestDialog").close();
+    renderPlaylist();
+  }
+  const selected = state.cycles.find(cycle => cycle.id === state.selectedPlaylistCycleId && cyclePhase(cycle) !== "planned")
+    || latestClosed || state.activeCycle || null;
+  if (state.playlistCycle?.id !== selected?.id) {
+    state.resultSongs = [];
+    state.resultError = "";
+    resultLoadGeneration++;
+    state.resultLoading = false;
+  }
+  state.playlistCycle = selected;
+  state.selectedPlaylistCycleId = selected?.id ?? null;
   renderCycleSelection();
+  renderResults();
 }
 
 async function restoreMember() {
@@ -316,15 +435,15 @@ async function loadPlaylist() {
   }
 }
 
-function songCard(song, mine = false) {
-  const controls = !canVoteInDisplayedCycle() ? (mine ? `<span class="muted">${song.my_points} Punkte von dir</span>` : "") : state.member ? `
+function songCard(song, mine = false, readOnly = false) {
+  const controls = readOnly ? "" : !canVoteInDisplayedCycle() ? (mine ? `<span class="muted">${song.my_points} Punkte von dir</span>` : "") : state.member ? `
     <div class="points">
       <button type="button" data-vote="-1" aria-label="Einen Punkt entfernen"${votePending || song.my_points <= 0 ? " disabled" : ""}>−</button>
       <strong>${song.my_points}</strong>
       <button type="button" data-vote="1" aria-label="Einen Punkt hinzufügen"${votePending || state.budget.remaining < 1 ? " disabled" : ""}>+</button>
     </div>` : '<button class="button ghost small login-to-vote" type="button" data-login-to-vote>Zum Abstimmen anmelden</button>';
   return `
-    <article class="song-card" data-song-id="${song.suggestion_id}">
+    <article class="song-card${readOnly ? " result-song" : ""}" data-song-id="${song.suggestion_id}">
       <div class="song-visual">${song.thumbnail_url ? `<img class="song-cover" src="${esc(song.thumbnail_url)}" alt="" loading="lazy">` : '<span class="song-cover song-fallback">♪</span>'}<span class="song-rank">${mine ? "♪" : song.rank}</span></div>
       <div class="song-copy">
         <strong>${esc(song.title)}</strong>
@@ -379,25 +498,23 @@ function renderPlaylist() {
   const visible = state.playlist.filter(song => matchesSong(song, query));
   $("#playlistFilterCount").textContent = query.trim() ? `${visible.length} von ${state.playlist.length} Songs` : "";
   $("#clearPlaylistFilter").hidden = !query;
-  if (!cycle || phase === "planned") {
+  if (!cycle || phase !== "active") {
     root._listHtml = null;
-    root.innerHTML = cycle
-      ? `<div class="empty">Die Rangliste öffnet am ${formatDate(cycle.starts_at)}.</div>`
-      : '<div class="empty">Derzeit ist keine Abstimmung vorhanden.</div>';
+    root.innerHTML = !cycle ? '<div class="empty">Derzeit ist keine Abstimmung vorhanden.</div>'
+      : phase === "planned" ? `<div class="empty">Die Abstimmung öffnet am ${formatDate(cycle.starts_at)}.</div>`
+      : '<div class="empty">Die Abstimmung ist beendet. Öffne „Playlists“, um das Ergebnis zu sehen und abzuspielen.</div>';
   } else if (!state.playlist.length) {
     root._listHtml = null;
-    root.innerHTML = phase === "closed"
-      ? '<div class="empty">Für diese Abstimmung wurden keine Songs vorgeschlagen. Beim Laden der Playlist gelten weiterhin die eingestellten Auffüllregeln.</div>'
-      : state.previousPlaylist?.songs?.length
-        ? '<div class="empty">Noch keine neuen Vorschläge. Wähle unten einen Song aus der letzten Playlist oder suche unter „Song vorschlagen“.</div>'
+    root.innerHTML = state.previousPlaylist?.songs?.length
+        ? '<div class="empty">Noch keine neuen Vorschläge. Unter „Song vorschlagen“ kannst du suchen oder einen Song der letzten Runde zurückholen.</div>'
         : '<div class="empty">Noch keine Songs vorhanden. Mach den ersten Vorschlag.</div>';
   } else {
     const html = visible.map(song => songCard(song)).join("") || '<div class="empty">Kein passender Song. Suche zurücksetzen oder einen anderen Titel eingeben.</div>';
     if (setListHtml(root, html)) wireVoteButtons(root);
   }
-  $("#mineCount").textContent = state.playlist.filter(song => song.my_points > 0).length;
-  $("#playlistSummary").textContent = cycle
-    ? `${phase === "closed" ? "Endergebnis · " : ""}${state.playlist.length} Song${state.playlist.length === 1 ? "" : "s"} · ${state.playlist.reduce((sum, song) => sum + song.total_points, 0)} Punkte`
+  $("#mineCount").textContent = canVoteInDisplayedCycle() ? state.playlist.filter(song => song.my_points > 0).length : 0;
+  $("#playlistSummary").textContent = canVoteInDisplayedCycle()
+    ? `${state.playlist.length} Song${state.playlist.length === 1 ? "" : "s"} · ${state.playlist.reduce((sum, song) => sum + song.total_points, 0)} Punkte`
     : "";
   renderMyVotes();
   renderPreviousPlaylist();
@@ -466,7 +583,9 @@ function renderPreviousPlaylist() {
 function renderMyVotes() {
   const root = $("#myVotes");
   const mine = state.playlist.filter(song => song.my_points > 0);
-  if (!state.member) {
+  if (!canVoteInDisplayedCycle()) {
+    setListHtml(root, '<div class="empty">Hier siehst du deine Punkte während einer laufenden Abstimmung. Abgeschlossene Ergebnisse findest du unter „Playlists“.</div>');
+  } else if (!state.member) {
     root._listHtml = null;
     root.innerHTML = '<div class="empty">Melde dich an, um deine Auswahl zu sehen.</div>';
   } else if (!mine.length) {
@@ -570,14 +689,17 @@ async function searchSongs(event) {
     return;
   }
   if (!canVoteInDisplayedCycle()) {
-    toast("Bitte oben eine laufende Abstimmung auswählen, um Songs vorzuschlagen.", true);
+    toast("Zurzeit ist keine Abstimmung geöffnet.", true);
     return;
   }
   const query = $("#searchInput").value.trim();
   const root = $("#searchResults");
+  const generation = ++searchGeneration;
+  const cycleId = state.displayedCycle.id;
   root.innerHTML = '<div class="empty">Suche läuft …</div>';
   try {
     const data = await api(`/api/v1/music/provider/search?q=${encodeURIComponent(query)}`);
+    if (generation !== searchGeneration || state.displayedCycle?.id !== cycleId || !canVoteInDisplayedCycle()) return;
     const results = data.results || [];
     root.innerHTML = results.length ? results.map((song, index) => `
       <article class="song-card">
@@ -589,15 +711,20 @@ async function searchSongs(event) {
     $$('[data-suggest]', root).forEach(button => button.addEventListener("click", () => suggestSong(button)));
     wirePreviewButtons(root);
   } catch (error) {
+    if (generation !== searchGeneration) return;
     root.innerHTML = `<div class="empty">${esc(error.message)}</div>`;
   }
 }
 
 async function suggestSong(button) {
-  if (!canVoteInDisplayedCycle()) return toast("Bitte oben eine laufende Abstimmung auswählen.", true);
+  if (suggestionPending) return;
+  if (!state.member) return openMemberDialog();
+  if (!canVoteInDisplayedCycle()) return toast("Zurzeit ist keine Abstimmung geöffnet.", true);
+  const cycleId = state.displayedCycle.id;
+  suggestionPending = true;
   button.disabled = true;
   try {
-    await api(`/api/v1/music/cycles/${state.activeCycle.id}/suggestions`, {
+    await api(`/api/v1/music/cycles/${cycleId}/suggestions`, {
       method: "POST",
       body: JSON.stringify({
         provider: "youtube",
@@ -607,11 +734,14 @@ async function suggestSong(button) {
       }),
     });
     await loadPlaylist();
+    $("#suggestDialog").close();
+    setVoteView("all");
     setTab("voting");
     toast("Song wurde zur Abstimmung hinzugefügt.");
   } catch (error) {
     toast(error.message, true);
   } finally {
+    suggestionPending = false;
     button.disabled = false;
   }
 }
@@ -715,6 +845,7 @@ function renderPlayer() {
       : player.paused ? "Internetradio pausiert." : "Sender wird verbunden …");
   });
   if (state.radioStations.length) renderRadioStations();
+  renderResultSelection();
 }
 
 function renderPlayerQueue() {
@@ -1019,7 +1150,7 @@ async function queueRanking() {
   if (!state.member) return openMemberDialog();
   if (!state.member.can_control_player) return toast("Du bist für die Player-Bedienung nicht freigegeben.", true);
   if (playerStale) return toast("Bitte zuerst den Player-Status aktualisieren. Die vorhandene Warteschlange ist gerade nicht sicher bekannt.", true);
-  const cycle = state.displayedCycle;
+  const cycle = state.playlistCycle;
   if (!cycle || cyclePhase(cycle) === "planned") return toast("Bitte eine laufende oder abgeschlossene Abstimmung auswählen.", true);
   if (queueRankingPending) return;
   queueRankingPending = true;
@@ -1442,6 +1573,22 @@ function bindEvents() {
       format: mediaTime, commit: value => playerCommand("seek", value) }),
   };
   $("#playlistFilter").addEventListener("input", renderPlaylist);
+  $("#resultFilter").addEventListener("input", renderResults);
+  $("#clearResultFilter").addEventListener("click", () => {
+    $("#resultFilter").value = ""; renderResults(); $("#resultFilter").focus();
+  });
+  $("#openSuggest").addEventListener("click", openSuggest);
+  $$('[data-vote-view]').forEach(button => button.addEventListener("click", () => setVoteView(button.dataset.voteView)));
+  $("#browsePlaylists").addEventListener("click", () => setTab("playlists"));
+  $("#openLatestPlaylist").addEventListener("click", () => {
+    state.selectedPlaylistCycleId = null;
+    setTab("playlists");
+  });
+  $("#refreshResults").addEventListener("click", () => refreshResults().catch(error => toast(error.message, true)));
+  $("#suggestDialog").addEventListener("close", () => {
+    searchGeneration++;
+    $("#searchResults").innerHTML = "";
+  });
   $("#previousFilter").addEventListener("input", renderPreviousPlaylist);
   $("#previousOnlyNew").addEventListener("change", renderPreviousPlaylist);
   $("#queueFilter").addEventListener("input", renderPlayerQueue);
@@ -1485,7 +1632,6 @@ function bindEvents() {
   });
   $("#stopRadio").addEventListener("click", stopRadio);
   $$('[data-player-action]').forEach(button => button.addEventListener("click", () => handlePlayerAction(button)));
-  $("#queueFromRanking").addEventListener("click", queueRanking);
   $("#queueSelectedPlaylist").addEventListener("click", queueRanking);
   $("#refreshPlayer").addEventListener("click", () => loadPlayerState());
   $("#reconnectSpeaker").addEventListener("click", reconnectSpeaker);
@@ -1527,7 +1673,10 @@ window.addEventListener("appinstalled", () => {
   $("#installPwa").hidden = true;
 });
 setInterval(updateCountdown, 1000);
-setInterval(() => loadPlaylist().catch(() => {}), 30000);
+setInterval(() => {
+  refreshVotingState().catch(() => {});
+  if (state.tab === "playlists") loadResults().catch(() => {});
+}, 30000);
 setInterval(() => loadActivity(true).catch(() => {}), 30000);
 setInterval(() => {
   if (!document.hidden) loadPlayerState(true).catch(() => {});

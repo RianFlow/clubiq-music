@@ -8,7 +8,7 @@ ClubIQ Music ist die lokale Musikwunsch- und Abstimmungs-App für den Vereinsbet
 - Die geschützte Verwaltung kann Mitglieder weiterhin anlegen, sperren und vergessene PINs zurücksetzen.
 - Nach der Anmeldung zeigt die App das verbleibende Punktebudget an.
 - Punkte können je Song erhöht, reduziert oder vollständig entfernt werden.
-- „Meine Auswahl“ fasst die eigenen Stimmen nachvollziehbar zusammen.
+- **Abstimmen → Meine Punkte** fasst die eigenen Stimmen nachvollziehbar zusammen.
 - Abstimmungen werden mit genauer Start- und Endzeit geplant und durch einen Live-Countdown begleitet.
 - Die öffentliche Rangliste bleibt ohne Anmeldung sichtbar; zum Vergeben eigener Punkte ist weiterhin eine Anmeldung nötig.
 - YouTube-Suchergebnisse und gespeicherte YouTube-Songs erhalten Vorschaubilder, wenn Internet verfügbar ist.
@@ -28,11 +28,20 @@ steht in [DJ, Warteschlange und Aktivitätsliste](docs/DJ-UND-AKTIVITAET.md).
 
 ## Abgeschlossene Abstimmungen abspielen
 
-Oben unter **Abstimmung / Playlist auswählen** bleiben auch beendete Abstimmungen
+Die drei Hauptbereiche sind getrennt: **Abstimmen** zeigt nur die aktuelle bzw.
+kommende Runde, **Playlists** enthält die auswählbaren Ergebnisse und **Player**
+steuert Musik, Warteschlange, Radio und Soundboard. Unter **Abstimmen** öffnet
+**+ Song vorschlagen** die Suche und die Songs der letzten Runde in einem Dialog.
+**Meine Punkte** bleibt direkt bei der Abstimmung, nicht bei der Wiedergabe.
+
+Unter **Playlists → Playlist auswählen** bleiben auch beendete Abstimmungen
 erreichbar. Wähle den Vereinsabend, klicke als freigegebener DJ auf
 **Diese Playlist in den Player laden** und starte im Player mit **▶**.
 Die bisherige Warteschlange wird ersetzt; die Stimmen der beendeten Abstimmung
-bleiben gesperrt. Ohne laufende Abstimmung öffnet die App das neueste Endergebnis.
+bleiben gesperrt. Der Playlist-Bereich wählt zunächst das neueste abgeschlossene
+Ergebnis. Eine laufende Runde ist dort ausdrücklich als **Zwischenstand** markiert.
+Das Durchsehen eines Ergebnisses verändert weder die laufende Abstimmung noch die
+Musik. Abstimmen und Playlists haben unabhängige Auswahlen.
 
 Beim ersten Laden nach dem Abstimmungsende wird die endgültige Playlist aus dem
 Endergebnis und den Auffüllregeln gespeichert. Weitere Aufrufe verwenden genau
@@ -46,7 +55,7 @@ aktualisiert. Manuelle DJ-Änderungen betreffen nur die Player-Warteschlange.
   gekoppelte Box ohne Suche. Nur freigegebene DJs haben diesen Knopf. Neue Boxen
   koppelt weiterhin die Verwaltung. „Trennen“ behält die Box in der gespeicherten
   Liste, „Vergessen“ entfernt ihre Kopplung.
-- Unter der neuen Rangliste zeigt **Aus der letzten Playlist** die Songs des
+- Unter **Abstimmen → + Song vorschlagen → Aus der letzten Playlist** stehen die Songs des
   vorherigen Vereinsabends. **Wieder vorschlagen** nimmt einen Song ohne alte
   Stimmen in die aktuelle Abstimmung auf. Gibt es noch keine erzeugte Playlist,
   werden die freigegebenen Vorschläge der vorigen Abstimmung angezeigt.

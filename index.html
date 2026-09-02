@@ -8,10 +8,10 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/pics/logo.png">
   <link rel="apple-touch-icon" href="/pics/logo.png">
-  <link rel="stylesheet" href="/static/app.css?v=20260902-1">
-  <script defer src="/static/images.js?v=20260902-1"></script>
-  <script defer src="/static/range-control.js?v=20260902-1"></script>
-  <script defer src="/static/app.js?v=20260902-1"></script>
+  <link rel="stylesheet" href="/static/app.css?v=20260902-2">
+  <script defer src="/static/images.js?v=20260902-2"></script>
+  <script defer src="/static/range-control.js?v=20260902-2"></script>
+  <script defer src="/static/app.js?v=20260902-2"></script>
 </head>
 <body>
   <header class="topbar">
@@ -31,14 +31,18 @@
   </header>
 
   <main class="shell">
+    <nav class="tabs" aria-label="Musikbereiche">
+      <button class="tab active" data-tab="voting" type="button" aria-current="page">Abstimmen</button>
+      <button class="tab" data-tab="playlists" type="button">Playlists</button>
+      <button class="tab" data-tab="player" type="button">Player <span id="playerIndicator">–</span></button>
+    </nav>
+
+    <section id="tab-voting" class="tab-panel active">
     <section class="hero">
       <div>
-        <p class="eyebrow">Abstimmungen &amp; Playlists</p>
+        <p class="eyebrow">Gemeinsam entscheiden</p>
         <h1 id="cycleName">Musikwünsche</h1>
         <p id="cycleMeta" class="muted">Abstimmung wird geladen …</p>
-        <label class="cycle-picker" for="cycleSelect">Abstimmung / Playlist auswählen
-          <select id="cycleSelect" aria-label="Abstimmung oder archivierte Playlist auswählen"><option>Wird geladen …</option></select>
-        </label>
         <div id="cycleCountdown" class="countdown" hidden>
           <span id="countdownLabel">Endet in</span><strong id="countdownValue">–</strong>
         </div>
@@ -56,22 +60,22 @@
       <button class="button primary" data-open-member type="button">Jetzt anmelden</button>
     </section>
 
-    <nav class="tabs" aria-label="Musikbereiche">
-      <button class="tab active" data-tab="voting" type="button">Abstimmung &amp; Playlists</button>
-      <button class="tab" data-tab="player" type="button">Player <span id="playerIndicator">–</span></button>
-      <button class="tab" data-tab="suggest" type="button">Song vorschlagen</button>
-      <button class="tab" data-tab="mine" type="button">Meine Auswahl <span id="mineCount">0</span></button>
-    </nav>
-
-    <section id="tab-voting" class="tab-panel active">
-      <div class="section-head branded-heading">
-        <div><p class="eyebrow">Rangliste</p><h2>Eure Favoriten</h2></div>
-        <img class="section-brand-mark" src="/pics/clubiq-symbol-gold.png" alt="" aria-hidden="true">
-        <div class="list-actions"><span id="playlistSummary" class="muted"></span><button id="refreshPlaylist" class="button ghost small" type="button">Aktualisieren</button></div>
+      <div id="votingClosedNotice" class="notice" hidden>
+        <div><strong id="votingClosedTitle">Diese Abstimmung ist beendet.</strong><span>Die Ergebnisse bleiben unter „Playlists“ erhalten und können dort zum Abspielen geladen werden.</span></div>
+        <button id="openLatestPlaylist" class="button primary" type="button">Zu den Playlists</button>
       </div>
-      <div class="archive-player-actions" data-player-control hidden>
-        <button id="queueSelectedPlaylist" class="button primary" type="button">Diese Playlist in den Player laden</button>
-        <span class="muted">Ersetzt die aktuelle Warteschlange. Danach im Player mit ▶ starten.</span>
+      <div class="voting-toolbar">
+        <div class="vote-views" role="group" aria-label="Vorschläge anzeigen">
+          <button class="button ghost active" data-vote-view="all" aria-pressed="true" type="button">Alle Vorschläge</button>
+          <button class="button ghost" data-vote-view="mine" aria-pressed="false" type="button">Meine Punkte <span id="mineCount">0</span></button>
+        </div>
+        <button id="openSuggest" class="button primary" type="button">+ Song vorschlagen</button>
+      </div>
+      <p id="suggestAvailability" class="muted section-description"></p>
+      <div id="allVotesView">
+      <div class="section-head">
+        <div><p class="eyebrow">Aktuelle Abstimmung</p><h2>Vorschläge &amp; Stimmen</h2></div>
+        <div class="list-actions"><span id="playlistSummary" class="muted"></span><button id="refreshPlaylist" class="button ghost small" type="button">Aktualisieren</button></div>
       </div>
       <div class="list-filter">
         <label for="playlistFilter">In dieser Abstimmung suchen<input id="playlistFilter" type="search" placeholder="Titel oder Interpret" autocomplete="off"></label>
@@ -79,18 +83,11 @@
         <span id="playlistFilterCount" class="muted" role="status"></span>
       </div>
       <div id="playlist" class="song-list" aria-live="polite"></div>
-      <section id="previousPlaylistPanel" class="previous-playlist" hidden>
-        <div class="section-head"><div><p class="eyebrow">Noch einmal hören?</p><h3>Aus der letzten Playlist</h3></div></div>
-        <p id="previousPlaylistMeta" class="muted"></p>
-        <p class="muted">Die Songs bleiben zur Auswahl erhalten. Mit „Wieder vorschlagen“ kommen sie ohne alte Stimmen in die neue Abstimmung.</p>
-        <div class="list-filter">
-          <label for="previousFilter">In der letzten Playlist suchen<input id="previousFilter" type="search" placeholder="Titel oder Interpret" autocomplete="off"></label>
-          <button id="clearPreviousFilter" class="button ghost small" type="button" hidden>Filter zurücksetzen</button>
-          <span id="previousFilterCount" class="muted" role="status"></span>
-          <label class="filter-check"><input id="previousOnlyNew" type="checkbox">Nur noch nicht vorgeschlagene Songs</label>
-        </div>
-        <div id="previousPlaylist" class="song-list"></div>
-      </section>
+      </div>
+      <div id="myVotesView" hidden>
+        <div class="section-head"><div><p class="eyebrow">Aktuelle Abstimmung</p><h2>Meine vergebenen Punkte</h2></div></div>
+        <div id="myVotes" class="song-list"></div>
+      </div>
       <section class="activity-panel">
         <div class="section-head compact">
           <div><p class="eyebrow">Mitgemacht</p><h3>Aktivste Mitglieder</h3></div>
@@ -99,6 +96,32 @@
         <p class="muted activity-explanation">Bewertet werden Beteiligung, Vorschläge und sinnvolle Player-Aktionen – nicht die Höhe einzelner Stimmen.</p>
         <div id="activityLeaderboard" class="activity-list"><div class="empty">Aktivität wird geladen …</div></div>
       </section>
+    </section>
+
+    <section id="tab-playlists" class="tab-panel">
+      <div class="section-head branded-heading">
+        <div><p class="eyebrow">Aus Wünschen wird Musik</p><h1>Playlists</h1></div>
+        <img class="section-brand-mark" src="/pics/clubiq-symbol-gold.png" alt="" aria-hidden="true">
+        <button id="refreshResults" class="button ghost small" type="button">Aktualisieren</button>
+      </div>
+      <p class="muted section-description">Hier findest du die Ergebnisse eurer Abstimmungen – auch nach deren Ende. Die Auswahl verändert weder die aktuelle Abstimmung noch die laufende Musik.</p>
+      <label class="cycle-picker" for="cycleSelect">Playlist auswählen
+        <select id="cycleSelect" aria-label="Playlist auswählen"><option>Wird geladen …</option></select>
+      </label>
+      <div class="result-heading"><h2 id="resultName">Noch keine Playlist</h2><span id="resultPhase" class="result-phase"></span></div>
+      <p id="resultMeta" class="muted section-description"></p>
+      <div class="archive-player-actions" data-player-control hidden>
+        <button id="queueSelectedPlaylist" class="button primary" type="button">Diese Playlist in den Player laden</button>
+        <span class="muted">Ersetzt die aktuelle Warteschlange. Danach im Player mit ▶ starten.</span>
+      </div>
+      <p id="resultPlayerHint" class="muted section-description">Nur freigegebene DJs können eine Playlist auf der Vereinsbox laden.</p>
+      <p class="muted section-description">Unten siehst du die Vorschläge nach Punkten. Beim Laden greifen die eingestellten Auffüllregeln; die tatsächliche Abspielreihenfolge steht im Player.</p>
+      <div class="list-filter">
+        <label for="resultFilter">In dieser Playlist suchen<input id="resultFilter" type="search" placeholder="Titel oder Interpret" autocomplete="off"></label>
+        <button id="clearResultFilter" class="button ghost small" type="button" hidden>Suche zurücksetzen</button>
+        <span id="resultSummary" class="muted" role="status"></span>
+      </div>
+      <div id="resultSongs" class="song-list" aria-live="polite"></div>
     </section>
 
     <section id="tab-player" class="tab-panel">
@@ -151,8 +174,8 @@
             <button class="button primary small" data-open-member type="button">Anmelden</button>
           </div>
           <div class="player-actions" data-player-control hidden>
-            <p id="queueCycleName" class="muted">Oben eine Abstimmung auswählen.</p>
-            <button id="queueFromRanking" class="button primary" type="button">Ausgewählte Playlist laden</button>
+            <p class="muted">Eine andere Abstimmung hören? Wähle das Ergebnis unter „Playlists“ aus.</p>
+            <button id="browsePlaylists" class="button primary" type="button">Playlist auswählen</button>
             <button id="refreshPlayer" class="button ghost" type="button">Status aktualisieren</button>
           </div>
         </article>
@@ -174,25 +197,33 @@
       </section>
     </section>
 
-    <section id="tab-suggest" class="tab-panel">
-      <div class="section-head">
-        <div><p class="eyebrow">Neuer Musikwunsch</p><h2>Song vorschlagen</h2></div>
-      </div>
+  </main>
+
+  <dialog id="suggestDialog" class="modal" aria-labelledby="suggestTitle">
+    <div class="modal-card suggest-card">
+      <button class="icon-button close" type="button" data-close aria-label="Songvorschläge schließen">×</button>
+      <p class="eyebrow">Für die aktuelle Abstimmung</p><h2 id="suggestTitle">Song vorschlagen</h2>
+      <p id="suggestCycleName" class="muted section-description"></p>
       <form id="searchForm" class="search-box">
         <label for="searchInput">Titel oder Interpret</label>
         <div><input id="searchInput" minlength="3" maxlength="100" placeholder="z. B. Queen Don't Stop Me Now" autocomplete="off"><button class="button primary" type="submit">Suchen</button></div>
         <small>Die Suche benötigt Internet. Abstimmen und die vorhandene Liste funktionieren lokal.</small>
       </form>
       <div id="searchResults" class="song-list"></div>
-    </section>
-
-    <section id="tab-mine" class="tab-panel">
-      <div class="section-head">
-        <div><p class="eyebrow">Dein Überblick</p><h2>Meine vergebenen Punkte</h2></div>
-      </div>
-      <div id="myVotes" class="song-list"></div>
-    </section>
-  </main>
+      <section id="previousPlaylistPanel" class="previous-playlist" hidden>
+        <div class="section-head"><div><p class="eyebrow">Oder einen Favoriten zurückholen</p><h3>Aus der letzten Playlist</h3></div></div>
+        <p id="previousPlaylistMeta" class="muted"></p>
+        <p class="muted">Mit „Wieder vorschlagen“ kommt ein Song ohne alte Stimmen in die aktuelle Abstimmung.</p>
+        <div class="list-filter">
+          <label for="previousFilter">In der letzten Playlist suchen<input id="previousFilter" type="search" placeholder="Titel oder Interpret" autocomplete="off"></label>
+          <button id="clearPreviousFilter" class="button ghost small" type="button" hidden>Filter zurücksetzen</button>
+          <span id="previousFilterCount" class="muted" role="status"></span>
+          <label class="filter-check"><input id="previousOnlyNew" type="checkbox">Nur noch nicht vorgeschlagene Songs</label>
+        </div>
+        <div id="previousPlaylist" class="song-list"></div>
+      </section>
+    </div>
+  </dialog>
 
   <dialog id="memberDialog" class="modal">
     <div class="modal-card">
