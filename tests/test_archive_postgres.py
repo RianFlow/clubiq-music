@@ -1,4 +1,5 @@
 """Archive lifecycle against real PostgreSQL, isolated in a rolled-back schema."""
+import json
 import os
 import unittest
 from contextlib import contextmanager
@@ -133,3 +134,44 @@ class ArchivePostgresTests(unittest.TestCase):
         new_song = main.get_playlist(2, self.dj)["playlist"][0]
         self.assertEqual(new_song["total_points"], 0)
         self.assertEqual(new_song["my_points"], 0)
+
+    def test_five_recent_playlists_feed_suggestions_and_automatic_fallback(self):
+        with self.conn.cursor() as cur:
+            # Keep the fixture's original round older than this explicit history.
+            cur.execute("UPDATE music_cycles SET status='closed', starts_at=CURRENT_TIMESTAMP - INTERVAL '20 days', closes_at=CURRENT_TIMESTAMP - INTERVAL '19 days' WHERE id=1;")
+            history = [
+                (10, "Zu alt", 7, [{"title": "Alt", "artist": "A", "external_id": "too-old-001"}]),
+                (11, "Vor fünf", 6, [{"title": "Fünf", "artist": "E", "external_id": "history0005"}]),
+                (12, "Vor vier", 5, [{"title": "Vier", "artist": "D", "external_id": "history0004"}]),
+                (13, "Vor drei", 4, [{"title": "Drei", "artist": "C", "external_id": "history0003"}]),
+                (14, "Vor zwei", 3, [
+                    {"title": "Doppelt", "artist": "A", "external_id": "history0001"},
+                    {"title": "Zwei", "artist": "B", "external_id": "history0002"},
+                ]),
+                (15, "Letzte Runde", 2, [{"title": "Letzte", "artist": "A", "external_id": "history0001"}]),
+            ]
+            for cycle_id, name, days, items in history:
+                cur.execute(
+                    "INSERT INTO music_cycles (id,name,status,starts_at,closes_at) VALUES (%s,%s,'closed',CURRENT_TIMESTAMP-(%s * INTERVAL '1 day'),CURRENT_TIMESTAMP-((%s-1) * INTERVAL '1 day'));",
+                    (cycle_id, name, days, days),
+                )
+                cur.execute(
+                    "INSERT INTO music_cycle_playlists (cycle_id,items_json,finalized_at) VALUES (%s,%s::jsonb,CURRENT_TIMESTAMP);",
+                    (cycle_id, json.dumps(items)),
+                )
+            cur.execute("INSERT INTO music_cycles (id,name,status,starts_at,closes_at,playlist_target_count,reuse_previous_playlist,genre_fallback_enabled) VALUES (20,'Heute','active',CURRENT_TIMESTAMP-INTERVAL '1 minute',CURRENT_TIMESTAMP+INTERVAL '1 day',5,TRUE,FALSE);")
+
+        candidates = main.get_previous_playlist(20)
+        self.assertEqual([cycle["id"] for cycle in candidates["cycles"]], [15, 14, 13, 12, 11])
+        self.assertEqual([song["external_id"] for song in candidates["songs"]], [
+            "history0001", "history0002", "history0003", "history0004", "history0005",
+        ])
+        self.assertEqual(candidates["songs"][0]["source_cycle_name"], "Letzte Runde")
+        self.assertNotIn("too-old-001", [song["external_id"] for song in candidates["songs"]])
+
+        generated = main.use_cycle_ranking(20, self.dj)
+        self.assertEqual(self.ids(generated), [
+            "history0001", "history0002", "history0003", "history0004", "history0005",
+        ])
+        self.assertEqual(generated["playlist_build"]["sources"]["previous"], 5)
+        self.genre.assert_not_called()

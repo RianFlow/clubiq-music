@@ -18,7 +18,7 @@ const state = {
   voteView: "all",
   budget: { remaining: 0, maximum: 0 },
   playlist: [],
-  previousPlaylist: { cycle: null, songs: [] },
+  previousPlaylist: { cycle: null, cycles: [], songs: [] },
   player: { available: false, queue: [], current_index: -1, volume: 70, repeat: "off", shuffle: false },
   soundboard: [],
   soundCategory: "Alle",
@@ -377,7 +377,7 @@ async function loadCycles() {
   state.displayedCycle = state.activeCycle || state.upcomingCycle || latestClosed || null;
   if (previousVotingId !== state.displayedCycle?.id) {
     state.playlist = [];
-    state.previousPlaylist = { cycle: null, songs: [] };
+    state.previousPlaylist = { cycle: null, cycles: [], songs: [] };
     $("#playlistFilter").value = "";
     $("#searchResults").innerHTML = "";
     searchGeneration++;
@@ -417,7 +417,7 @@ async function loadPlaylist() {
   const cycleId = state.displayedCycle?.id;
   if (!cycleId) {
     state.playlist = [];
-    state.previousPlaylist = { cycle: null, songs: [] };
+    state.previousPlaylist = { cycle: null, cycles: [], songs: [] };
     renderPlaylist();
     return;
   }
@@ -548,11 +548,14 @@ function startPreview() {
 }
 
 function renderPreviousPlaylist() {
-  const { cycle, songs = [] } = state.previousPlaylist || {};
+  const { cycle, cycles = [], songs = [] } = state.previousPlaylist || {};
   const panel = $("#previousPlaylistPanel");
   panel.hidden = !state.displayedCycle || cyclePhase(state.displayedCycle) === "closed" || !cycle;
   if (panel.hidden) return;
-  $("#previousPlaylistMeta").textContent = `Aus „${cycle.name}“ · ${songs.length} Songs`;
+  const historyCount = cycles.length || (cycle ? 1 : 0);
+  $("#previousPlaylistMeta").textContent = historyCount === 1
+    ? `Aus „${cycle.name}“ · ${songs.length} Songs`
+    : `Aus den letzten ${historyCount} Playlists · ${songs.length} einzigartige Songs`;
   const root = $("#previousPlaylist");
   const query = $("#previousFilter").value || "";
   const onlyNew = $("#previousOnlyNew").checked;
@@ -564,10 +567,10 @@ function renderPreviousPlaylist() {
     const present = state.playlist.some(item => item.external_id === song.external_id);
     return `<article class="song-card">
       <div class="song-visual"><img class="song-cover" src="${esc(song.thumbnail_url)}" alt="" loading="lazy"><span class="song-rank">${index + 1}</span></div>
-      <div class="song-copy"><strong>${esc(song.title)}</strong><span>${esc(song.channel_title || "")}</span>${previewButton(song)}</div>
+      <div class="song-copy"><strong>${esc(song.title)}</strong><span>${esc(song.channel_title || "")}${song.source_cycle_name ? ` · aus „${esc(song.source_cycle_name)}“` : ""}</span>${previewButton(song)}</div>
       <button class="button ghost small" type="button" data-reuse-song="${index}"${present || !canVoteInDisplayedCycle() ? " disabled" : ""}>${present ? "Schon in Abstimmung" : "Wieder vorschlagen"}</button>
     </article>`;
-  }).join("") || `<div class="empty">${songs.length ? "Keine passenden Songs. Setze die Filter zurück." : "In der letzten Abstimmung waren noch keine Songs vorhanden."}</div>`;
+  }).join("") || `<div class="empty">${songs.length ? "Keine passenden Songs. Setze die Filter zurück." : "In den letzten fünf Playlists waren noch keine Songs vorhanden."}</div>`;
   if (!setListHtml(root, html)) return;
   wirePreviewButtons(root);
   $$('[data-reuse-song]', root).forEach(button => button.addEventListener("click", async () => {

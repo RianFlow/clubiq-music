@@ -53,7 +53,7 @@ const server = http.createServer((req, res) => {
       else if (p.endsWith('/state')) data = player;
       else if (p.endsWith('/soundboard')) data = {items:soundpack.map((item, i) => ({...item,id:i+1,builtin:true}))};
       else if (p.endsWith('/bluetooth/saved')) data = {devices:[]};
-      else if (p.endsWith('/previous-playlist')) data = {cycle:closed,songs:oldSongs};
+      else if (p.endsWith('/previous-playlist')) data = {cycle:closed,cycles:[closed,{id:0,name:'Vorletzte Runde'}],songs:oldSongs.map(item=>({...item,source_cycle_name:closed.name}))};
       else if (p.endsWith('/playlist')) {
         if (failResults && p.includes('/cycles/1/')) return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({detail:'Test: kurz nicht erreichbar'})});
         data = {playlist:p.includes('/cycles/1/') ? oldSongs : songs};
@@ -94,6 +94,8 @@ const server = http.createServer((req, res) => {
     await page.getByRole('button',{name:'+ Song vorschlagen',exact:true}).click();
     assert.equal(await page.locator('#suggestDialog').isVisible(),true);
     assert.equal(await page.locator('#previousPlaylist').getByText('Bohemian Rhapsody',{exact:true}).isVisible(),true);
+    assert.match(await page.locator('#previousPlaylistMeta').textContent(),/letzten 2 Playlists/);
+    assert.equal(await page.locator('#previousPlaylist').getByText(/aus „Letzter Vereinsabend“/).first().isVisible(),true);
     await page.locator('#suggestDialog').getByLabel('Titel oder Interpret',{exact:true}).fill('Queen');
     await page.locator('#searchForm').getByRole('button',{name:'Suchen',exact:true}).click();
     await page.locator('#searchResults').getByRole('button',{name:'Vorschlagen',exact:true}).click();
