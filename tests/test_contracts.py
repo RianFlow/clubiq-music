@@ -127,6 +127,7 @@ class SecurityContractTests(unittest.TestCase):
         self.assertEqual([item["source"] for item in merged], [
             "votes", "votes", "previous", "genre",
         ])
+        self.assertEqual(main.PREVIOUS_PLAYLIST_LIMIT, 5)
 
     def test_admin_password_uses_server_configuration(self):
         with patch.object(main, "ADMIN_PASSWORD", "test-secret"):
@@ -230,6 +231,7 @@ class OfflineFrontendContractTests(unittest.TestCase):
         self.assertIn('id="cyclePlaylistTarget"', html_source)
         self.assertIn('id="cycleFallbackGenre"', html_source)
         self.assertIn("data-cycle-settings", script_source)
+        self.assertIn("Aus den letzten fünf Playlists", html_source)
 
     def test_database_migration_contains_sessions_and_budget(self):
         schema = (ROOT / "bootstrap.py").read_text(encoding="utf-8")

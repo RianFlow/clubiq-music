@@ -31,6 +31,7 @@ load_dotenv()
 
 DEFAULT_MAX_BUDGET = int(os.getenv("MAX_BUDGET", "10"))
 DEFAULT_PLAYLIST_TARGET = max(1, min(100, int(os.getenv("PLAYLIST_TARGET_COUNT", "20"))))
+PREVIOUS_PLAYLIST_LIMIT = 5
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 SESSION_DAYS = max(1, int(os.getenv("SESSION_DAYS", "30")))
@@ -736,6 +737,71 @@ def player_item(item: dict) -> dict:
     }
 
 
+def recent_playlist_candidates(
+    cur, cycle_id: int, starts_at, *, include_unvoted: bool = True
+) -> tuple[list[dict], list[dict]]:
+    """Collect unique YouTube songs from the five latest completed rounds."""
+    cur.execute(
+        """
+        SELECT c.id, c.name, p.items_json
+        FROM music_cycles c
+        LEFT JOIN music_cycle_playlists p ON p.cycle_id = c.id
+        WHERE c.id <> %s AND c.starts_at < %s
+          AND (c.status = 'closed' OR c.closes_at <= CURRENT_TIMESTAMP)
+        ORDER BY c.starts_at DESC, c.id DESC
+        LIMIT %s;
+        """,
+        (cycle_id, starts_at, PREVIOUS_PLAYLIST_LIMIT),
+    )
+    previous_cycles = cur.fetchall()
+    summaries: list[dict] = []
+    songs: list[dict] = []
+    seen: set[str] = set()
+    for previous_id, previous_name, stored_items in previous_cycles:
+        items = stored_items
+        if isinstance(items, str):
+            items = json.loads(items)
+        if not isinstance(items, list) or not items:
+            cur.execute(
+                """
+                SELECT s.title, s.channel_title, s.external_id
+                FROM music_suggestions s
+                LEFT JOIN music_votes v ON v.suggestion_id = s.id
+                WHERE s.cycle_id = %s AND s.status = 'approved' AND s.provider = 'youtube'
+                GROUP BY s.id
+                HAVING %s OR COALESCE(SUM(v.points), 0) > 0
+                ORDER BY COALESCE(SUM(v.points), 0) DESC, s.created_at ASC, s.id ASC
+                LIMIT 50;
+                """,
+                (previous_id, include_unvoted),
+            )
+            items = [
+                {"title": row[0], "artist": row[1], "external_id": row[2]}
+                for row in cur.fetchall()
+            ]
+        added = 0
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            external_id = str(item.get("external_id", ""))
+            if external_id in seen or not YOUTUBE_VIDEO_ID.fullmatch(external_id):
+                continue
+            seen.add(external_id)
+            added += 1
+            songs.append({
+                "external_id": external_id,
+                "title": str(item.get("title") or "Song")[:255],
+                "channel_title": str(item.get("artist") or item.get("channel_title") or "")[:255],
+                "artist": str(item.get("artist") or item.get("channel_title") or "")[:255],
+                "provider": "youtube",
+                "thumbnail_url": f"/api/v1/music/thumbnails/youtube/{external_id}",
+                "source_cycle_id": previous_id,
+                "source_cycle_name": previous_name,
+            })
+        summaries.append({"id": previous_id, "name": previous_name, "song_count": added})
+    return summaries, songs
+
+
 @app.get("/api/v1/music/provider/search")
 def search_tracks(
     q: str = Query(min_length=3, max_length=100),
@@ -813,39 +879,9 @@ def get_previous_playlist(cycle_id: int):
         current = cur.fetchone()
         if not current:
             raise HTTPException(status_code=404, detail="Abstimmung nicht gefunden.")
-        cur.execute("""
-            SELECT c.id, c.name, p.items_json FROM music_cycles c
-            LEFT JOIN music_cycle_playlists p ON p.cycle_id = c.id
-            WHERE c.id <> %s AND c.starts_at < %s
-              AND (c.status = 'closed' OR c.closes_at <= CURRENT_TIMESTAMP)
-            ORDER BY c.starts_at DESC, c.id DESC LIMIT 1;
-        """, (cycle_id, current[0]))
-        previous = cur.fetchone()
-        if not previous:
-            return {"cycle": None, "songs": []}
-        items = previous[2]
-        if isinstance(items, str):
-            items = json.loads(items)
-        if not items:
-            cur.execute("""
-                SELECT s.title, s.channel_title, s.external_id FROM music_suggestions s
-                LEFT JOIN music_votes v ON v.suggestion_id = s.id
-                WHERE s.cycle_id = %s AND s.status = 'approved' AND s.provider = 'youtube'
-                GROUP BY s.id ORDER BY COALESCE(SUM(v.points), 0) DESC, s.created_at ASC, s.id ASC
-                LIMIT 50;
-            """, (previous[0],))
-            items = [{"title": row[0], "artist": row[1], "external_id": row[2]} for row in cur.fetchall()]
-    songs = []
-    seen = set()
-    for item in items:
-        external_id = str(item.get("external_id", ""))
-        if external_id in seen or not YOUTUBE_VIDEO_ID.fullmatch(external_id):
-            continue
-        seen.add(external_id)
-        songs.append({"external_id": external_id, "title": item.get("title", "Song"),
-                      "channel_title": item.get("artist", ""), "provider": "youtube",
-                      "thumbnail_url": f"/api/v1/music/thumbnails/youtube/{external_id}"})
-    return {"cycle": {"id": previous[0], "name": previous[1]}, "songs": songs[:50]}
+        cycles, songs = recent_playlist_candidates(cur, cycle_id, current[0])
+    latest = cycles[0] if cycles else None
+    return {"cycle": latest, "cycles": cycles, "songs": songs}
 
 
 @app.get("/api/v1/music/player/state")
@@ -1045,46 +1081,9 @@ def queue_cycle_ranking(cycle_id: int | None, member: dict):
         ]
         previous_playlist: list[dict] = []
         if reuse_previous and len(current_votes) < target:
-            cur.execute(
-                """
-                SELECT p.items_json
-                FROM music_cycle_playlists p
-                JOIN music_cycles c ON c.id = p.cycle_id
-                WHERE c.id <> %s AND c.starts_at < %s
-                ORDER BY c.starts_at DESC, p.generated_at DESC
-                LIMIT 1;
-                """,
-                (cycle_id, starts_at),
+            _, previous_playlist = recent_playlist_candidates(
+                cur, cycle_id, starts_at, include_unvoted=False
             )
-            previous = cur.fetchone()
-            if previous:
-                previous_playlist = previous[0]
-                if isinstance(previous_playlist, str):
-                    previous_playlist = json.loads(previous_playlist)
-            else:
-                cur.execute(
-                    """
-                    WITH previous_cycle AS (
-                        SELECT id FROM music_cycles
-                        WHERE id <> %s AND starts_at < %s
-                        ORDER BY starts_at DESC LIMIT 1
-                    )
-                    SELECT s.title, s.channel_title, s.external_id
-                    FROM music_suggestions s
-                    JOIN music_votes v ON v.suggestion_id = s.id AND v.cycle_id = s.cycle_id
-                    JOIN previous_cycle c ON c.id = s.cycle_id
-                    WHERE s.status = 'approved' AND s.provider = 'youtube'
-                    GROUP BY s.id
-                    HAVING COALESCE(SUM(v.points), 0) > 0
-                    ORDER BY COALESCE(SUM(v.points), 0) DESC, s.created_at ASC
-                    LIMIT %s;
-                    """,
-                    (cycle_id, starts_at, target),
-                )
-                previous_playlist = [
-                    {"title": row[0], "artist": row[1] or "", "external_id": row[2]}
-                    for row in cur.fetchall()
-                ]
 
     prior = merge_playlist_sources(current_votes, previous_playlist, [], int(target))
     remaining = max(0, int(target) - len(prior))

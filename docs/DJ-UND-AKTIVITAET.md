@@ -55,7 +55,9 @@ einmal neu koppeln. Der Verbinden-Knopf ist nur für freigegebene DJs sichtbar.
 ## Songs wiederverwenden und vorher anhören
 
 Bei einer neuen Abstimmung öffnest du **Abstimmen → + Song vorschlagen**.
-Im Dialog kannst du nach neuen Songs suchen oder **Aus der letzten Playlist** wählen.
+Im Dialog kannst du nach neuen Songs suchen oder **Aus den letzten fünf Playlists**
+wählen. Die neuesten Listen stehen zuerst; ein mehrfach enthaltener Titel wird nur
+einmal angezeigt. Am Song steht, aus welcher Playlist er übernommen wurde.
 Mit **Wieder vorschlagen** kann jedes angemeldete Mitglied einen Titel erneut
 zur Wahl stellen. Seine Punkte beginnen bei null. Bereits enthaltene Songs
 werden als **Schon in Abstimmung** markiert.
@@ -72,12 +74,13 @@ sperren. Der Link **Auf YouTube öffnen** ist dann eine Alternative.
 ClubIQ baut die Liste immer in dieser festen Reihenfolge:
 
 1. Songs mit Stimmen aus der ausgewählten Abstimmung, nach Punkten sortiert
-2. noch fehlende Songs aus der zuletzt tatsächlich erzeugten ClubIQ-Playlist
+2. noch fehlende Songs aus den bis zu fünf letzten abgeschlossenen ClubIQ-Playlists,
+   beginnend mit der neuesten
 3. noch fehlende populäre Songs aus dem eingestellten Genre
 
 Doppelte YouTube-Titel werden automatisch entfernt. Die fertige Liste wird bei der
-Abstimmung gespeichert und kann bei der nächsten Veranstaltung als zweite Stufe
-verwendet werden. Die YouTube-Genre-Suche wird zwölf Stunden zwischengespeichert,
+Abstimmung gespeichert und kann bei den nächsten fünf Veranstaltungen als zweite
+Stufe verwendet werden. Die YouTube-Genre-Suche wird zwölf Stunden zwischengespeichert,
 damit das API-Kontingent nicht durch wiederholtes Laden verbraucht wird.
 
 Die Regeln stehen unter **Verwaltung → Abstimmungen**. Beim Erstellen oder später
