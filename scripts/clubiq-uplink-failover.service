@@ -1,0 +1,9 @@
+[Unit]
+Description=ClubIQ LAN/WLAN-Notfallumschaltung
+After=NetworkManager.service network.target
+Wants=NetworkManager.service
+ConditionPathExists=/sys/class/net/wlan1
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/clubiq-uplink-failover

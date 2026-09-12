@@ -186,7 +186,7 @@ Während der Wiedergabe wird bei normaler Reihenfolge die Stream-Adresse des nä
 Titels vorbereitet (bei Zufallswiedergabe nicht vorhersagbar). Es läuft höchstens
 ein Hintergrundabruf; eine Adresse wird maximal zehn Minuten im Arbeitsspeicher
 behalten. Es werden **keine Songs dauerhaft heruntergeladen**. Der aktive Stream
-hat einen Puffer von bis zu 20 Sekunden, begrenzt auf 16 MiB. Das überbrückt kurze
+hat einen Puffer von bis zu 30 Sekunden, begrenzt auf 16 MiB. Das überbrückt kurze
 Schwankungen, ersetzt aber kein Internet. YouTube-Änderungen oder Zugriffsbeschränkungen
 können weiterhin ein späteres Update erfordern.
 
@@ -203,6 +203,27 @@ und [mpv keep-open / eof-reached](https://mpv.io/manual/stable/#options-keep-ope
 Technische Grundlage: [BlueZ bluetoothctl](https://github.com/bluez/bluez/blob/5.82/client/main.c)
 (Einzelbefehle mit Rückmeldung und zeitlich begrenztem Pairing-Agenten) und
 [modale Browser-Ebene](https://developer.mozilla.org/en-US/docs/Glossary/Top_layer).
+
+### Internet-WLAN nur als Notfallverbindung
+
+Wenn der Raspberry über LAN ins Internet geht, kann der USB-WLAN-Stick im
+Bereitschaftsmodus bleiben. Das reduziert gleichzeitig den 2,4-GHz-Funkverkehr in
+der Nähe des Bluetooth-Sticks. Einmalig installieren:
+
+```bash
+cd ~/clubiq_music_release
+sudo ./scripts/install-uplink-failover.sh
+```
+
+Die Umschaltung prüft alle 15 Sekunden den Internetzugang über `eth0`. Nach drei
+erfolgreichen Prüfungen wird `wlan1` getrennt. Fällt LAN aus, aktiviert sie das
+gespeicherte NetworkManager-Profil `clubiq-internet-wlan` automatisch wieder.
+Status und letzte Umschaltung:
+
+```bash
+systemctl status clubiq-uplink-failover.timer --no-pager
+journalctl -u clubiq-uplink-failover.service -n 20 --no-pager
+```
 
 ## Aktualisieren
 
