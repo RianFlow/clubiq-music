@@ -194,6 +194,7 @@ class RadioPlayerTests(unittest.TestCase):
         self.assertIn("--audio-fallback-to-null=no", command)
         self.assertNotIn("--audio-fallback=no", command)
         self.assertIn("--mute=yes", command)
+        self.assertIn("--cache-secs=30", command)
         self.assertIn("--audio-device=alsa/bluealsa:DEV=02:11:22:33:44:55,PROFILE=a2dp,SOFTVOL=yes", command)
 
     def test_radio_resume_does_not_switch_to_youtube_playlist(self):

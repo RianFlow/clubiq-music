@@ -349,7 +349,7 @@ class MpvController:
             f"--log-file={MPV_LOG_FILE}",
             f"--audio-device={audio_device}", "--audio-fallback-to-null=no", f"--volume={self.volume}",
             f"--mute={'yes' if self.muted else 'no'}", "--network-timeout=10",
-            "--vid=no", "--cache=yes", "--cache-secs=20", "--demuxer-max-bytes=16MiB",
+            "--vid=no", "--cache=yes", "--cache-secs=30", "--demuxer-max-bytes=16MiB",
         ]
         self.process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                         text=True, env=player_environment())
