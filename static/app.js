@@ -51,6 +51,10 @@ let playerMutationVersion = 0;
 let playerMutationsPending = 0;
 let playerStale = false;
 let playerRangeControls = null;
+let playerLoadPending = false;
+let playerLastUpdated = 0;
+let savedSpeakersPending = false;
+let savedSpeakersUpdated = 0;
 
 function matchesSong(song, query) {
   const normalize = value => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("de");
@@ -85,19 +89,12 @@ async function api(path, options = {}, admin = false) {
   }
   if (admin && state.adminPassword) headers.set("X-Admin-Password", state.adminPassword);
   if (!admin && state.token) headers.set("Authorization", `Bearer ${state.token}`);
-  let response;
   try {
-    response = await fetch(path, { ...options, headers });
-  } catch (_) {
-    throw new Error("Die Kasse ist gerade nicht erreichbar.");
+    return await musicRequestJson(path, {...options, headers});
+  } catch (error) {
+    if (error.status === 401 && !admin) clearMemberSession(false);
+    throw error;
   }
-  let payload = {};
-  try { payload = await response.json(); } catch (_) { /* empty response */ }
-  if (!response.ok) {
-    if (response.status === 401 && !admin) clearMemberSession(false);
-    throw new Error(payload.detail || payload.error || `Fehler ${response.status}`);
-  }
-  return payload;
 }
 
 function formatDate(value) {
@@ -341,7 +338,7 @@ function renderSession() {
   if (!loggedIn && $("#suggestDialog").open) $("#suggestDialog").close();
   renderResultSelection();
   renderPlayer();
-  if (canControlPlayer) loadSavedSpeakers().catch(error => toast(error.message, true));
+  if (canControlPlayer && Date.now() - savedSpeakersUpdated > 60000) loadSavedSpeakers().catch(() => {});
 }
 
 function clearMemberSession(showMessage = true) {
@@ -407,8 +404,9 @@ async function restoreMember() {
     if (data.active_cycle_id) {
       state.activeCycle = state.cycles.find(cycle => cycle.id === data.active_cycle_id) || state.activeCycle;
     }
-  } catch (_) {
-    clearMemberSession(false);
+  } catch (error) {
+    // Only the server can invalidate a session. An outage must not log out DJs.
+    if (error.status === 401) clearMemberSession(false);
   }
 }
 
@@ -750,21 +748,25 @@ async function suggestSong(button) {
 }
 
 async function loadSavedSpeakers() {
-  if (!state.member?.can_control_player || reconnectPending) return;
-  const previous = $("#savedSpeakerSelect").value;
-  const data = await api("/api/v1/music/player/bluetooth/saved");
-  state.savedSpeakers = data.devices || [];
-  $("#savedSpeakerSelect").innerHTML = state.savedSpeakers.map(device =>
-    `<option value="${esc(device.address)}">${esc(device.name)}${device.connected ? " · verbunden" : ""}</option>`
-  ).join("") || '<option value="">Noch keine Box gespeichert</option>';
-  const preferred = state.savedSpeakers.find(device => device.address === previous)
-    || state.savedSpeakers.find(device => device.address === data.selected_address)
-    || state.savedSpeakers[0];
-  $("#savedSpeakerSelect").value = preferred?.address || "";
-  $("#reconnectSpeaker").disabled = !preferred || reconnectPending;
-  $("#savedSpeakerStatus").textContent = preferred
-    ? "Box einschalten, auswählen und verbinden. Keine neue Suche oder Kopplung nötig."
-    : "Eine neue Box muss die Verwaltung zuerst unter Player & Box koppeln.";
+  if (!state.member?.can_control_player || reconnectPending || savedSpeakersPending) return;
+  savedSpeakersPending = true;
+  try {
+    const previous = $("#savedSpeakerSelect").value;
+    const data = await api("/api/v1/music/player/bluetooth/saved", {timeoutMs:35000});
+    savedSpeakersUpdated = Date.now();
+    state.savedSpeakers = data.devices || [];
+    $("#savedSpeakerSelect").innerHTML = state.savedSpeakers.map(device =>
+      `<option value="${esc(device.address)}">${esc(device.name)}${device.connected ? " · verbunden" : ""}</option>`
+    ).join("") || '<option value="">Noch keine Box gespeichert</option>';
+    const preferred = state.savedSpeakers.find(device => device.address === previous)
+      || state.savedSpeakers.find(device => device.address === data.selected_address)
+      || state.savedSpeakers[0];
+    $("#savedSpeakerSelect").value = preferred?.address || "";
+    $("#reconnectSpeaker").disabled = !preferred || reconnectPending;
+    $("#savedSpeakerStatus").textContent = preferred
+      ? "Box einschalten, auswählen und verbinden. Keine neue Suche oder Kopplung nötig."
+      : "Eine neue Box muss die Verwaltung zuerst unter Player & Box koppeln.";
+  } finally { savedSpeakersPending = false; }
 }
 
 async function reconnectSpeaker() {
@@ -812,14 +814,27 @@ function renderPlayer() {
     ? "Playlist aus Abstimmung und Fallback-Regeln erstellen"
     : "Die Verwaltung verbindet zuerst eine Bluetooth-Box");
   const playbackStatus = $("#playerPlaybackStatus");
-  playbackStatus.textContent = playerStale ? "Verbindung zum Player unterbrochen. Letzter bekannter Stand – die Musik kann weiterhin laufen. Es wird automatisch erneut versucht."
-    : player.last_error || (player.loading ? "Titel wird geladen …"
-    : player.buffering ? "Audio wird gepuffert …"
-    : player.next_prepared ? "Nächster Titel ist vorbereitet." : "");
-  playbackStatus.hidden = !playbackStatus.textContent;
-  playbackStatus.classList.toggle("error", playerStale || Boolean(player.last_error));
+  const summary = musicPlaybackSummary(player, playerStale);
+  $("#playbackHealth").dataset.level = summary.level;
+  $("#playbackHealthTitle").textContent = summary.title;
+  playbackStatus.textContent = summary.hint;
+  playbackStatus.hidden = false;
+  const buffer = player.buffer_seconds;
+  const knownBuffer = !playerStale && !player.sound_active && typeof buffer === "number" && Number.isFinite(buffer) && buffer >= 0;
+  const target = Number(player.buffer_target_seconds) || 30;
+  $("#playerBuffer").hidden = !knownBuffer;
+  $("#playerBuffer").max = target;
+  $("#playerBuffer").value = knownBuffer ? Math.min(target, buffer) : 0;
+  $("#playerBufferText").textContent = knownBuffer ? `Ca. ${buffer.toLocaleString("de-DE", {maximumFractionDigits:1})} s im Puffer · Ziel ${target} s`
+    : playerStale ? "Pufferstand derzeit unbekannt" : "Pufferstand noch nicht verfügbar";
+  $("#playerNextTrack").textContent = musicNextTrack(player);
+  $("#playerPreparation").textContent = playerStale ? "Reihenfolge: letzter bekannter Stand"
+    : player.next_prepared ? "Stream-Adresse vorbereitet · Audio wird beim Titelwechsel geladen"
+    : "Der laufende Titel hat Vorrang beim Laden.";
+  $("#playerUpdated").textContent = playerLastUpdated ? `Letzter Status: ${new Date(playerLastUpdated).toLocaleTimeString("de-DE")}` : "Status wird abgefragt …";
+  $("#connectionState").innerHTML = playerStale || !playerLastUpdated ? "<i></i> Verbindung wird geprüft" : "<i></i> Player erreichbar";
   setMediaImage($("#playerCover"), current?.thumbnail, player.source_mode === "radio");
-  const canControl = Boolean(state.member?.can_control_player) && !playerStale;
+  const canControl = Boolean(state.member?.can_control_player) && !playerStale && player.available !== false;
   const radioMode = player.source_mode === "radio";
   playerRangeControls?.progress.update(player.position, {
     disabled: radioMode || !canControl || !Number(player.duration), max: Math.max(1, Number(player.duration) || 1),
@@ -827,6 +842,7 @@ function renderPlayer() {
   $("#playerDuration").textContent = mediaTime(player.duration);
   $("#playerPlay").textContent = player.playing || player.loading ? "❚❚" : "▶";
   $("#playerPlay").title = player.playing || player.loading ? "Pause" : "Wiedergabe";
+  $("#playerPlay").setAttribute("aria-label", $("#playerPlay").title);
   playerRangeControls?.volume.update(player.volume ?? 70, { disabled: !canControl });
   $("#playerMute").textContent = player.muted ? "🔇" : "🔊";
   $('[data-player-action="shuffle"]').classList.toggle("active", Boolean(player.shuffle));
@@ -1091,20 +1107,27 @@ async function djQueueAction(action, index) {
 }
 
 async function loadPlayerState(silent = false) {
-  if (playerMutationsPending) return;
+  if (playerMutationsPending || playerLoadPending) return;
+  playerLoadPending = true;
   const generation = ++playerLoadGeneration;
   const mutation = playerMutationVersion;
   try {
     const player = await api("/api/v1/music/player/state");
+    if (!Array.isArray(player.queue)) throw new Error("Player-Status unvollständig. Bitte die Verbindung prüfen.");
     if (generation !== playerLoadGeneration || mutation !== playerMutationVersion) return;
     state.player = player;
     playerStale = false;
+    playerLastUpdated = Date.now();
     renderPlayer();
+    return true;
   } catch (error) {
     if (generation !== playerLoadGeneration || mutation !== playerMutationVersion) return;
     playerStale = true;
     renderPlayer();
     if (!silent) toast(error.message, true);
+    return false;
+  } finally {
+    playerLoadPending = false;
   }
 }
 
@@ -1646,8 +1669,11 @@ function bindEvents() {
   $("#refreshActivity").addEventListener("click", () => loadActivity());
   $("#refreshBackup").addEventListener("click", () => loadBackupStatus());
   $("#installPwa").addEventListener("click", installPwa);
-  window.addEventListener("online", () => { $("#connectionState").innerHTML = "<i></i> Lokal bereit"; });
-  window.addEventListener("offline", () => { $("#connectionState").innerHTML = "<i></i> Offline im Kassen-WLAN"; });
+  const wake = () => { playerPoller.refresh(); votingPoller.refresh(); activityPoller.refresh(); };
+  window.addEventListener("online", wake);
+  window.addEventListener("focus", wake);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) wake(); });
+  window.addEventListener("offline", () => { playerStale = true; renderPlayer(); });
 }
 
 async function start() {
@@ -1662,7 +1688,15 @@ async function start() {
   }
 }
 
+const playerPoller = createMusicPoller(() => loadPlayerState(true));
+const votingPoller = createMusicPoller(async () => {
+  await refreshVotingState();
+  if (state.tab === "playlists") await loadResults();
+}, {interval:30000, maxDelay:60000});
+const activityPoller = createMusicPoller(() => loadActivity(true), {interval:30000, maxDelay:60000});
+
 start();
+playerPoller.start(); votingPoller.start(); activityPoller.start();
 if ("serviceWorker" in navigator && window.isSecureContext) {
   navigator.serviceWorker.register("/sw.js").catch(() => {});
 }
@@ -1676,11 +1710,3 @@ window.addEventListener("appinstalled", () => {
   $("#installPwa").hidden = true;
 });
 setInterval(updateCountdown, 1000);
-setInterval(() => {
-  refreshVotingState().catch(() => {});
-  if (state.tab === "playlists") loadResults().catch(() => {});
-}, 30000);
-setInterval(() => loadActivity(true).catch(() => {}), 30000);
-setInterval(() => {
-  if (!document.hidden) loadPlayerState(true).catch(() => {});
-}, 3000);

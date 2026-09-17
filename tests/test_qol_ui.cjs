@@ -19,13 +19,14 @@ function harness() {
     return nodes.get(selector);
   }
   const context = vm.createContext({
-    console, Date, Intl, setTimeout: () => 0, clearTimeout() {}, setInterval() {},
-    localStorage: { getItem: () => '' }, sessionStorage: { getItem: () => '' },
-    document: { querySelector: node, querySelectorAll: () => [], createElement: () => ({}) },
-    window: { confirm: () => false }, navigator: {}, setMediaImage() {},
+    console, Date, Intl, Headers, FormData, AbortController, setTimeout: () => 0, clearTimeout() {}, setInterval() {},
+    localStorage: { getItem: () => '', removeItem() {} }, sessionStorage: { getItem: () => '' },
+    document: { querySelector: node, querySelectorAll: () => [], createElement: () => ({}), addEventListener() {} },
+    window: { confirm: () => false, addEventListener() {} }, navigator: {}, setMediaImage() {},
   });
   const run = code => vm.runInContext(code, context);
   run(fs.readFileSync('static/range-control.js', 'utf8'));
+  run(fs.readFileSync('static/reliability.js', 'utf8'));
   return { node, run, context };
 }
 
@@ -137,5 +138,30 @@ async function testRemote() {
   assert.match(node('#remoteStatus').textContent,/letzter bekannter Stand/);
 }
 
-(async()=>{await testRange();await testApp();await testRemote();console.log('QoL UI: filters, volume drafts, serialized changes, stale state, voting and queue guard OK');})()
+async function testSessionAndTelemetry() {
+  const {node,run,context}=harness();
+  const source=fs.readFileSync('static/app.js','utf8');
+  run(source.slice(0,source.indexOf('\nstart();')));
+  run('renderSession=()=>{};renderPlaylist=()=>{};state.token="saved";state.member={display_name:"DJ",can_control_player:true};');
+  context.fetch=async()=>{throw new Error('offline');};
+  await run('restoreMember()');
+  assert.equal(run('state.token'),'saved');assert.equal(run('state.member.display_name'),'DJ');
+  context.fetch=async()=>({ok:false,status:503,json:async()=>({detail:'Unavailable'})});
+  await run('restoreMember()');assert.equal(run('state.token'),'saved');
+  context.fetch=async()=>({ok:false,status:401,json:async()=>({detail:'Expired'})});
+  await run('restoreMember()');assert.equal(run('state.token'),'');assert.equal(run('state.member'),null);
+  run(`state.player={queue:[{title:'A'},{title:'B'}],current_index:0,speaker:{connected:true},buffer_seconds:12.3,buffer_target_seconds:30};renderPlayer();`);
+  assert.match(node('#playerBufferText').textContent,/12,3 s/);
+  assert.equal(node('#playerBuffer').value,12.3);
+  assert.match(node('#playerNextTrack').textContent,/B/);
+  run('playerStale=true;renderPlayer()');assert.equal(node('#playerBuffer').hidden,true);
+  run('playerStale=false;state.player.buffer_seconds=null;renderPlayer()');assert.equal(node('#playerBuffer').hidden,true);
+  run('let requests=0,finishPoll;api=()=>{requests++;return new Promise(resolve=>finishPoll=resolve)};');
+  const first=run('loadPlayerState(true)');await run('loadPlayerState(true)');
+  assert.equal(run('requests'),1);
+  run('finishPoll(state.player)');await first;
+  assert.equal(run('playerLoadPending'),false);
+}
+
+(async()=>{await testRange();await testApp();await testRemote();await testSessionAndTelemetry();console.log('QoL UI: filters, volume drafts, serialized changes, stale state, voting, queue guard, session recovery and telemetry OK');})()
   .catch(error=>{console.error(error);process.exitCode=1;});
