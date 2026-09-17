@@ -11,7 +11,8 @@ const mime = { '.html':'text/html', '.js':'text/javascript', '.css':'text/css', 
 const soundpack = JSON.parse(fs.readFileSync(path.join(root, 'soundpack/manifest.json'), 'utf8'));
 const server = http.createServer((req, res) => {
   const requested = new URL(req.url, 'http://localhost').pathname;
-  const file = path.resolve(root, `.${requested === '/' ? '/index.html' : requested}`);
+  const routes = {'/':'/index.html', '/remote':'/remote.html', '/party':'/party.html'};
+  const file = path.resolve(root, `.${routes[requested] || requested}`);
   if (!file.startsWith(root + path.sep)) { res.writeHead(403); res.end(); return; }
   fs.readFile(file, (error, data) => {
     res.writeHead(error ? 404 : 200, { 'Content-Type': mime[path.extname(file)] || 'application/octet-stream', 'Cache-Control':'no-store' });
@@ -30,6 +31,8 @@ const server = http.createServer((req, res) => {
     const writes = [];
     let mode = 'active';
     let failResults = false;
+    let failPlayer = false;
+    let failAuth = false;
     const now = Date.now();
     const date = delta => new Date(now + delta).toISOString();
     const closed = {id:1,name:'Letzter Vereinsabend',status:'closed',starts_at:date(-172800000),closes_at:date(-86400000),max_budget:10};
@@ -39,12 +42,15 @@ const server = http.createServer((req, res) => {
     const songs = [song(1,'The Final Countdown','Europe',2),song(2,'Über den Wolken','Reinhard Mey')];
     const oldSongs = [song(3,'Bohemian Rhapsody','Queen'),song(4,'Dancing Queen','ABBA')];
     const member = {member_id:'fixture-dj',display_name:'Test-DJ',can_control_player:true};
-    const player = {available:true,queue:[{title:'Aktuelle Musik',artist:'Test',source:'votes'}],current_index:0,current:{title:'Aktuelle Musik',artist:'Test'},duration:200,position:40,volume:70,playing:false,repeat:'off',speaker:{name:'Test-Box',connected:true}};
+    const player = {available:true,queue:[{title:'Aktuelle Musik',artist:'Test',source:'votes'}],current_index:0,current:{title:'Aktuelle Musik',artist:'Test'},duration:200,position:40,volume:70,playing:false,repeat:'off',speaker:{name:'Test-Box',connected:true},buffer_seconds:18.5,buffer_target_seconds:30};
     page.on('pageerror', error => errors.push(error.message));
-    await page.route('**/api/v1/music/**', async route => {
+    await context.route('**/api/v1/music/**', async route => {
       const req = route.request();
       const url = new URL(req.url());
       const p = url.pathname;
+      if ((failPlayer && p.endsWith('/state')) || (failAuth && p.endsWith('/auth/me'))) {
+        return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({detail:'Test: Verbindung unterbrochen'})});
+      }
       if (req.method() !== 'GET') writes.push(p);
       let data = {items:[],stations:[],leaders:[]};
       if (p.endsWith('/cycles')) data = {cycles:mode === 'empty' ? [] : mode === 'planned' ? [planned] : mode === 'closed' ? [closed,{...active,status:'closed'},planned] : [active,closed,planned]};
@@ -113,6 +119,7 @@ const server = http.createServer((req, res) => {
     await page.locator('#resultSongs').getByText('Bohemian Rhapsody',{exact:true}).waitFor();
     await page.getByLabel('In dieser Playlist suchen').fill('ABBA');
     await page.locator('#resultSongs').getByText('Dancing Queen',{exact:true}).waitFor();
+    await page.waitForFunction(() => document.querySelectorAll('#resultSongs .song-card').length === 1);
     assert.equal(await page.locator('#resultSongs .song-card').count(),1);
     await page.getByLabel('Playlist auswählen',{exact:true}).selectOption('2');
     await page.locator('#resultPhase').getByText('Zwischenstand',{exact:true}).waitFor();
@@ -127,6 +134,33 @@ const server = http.createServer((req, res) => {
     await page.locator('#tab-player').waitFor({state:'visible'});
     assert.equal(writes.filter(p => p.includes('/player/queue/')).at(-1),'/api/v1/music/player/queue/cycles/1');
     assert.equal(await page.locator('#budgetCard').isVisible(),false);
+    await page.locator('#playerBufferText').getByText(/18,5 s im Puffer/).waitFor();
+    assert.equal(await page.locator('#playerBuffer').isVisible(),true);
+    await page.locator('#toast.show').waitFor({state:'hidden'});
+    if (process.env.NAV_SCREENSHOT_DIR) {
+      await page.screenshot({path:path.join(process.env.NAV_SCREENSHOT_DIR,'music-player-desktop.png'),fullPage:true});
+      await page.locator('.player-console').screenshot({path:path.join(process.env.NAV_SCREENSHOT_DIR,'music-player-detail.png')});
+    }
+    // A backend outage must preserve session, queue and volume, but disable stale controls.
+    failAuth = true;
+    await page.evaluate(() => restoreMember());
+    assert.equal(await page.evaluate(() => localStorage.getItem('clubiq_music_token')),'fixture-session');
+    failAuth = false; failPlayer = true;
+    await page.evaluate(() => loadPlayerState(true));
+    await page.locator('#playbackHealthTitle').getByText('Verbindung unterbrochen',{exact:true}).waitFor();
+    assert.equal(await page.locator('#playerBuffer').isVisible(),false);
+    assert.equal(await page.locator('#playerPlay').isDisabled(),true);
+    assert.equal(await page.locator('#playerTitle').textContent(),'Aktuelle Musik');
+    failPlayer = false; player.buffering = true;
+    await page.evaluate(() => loadPlayerState(true));
+    await page.locator('#playbackHealthTitle').getByText('Musik puffert nach',{exact:true}).waitFor();
+    assert.equal(await page.locator('#playerPlay').isDisabled(),false);
+    player.buffering = false; player.playing = true;
+    await page.evaluate(() => loadPlayerState(true));
+    await page.setViewportSize({width:390,height:844});
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),true,'mobile player must not overflow');
+    if (process.env.NAV_SCREENSHOT_DIR) await page.screenshot({path:path.join(process.env.NAV_SCREENSHOT_DIR,'music-player-mobile.png'),fullPage:true});
+    await page.setViewportSize({width:1280,height:900});
     await page.locator('#soundboard [data-play-sound]').first().waitFor();
     assert.equal(await page.locator('#soundboard [data-play-sound]').count(),13);
     await page.locator('#soundboardFilters').getByRole('button',{name:/^Darts /}).click();
@@ -193,7 +227,26 @@ const server = http.createServer((req, res) => {
       assert.equal(await page.locator('#queueSelectedPlaylist').isDisabled(),true);
       assert.equal(await page.locator('#cycleSelect').isDisabled(),true);
     }
+    // Companion screens share recovery behavior without erasing the last song.
+    const companion = await context.newPage();
+    companion.on('pageerror', error => errors.push(error.message));
+    await companion.goto(`${origin}/remote`);
+    await companion.locator('#remotePassword').fill('local-test-only');
+    await companion.locator('#remoteLoginForm button').click();
+    await companion.locator('#remoteTitle').getByText('Aktuelle Musik',{exact:true}).waitFor();
+    failPlayer = true;
+    await companion.evaluate(() => refresh(true));
+    assert.match(await companion.locator('#remoteStatus').textContent(),/letzter bekannter Stand/);
+    assert.equal(await companion.evaluate(() => sessionStorage.getItem('clubiq_music_admin')),'local-test-only');
+    failPlayer = false;
+    await companion.goto(`${origin}/party`);
+    await companion.locator('#partyTitle').getByText('Aktuelle Musik',{exact:true}).waitFor();
+    failPlayer = true;
+    await companion.evaluate(() => partyPoller.refresh());
+    assert.match(await companion.locator('#partyConnection').textContent(),/letzter bekannter Stand/);
+    assert.equal(await companion.locator('#partyTitle').textContent(),'Aktuelle Musik');
+    await companion.close();
     assert.deepEqual(errors,[]);
-    console.log('Browser navigation OK: voting/results, role gates, mobile layout, 13 recorded sounds, category filters, credits and silent audio decoding.');
+    console.log('Browser OK: navigation, role gates, mobile layout, recorded sounds, buffer UI, outage recovery and companion screens.');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode=1; }).finally(() => server.close());

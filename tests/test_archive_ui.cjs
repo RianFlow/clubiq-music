@@ -17,6 +17,7 @@ const context = vm.createContext({
   document: { querySelector: node, querySelectorAll: () => [], createElement: () => ({}) },
 });
 const source = fs.readFileSync('static/app.js', 'utf8');
+vm.runInContext(fs.readFileSync('static/reliability.js', 'utf8'), context);
 vm.runInContext(source.slice(0, source.indexOf('\nstart();')), context);
 const run = code => vm.runInContext(code, context);
 
@@ -68,6 +69,12 @@ async function test() {
   assert.equal(run('requests.at(-1)'), '/api/v1/music/player/queue/cycles/1');
   assert.match(run('messages.at(-1)'), /Vereinsabend/);
   // A slow response for an older selection must not overwrite the chosen list.
+  run('let finishRefresh; state.resultSongs=[song]; api=()=>new Promise(resolve=>{finishRefresh=resolve}); renderResults();');
+  const oldMarkup = node('#resultSongs').innerHTML;
+  const refreshing = run('loadResults()');
+  assert.equal(node('#resultSongs').innerHTML,oldMarkup,'same-cycle refresh must preserve visible and focused cards');
+  assert.match(node('#resultSummary').textContent,/wird aktualisiert/);
+  run('finishRefresh({playlist:[song]})'); await refreshing;
   run('let resolveOld; api = path => path.endsWith("/previous-playlist") ? Promise.resolve({cycle: null, songs: []}) : new Promise(resolve => {resolveOld = resolve;});');
   const pending = run('loadResults()');
   run('state.playlistCycle = active; state.resultSongs = []; resolveOld({playlist: [song]});');

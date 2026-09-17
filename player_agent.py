@@ -8,6 +8,7 @@ opened and every request additionally needs the shared player token.
 from __future__ import annotations
 
 import json
+import math
 import os
 import random
 import re
@@ -429,7 +430,8 @@ class MpvController:
             self.last_error = ''
         prepared = None if retry else self.preparer.get(item['url'])
         options = {**(prepared['options'] if prepared else {}), 'keep-open': 'yes',
-                   'start': str(self.resume_position)}
+                   'start': str(self.resume_position),
+                   'cache-pause-initial': 'yes', 'cache-pause-wait': '3'}
         self.command("loadfile", prepared['url'] if prepared else item["url"], "replace", -1, options)
         self.track_was_active = False
         self.command("set_property", "pause", not play)
@@ -497,8 +499,27 @@ class MpvController:
             self.command('set_property', 'pause', True, start=False)
             self.save_state()
             self.advance_after_end()
-        elif not self.property('pause', True):
+        elif not self.property('pause', True) and self.ready_to_prepare_next():
             self.preparer.prepare(self.next_url())
+
+    def buffered_seconds(self) -> float | None:
+        """mpv reports an estimate, not a guarantee; missing is NOT zero."""
+        value = self.property('demuxer-cache-duration', None)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            return None
+        return round(max(0.0, value), 1)
+
+    def ready_to_prepare_next(self) -> bool:
+        # Give the current stream priority over a second yt-dlp/network request.
+        if self.property('paused-for-cache', False):
+            return False
+        buffered = self.buffered_seconds()
+        if buffered is not None and buffered >= 10:
+            return True
+        # Also allow short/fully cached songs. Missing telemetry alone is not
+        # permission to compete with an already struggling network connection.
+        cache = self.property('demuxer-cache-state', {})
+        return isinstance(cache, dict) and cache.get('eof-cached') is True
 
     def set_queue(self, items: list[dict]) -> None:
         with self.lock:
@@ -777,7 +798,10 @@ class MpvController:
         metadata = self.property("metadata", {}) if running and self.source_mode == "radio" else {}
         if not isinstance(metadata, dict):
             metadata = {}
-        radio_title = metadata.get("icy-title") or metadata.get("title") or self.property("media-title", "")
+        radio_title = metadata.get("icy-title") or metadata.get("title")
+        if not radio_title and running and self.source_mode == "radio":
+            radio_title = self.property("media-title", "")
+        buffering = bool(self.property('paused-for-cache', False)) if running else False
         item = ({
             "title": radio_title or self.radio_station.get("name", "Internetradio"),
             "artist": self.radio_station.get("name", "Internetradio"),
@@ -789,7 +813,9 @@ class MpvController:
             "running": running,
             "playing": not idle and not paused and not self.playlist_loading and not self.playlist_retry_at,
             "loading": self.playlist_loading or bool(self.playlist_retry_at),
-            "buffering": bool(self.property('paused-for-cache', False)) if running else False,
+            "buffering": buffering,
+            "buffer_seconds": self.buffered_seconds() if running and not idle and not self.sound_active else None,
+            "buffer_target_seconds": 30,
             "next_prepared": bool(self.preparer.get(self.next_url())) if self.source_mode == 'playlist' else False,
             "paused": paused,
             "position": round(float(position), 1),

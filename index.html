@@ -8,10 +8,11 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/pics/logo.png">
   <link rel="apple-touch-icon" href="/pics/logo.png">
-  <link rel="stylesheet" href="/static/app.css?v=20260902-3">
+  <link rel="stylesheet" href="/static/app.css?v=20260915-1">
   <script defer src="/static/images.js?v=20260902-3"></script>
   <script defer src="/static/range-control.js?v=20260902-3"></script>
-  <script defer src="/static/app.js?v=20260902-3"></script>
+  <script defer src="/static/reliability.js?v=20260915-1"></script>
+  <script defer src="/static/app.js?v=20260915-1"></script>
 </head>
 <body>
   <header class="topbar">
@@ -139,36 +140,34 @@
         <button id="refreshSavedSpeakers" class="button ghost" type="button">Liste aktualisieren</button>
         <p id="savedSpeakerStatus" class="muted" role="status" aria-live="polite">Box einschalten und hier verbinden – eine neue Suche ist nicht nötig.</p>
       </section>
-      <section class="radio-panel panel-box">
-        <div class="section-head compact"><div><p class="eyebrow">Alternative Wiedergabe</p><h3>Internetradio</h3></div><button id="stopRadio" class="button ghost small" data-player-control type="button" hidden>Zur Playlist</button></div>
-        <div id="radioStations" class="radio-grid"><div class="empty">Noch keine Radiosender eingerichtet.</div></div>
-        <p class="radio-playback-status muted" role="status" aria-live="polite" hidden></p>
-      </section>
-      <nav class="companion-actions" aria-label="Weitere Player-Ansichten">
-        <a class="button ghost" href="/remote">DJ-Fernbedienung</a>
-        <a class="button ghost" href="/party">Party-Anzeige</a>
-      </nav>
       <div class="player-layout">
         <article class="player-console">
           <div class="now-playing">
             <img id="playerCover" class="player-cover" src="/pics/logo.png" alt="">
             <div><p class="eyebrow">Jetzt läuft</p><h3 id="playerTitle">Noch kein Song gewählt</h3><p id="playerArtist" class="muted">Playlist aus Abstimmung und Fallback-Regeln erstellen</p></div>
           </div>
-          <p id="playerPlaybackStatus" class="muted" role="status" aria-live="polite" hidden></p>
+          <section id="playbackHealth" class="playback-health" data-level="info" aria-label="Wiedergabestatus">
+            <strong id="playbackHealthTitle" role="status" aria-live="polite">Status wird geprüft …</strong>
+            <p id="playerPlaybackStatus" class="muted"></p>
+            <label for="playerBuffer" id="playerBufferText">Pufferstand noch nicht verfügbar</label>
+            <meter id="playerBuffer" min="0" max="30" value="0" hidden></meter>
+            <small id="playerUpdated" class="muted"></small>
+          </section>
           <input id="playerProgress" class="player-progress" type="range" min="0" max="1" value="0" aria-label="Wiedergabeposition">
           <div class="time-row"><span id="playerPosition">0:00</span><span id="playerDuration">0:00</span></div>
           <div id="playerControls" class="player-controls" data-player-control hidden>
-            <button class="player-icon" data-player-action="shuffle" type="button" title="Zufällige Reihenfolge">⇄</button>
-            <button class="player-icon" data-player-action="previous" type="button" title="Vorheriger Song">‹</button>
-            <button id="playerPlay" class="player-icon primary" data-player-action="play" type="button" title="Wiedergabe">▶</button>
-            <button class="player-icon" data-player-action="next" type="button" title="Nächster Song">›</button>
-            <button id="playerRepeat" class="player-icon" data-player-action="repeat" type="button" title="Wiederholen">↻</button>
+            <button class="player-icon" data-player-action="shuffle" type="button" title="Zufällige Reihenfolge" aria-label="Zufällige Reihenfolge">⇄</button>
+            <button class="player-icon" data-player-action="previous" type="button" title="Vorheriger Song" aria-label="Vorheriger Song">‹</button>
+            <button id="playerPlay" class="player-icon primary" data-player-action="play" type="button" title="Wiedergabe" aria-label="Wiedergabe">▶</button>
+            <button class="player-icon" data-player-action="next" type="button" title="Nächster Song" aria-label="Nächster Song">›</button>
+            <button id="playerRepeat" class="player-icon" data-player-action="repeat" type="button" title="Wiederholen" aria-label="Wiederholmodus wechseln">↻</button>
           </div>
           <div class="volume-row">
             <button id="playerMute" class="player-icon compact" type="button" data-player-action="mute" title="Stumm">🔊</button>
             <input id="playerVolume" type="range" min="0" max="100" value="70" aria-label="Lautstärke">
             <strong id="playerVolumeValue">70 %</strong>
           </div>
+          <div class="next-track"><strong id="playerNextTrack">Noch keine Warteschlange</strong><small id="playerPreparation" class="muted"></small></div>
           <div id="playerLoginGate" class="player-login">
             <span>Zum Steuern des Players bitte einmal anmelden.</span>
             <button class="button primary small" data-open-member type="button">Anmelden</button>
@@ -189,6 +188,15 @@
           <div id="playerQueue" class="player-queue"><div class="empty">Noch keine Songs geladen.</div></div>
         </aside>
       </div>
+      <nav class="companion-actions" aria-label="Weitere Player-Ansichten">
+        <a class="button ghost" href="/remote">DJ-Fernbedienung</a>
+        <a class="button ghost" href="/party">Party-Anzeige</a>
+      </nav>
+      <section class="radio-panel panel-box">
+        <div class="section-head compact"><div><p class="eyebrow">Alternative Wiedergabe</p><h3>Internetradio</h3></div><button id="stopRadio" class="button ghost small" data-player-control type="button" hidden>Zur Playlist</button></div>
+        <div id="radioStations" class="radio-grid"><div class="empty">Noch keine Radiosender eingerichtet.</div></div>
+        <p class="radio-playback-status muted" role="status" aria-live="polite" hidden></p>
+      </section>
       <section class="soundboard-panel">
         <div class="section-head compact"><div><p class="eyebrow">Direkte Sounds</p><h3>Soundboard</h3></div></div>
         <p class="muted">Echte Aufnahmen: Dart-Treffer, Jubel, Lachen und Instrumente. Nur freigegebene DJs können sie auf der Box abspielen. Die Musik wird kurz unterbrochen und danach fortgesetzt. <a href="/static/soundboard-credits.html" target="_blank" rel="noopener">Sound-Quellen & Lizenzen</a></p>

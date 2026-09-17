@@ -22,7 +22,7 @@ class PlaybackTests(unittest.TestCase):
         self.player.current_index = 0
         self.player.save_state = MagicMock()
         self.player.command = MagicMock()
-        self.props = {'idle-active': False, 'pause': False}
+        self.props = {'idle-active': False, 'pause': False, 'demuxer-cache-duration': 15}
         self.player.property = lambda key, default=None: self.props.get(key, default)
         self.player.preparer.prepare = MagicMock()
 
@@ -118,6 +118,47 @@ class PlaybackTests(unittest.TestCase):
         self.loaded()
         self.player.check_playlist()
         self.player.preparer.prepare.assert_called_once_with(self.player.queue[1]['url'])
+
+    def test_next_track_waits_for_current_stream_buffer(self):
+        self.loaded()
+        for value in (None, 0, 9.9, float('nan'), 'invalid'):
+            self.props['demuxer-cache-duration'] = value
+            self.player.check_playlist()
+        self.player.preparer.prepare.assert_not_called()
+        self.props['demuxer-cache-duration'] = 10
+        self.player.check_playlist()
+        self.player.preparer.prepare.assert_called_once()
+
+    def test_buffering_has_priority_over_next_track(self):
+        self.loaded()
+        self.props.update({'paused-for-cache': True, 'demuxer-cache-duration': 30})
+        self.player.check_playlist()
+        self.player.preparer.prepare.assert_not_called()
+
+    def test_short_fully_cached_song_can_prepare_next(self):
+        self.loaded()
+        self.props.update({'demuxer-cache-duration': 2, 'demuxer-cache-state': {'eof-cached': True}})
+        self.player.check_playlist()
+        self.player.preparer.prepare.assert_called_once()
+
+    def test_buffer_telemetry_is_optional_and_finite(self):
+        self.player.process = MagicMock()
+        self.player.process.poll.return_value = None
+        with patch.object(agent, 'MPV_SOCKET', MagicMock()):
+            for value in (None, 'invalid', True, float('nan'), float('inf')):
+                self.props['demuxer-cache-duration'] = value
+                self.assertIsNone(self.player.state()['buffer_seconds'])
+            self.props['demuxer-cache-duration'] = 12.34
+            self.assertEqual(self.player.state()['buffer_seconds'], 12.3)
+            self.assertEqual(self.player.state()['buffer_target_seconds'], 30)
+            self.player.sound_active = True
+            self.assertIsNone(self.player.state()['buffer_seconds'])
+
+    def test_initial_buffer_is_per_song_not_global_for_soundboard(self):
+        self.begin()
+        options = self.player.command.call_args_list[0].args[-1]
+        self.assertEqual(options['cache-pause-initial'], 'yes')
+        self.assertEqual(options['cache-pause-wait'], '3')
 
     def test_manual_start_resets_failure_budget(self):
         self.player.playlist_retry_count = 1

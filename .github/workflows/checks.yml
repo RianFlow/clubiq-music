@@ -33,6 +33,7 @@ jobs:
         run: |
           node tests/test_archive_ui.cjs
           node tests/test_qol_ui.cjs
+          node tests/test_reliability.cjs
       - name: Getrennte Musikbereiche im Browser prüfen
         run: |
           npm install --prefix "$RUNNER_TEMP/music-browser-tests" --no-audit --no-fund --package-lock=false playwright@1.62.1

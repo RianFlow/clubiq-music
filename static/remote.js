@@ -7,15 +7,13 @@ let refreshGeneration = 0;
 let mutationVersion = 0;
 let mutationsPending = 0;
 let stale = true;
+let refreshPending = false;
 
 async function api(path, options = {}) {
   const headers = new Headers(options.headers || {});
   headers.set("X-Admin-Password", password);
   if (options.body) headers.set("Content-Type", "application/json");
-  const response = await fetch(path, {...options, headers});
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.detail || data.error || `Fehler ${response.status}`);
-  return data;
+  return musicRequestJson(path, {...options, headers});
 }
 function time(value){const n=Math.max(0,Math.floor(Number(value)||0));return `${Math.floor(n/60)}:${String(n%60).padStart(2,"0")}`;}
 function esc(value=""){return String(value).replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]);}
@@ -26,7 +24,8 @@ function render() {
   setMediaImage($("#remoteCover"),current.thumbnail,player.source_mode==="radio");
   $("#remoteTitle").textContent=current.title||"Noch kein Song";
   $("#remoteArtist").textContent=current.artist||"–";
-  $("#remotePlaybackStatus").textContent=player.last_error||(player.loading?"Titel wird geladen …":player.buffering?"Audio wird gepuffert …":player.next_prepared?"Nächster Titel ist vorbereitet.":"");
+  const summary=musicPlaybackSummary(player,stale);
+  $("#remotePlaybackStatus").textContent=`${summary.title}. ${summary.hint}`;
   $("#remotePlaybackStatus").hidden=!$("#remotePlaybackStatus").textContent;
   remoteRanges.progress.update(player.position, {max:Math.max(1,Number(player.duration)||1), disabled:stale||player.source_mode==="radio"||!Number(player.duration)});
   $("#remoteDuration").textContent=time(player.duration);
@@ -41,16 +40,20 @@ function render() {
   document.querySelectorAll("[data-play-index]").forEach(button=>button.addEventListener("click",()=>playIndex(Number(button.dataset.playIndex))));
 }
 async function refresh(silent=false){
-  if(mutationsPending)return;
+  if(mutationsPending||refreshPending)return;
+  refreshPending=true;
   const generation=++refreshGeneration, mutation=mutationVersion;
   try{
     const result=await api("/api/v1/music/player/state");
+    if(!Array.isArray(result.queue))throw new Error("Player-Status unvollständig.");
     if(generation!==refreshGeneration||mutation!==mutationVersion)return;
     player=result;stale=false;render();setConnection(Boolean(player.speaker?.connected),player.speaker?.connected?"Box verbunden":"Box getrennt");
+    return true;
   }catch(error){
     if(generation!==refreshGeneration||mutation!==mutationVersion)return;
     stale=true;render();setConnection(false,"Player nicht erreichbar · letzter bekannter Stand");if(!silent)throw error;
-  }
+    return false;
+  }finally{refreshPending=false;}
 }
 async function mutatePlayer(path,body){
   if(stale)throw new Error("Bitte warten, bis der Player wieder erreichbar ist.");
@@ -73,6 +76,10 @@ $("#remoteLoginForm").addEventListener("submit",login);
 document.querySelectorAll("[data-action]").forEach(button=>button.addEventListener("click",()=>{if(mutationsPending)return;let action=button.dataset.action;let value=null;if(action==="play"&&(player.playing||player.loading))action="pause";if(action==="mute")value=!player.muted;command(action,value).catch(error=>setConnection(false,error.message));}));
 $("#remoteRefresh").addEventListener("click",()=>refresh().catch(error=>setConnection(false,error.message)));
 $("#remoteLogout").addEventListener("click",()=>{sessionStorage.removeItem("clubiq_music_admin");location.reload();});
-if(password){$("#remoteLogin").hidden=true;$("#remoteArea").hidden=false;refresh().catch(()=>{sessionStorage.removeItem("clubiq_music_admin");location.reload();});}
-setInterval(()=>{if(password&&!document.hidden)refresh(true);},2500);
+if(password){$("#remoteLogin").hidden=true;$("#remoteArea").hidden=false;refresh().catch(error=>setConnection(false,error.message));}
+const remotePoller=createMusicPoller(()=>refresh(true),{enabled:()=>Boolean(password)&&!document.hidden});
+remotePoller.start();
+window.addEventListener("online",remotePoller.refresh);
+window.addEventListener("focus",remotePoller.refresh);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)remotePoller.refresh();});
 if("serviceWorker" in navigator&&window.isSecureContext)navigator.serviceWorker.register("/sw.js").catch(()=>{});

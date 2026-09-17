@@ -26,6 +26,9 @@ Player-Bedienung. Im geschützten DJ-Modus kann die Verwaltung Songs suchen,
 direkt einreihen, verschieben, sofort abspielen und entfernen. Die genaue Bedienung
 steht in [DJ, Warteschlange und Aktivitätsliste](docs/DJ-UND-AKTIVITAET.md).
 
+Die Überarbeitung von Pufferanzeige, Verbindungsfehlern und Bedienung sowie die
+nächsten Qualitätsziele stehen im [Musik-Qualitätsplan](docs/MUSIK-QUALITAETSPLAN-2026-09.md).
+
 ## Abgeschlossene Abstimmungen abspielen
 
 Die drei Hauptbereiche sind getrennt: **Abstimmen** zeigt nur die aktuelle bzw.
