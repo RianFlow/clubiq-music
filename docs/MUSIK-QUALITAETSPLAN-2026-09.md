@@ -35,6 +35,9 @@ gewünscht außerhalb des aktuellen Pakets.
   bis auf 30 Sekunden. Beim Zurückkehren in die App wird sofort neu geprüft.
 - Versteckte Ansichten fragen nicht ständig weiter ab. Gespeicherte Boxen werden
   höchstens einmal pro Minute automatisch und weiterhin manuell aktualisiert.
+- Eine Aktualisierung derselben Playlist lässt die sichtbaren Songs und den
+  Suchfilter stehen. Beim Wechsel zu einer anderen Playlist wird weiterhin neu
+  geladen; alte Songs werden nicht unter einer falschen Überschrift angezeigt.
 - Netzfehler und Serverfehler löschen keine Mitgliedsanmeldung. Ein vom Server
   bestätigtes ungültiges Mitgliedstoken (401) wird weiterhin verworfen.
 - API-Antworten haben ein Zeitlimit; ungültiges JSON/HTML wird als Fehler behandelt.

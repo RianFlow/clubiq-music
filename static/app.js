@@ -197,9 +197,11 @@ function renderResults() {
   const query = $("#resultFilter").value || "";
   const visible = state.resultSongs.filter(song => matchesSong(song, query));
   $("#clearResultFilter").hidden = !query;
-  $("#resultSummary").textContent = state.resultLoading || state.resultError || !state.playlistCycle ? ""
-    : `${visible.length} von ${state.resultSongs.length} Songs · ${state.resultSongs.reduce((sum, song) => sum + song.total_points, 0)} Punkte`;
-  const html = state.resultLoading ? '<div class="empty">Playlist wird geladen …</div>'
+  $("#resultSummary").textContent = state.resultError || !state.playlistCycle ? ""
+    : `${visible.length} von ${state.resultSongs.length} Songs · ${state.resultSongs.reduce((sum, song) => sum + song.total_points, 0)} Punkte${state.resultLoading ? " · wird aktualisiert …" : ""}`;
+  // Same-playlist refreshes must not remove focused cards or flash an empty list.
+  // Switching to another cycle clears resultSongs before requesting its data.
+  const html = state.resultLoading && !state.resultSongs.length ? '<div class="empty">Playlist wird geladen …</div>'
     : state.resultError ? `<div class="empty">${esc(state.resultError)} Bitte erneut aktualisieren.</div>`
     : !state.playlistCycle ? '<div class="empty">Hier erscheinen eure Playlists, sobald eine Abstimmung gestartet ist.</div>'
     : !state.resultSongs.length ? '<div class="empty">Keine Songs vorgeschlagen. Beim Laden in den Player gelten trotzdem die eingestellten Auffüllregeln.</div>'
