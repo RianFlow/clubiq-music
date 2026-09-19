@@ -69,11 +69,31 @@ bleibt unverändert (45 s durchgehende Störung, nur wenn vorher ausdrücklich a
 
 Referenz: [mpv-Cache-Dokumentation](https://mpv.io/manual/master/#cache).
 
-### Lokaler Prüfstand, 19.09.2026
+### Prüfstand, 19.09.2026
 
-126 Python-Tests bestanden; 11 PostgreSQL-Integrationstests mangels lokaler
-Datenbank übersprungen. Alle vier JavaScript-Testsuiten, Syntaxprüfungen und der
-Chrome-Browsertest mit isolierten Testdaten bestanden. Der erweiterte echte
-mpv-Test wurde hier nicht ausgeführt (keine nutzbare lokale Linux-/mpv-Laufzeit).
-Er bleibt vor Veröffentlichung erforderlich. Keine Installation auf dem Raspberry
-und kein praktischer Test mit der Vereinsheim-Box in diesem Arbeitsschritt.
+Alle 137 Python-Tests einschließlich der PostgreSQL-Integrationstests bestanden.
+Die Datenbanktests liefen auf dem Raspberry gegen eine neue, wegwerfbare PostgreSQL-
+Instanz in einem separaten internen Docker-Netz ohne veröffentlichte Ports, ohne
+Produktionszugangsdaten und ohne Vereinsdaten. Testcontainer und Netzwerk wurden
+anschließend entfernt. Die produktive Datenbank wurde nicht verwendet.
+
+Alle vier JavaScript-Testsuiten, Syntaxprüfungen und der Chrome-Browsertest mit
+isolierten Testdaten bestanden ebenfalls.
+
+Der erweiterte echte mpv-Test bestand auf dem Raspberry (aarch64, mpv 0.40.0):
+separater Prozess, temporärer Socket/Statusdatei und stumme Audioausgabe. Nachweis:
+
+- Reguläres Titelende wechselt genau einmal; Playlist-Ende bleibt pausiert.
+- Liedprofil 90/10/15 s; Radio und Soundboard erben das Liedprofil nicht.
+- Sehr kurze vollständig geladene Dateien starten ohne künstliche Zehn-Sekunden-Pause.
+- Eine künstlich langsame HTTP-Quelle auf Loopback erzeugt einen echten Pufferabriss.
+- Neun Sekunden nachgelieferte Musik reichen nicht zum Fortsetzen; erst weitere
+  Daten beenden die Pause. Danach wurden tatsächlich 90 s Puffer gemessen.
+- Kein Titelwechsel/Neustart bei diesem Nachladen. Eine fehlende Datei wird genau
+  einmal erneut versucht und anschließend angehalten.
+
+mpv liefert die ausgeschaltete Cache-Option im JSON-IPC als `false`; die Testprüfung
+akzeptiert diesen Wert sowie die textuelle Darstellung `no`.
+
+Keine Installation des Updates und kein Neustart produktiver Dienste in diesem
+Prüfschritt. Ein hörbarer Praxistest mit der Vereinsheim-Box steht noch aus.

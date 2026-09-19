@@ -1,13 +1,109 @@
 #!/usr/bin/env python3
 """Test real mpv loading/EOF using null audio, isolated sockets and temporary state."""
 import importlib.util
+import io
 import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import wave
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+def check_network_buffer(player):
+    """Exercise a real underrun on loopback, with silence and no external media."""
+    audio = io.BytesIO()
+    with wave.open(audio, 'wb') as wav:
+        wav.setnchannels(2)
+        wav.setsampwidth(2)
+        wav.setframerate(44100)
+        wav.writeframes(b'\x00' * 4 * 44100 * 120)
+    payload = audio.getvalue()
+    rate = 4 * 44100
+    refill, finish, stop = threading.Event(), threading.Event(), threading.Event()
+
+    class Stream(BaseHTTPRequestHandler):
+        def log_message(self, *_):
+            pass
+
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header('Content-Type', 'audio/wav')
+            self.send_header('Content-Length', str(len(payload)))
+            self.end_headers()
+            offset = 44 + 12 * rate
+            try:
+                self.wfile.write(payload[:offset])
+                self.wfile.flush()
+                # Keep the connection alive but deliver much less than playback
+                # consumes. This simulates weak throughput, not a dead socket.
+                deadline = time.monotonic() + 25
+                while not refill.is_set() and not stop.is_set() and time.monotonic() < deadline:
+                    self.wfile.write(payload[offset:offset + 1764])
+                    self.wfile.flush()
+                    offset += 1764
+                    stop.wait(.25)
+                if stop.is_set():
+                    return
+                self.wfile.write(payload[offset:offset + 9 * rate])
+                self.wfile.flush()
+                offset += 9 * rate
+                finish.wait(8)
+                if not stop.is_set():
+                    self.wfile.write(payload[offset:])
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Stream)
+    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    try:
+        player.queue = [{'url': f'http://127.0.0.1:{server.server_port}/silence.wav', 'title': 'buffer test'}]
+        player.current_index = 0
+        player.load_current()
+        deadline = time.monotonic() + 25
+        started = underrun = False
+        while time.monotonic() < deadline:
+            player.check_buffering()
+            player.check_playlist()
+            started = started or not player.initial_buffer_pending
+            if started and player.property('paused-for-cache', False):
+                underrun = True
+                break
+            time.sleep(.1)
+        assert started and underrun, 'Slow source must cause a real cache pause after initial playback'
+        assert player.current_index == 0 and player.playlist_retry_count == 0, 'An underrun must not skip or restart the song'
+        refill.set()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and (player.buffered_seconds() or 0) < 7:
+            time.sleep(.1)
+        buffered = player.buffered_seconds()
+        assert buffered is not None and 7 <= buffered < 15, f'Expected partial refill: {buffered!r}'
+        time.sleep(.4)
+        assert player.property('paused-for-cache', False), 'Nine seconds must not release the 15-second refill threshold'
+        finish.set()
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            player.check_buffering()
+            if not player.property('paused-for-cache', True) and (player.buffered_seconds() or 0) >= 80:
+                break
+            time.sleep(.1)
+        assert not player.property('paused-for-cache', True), 'Playback must resume after enough data arrives'
+        assert (player.buffered_seconds() or 0) >= 80, 'Player must actually fill the larger cache, not just advertise it'
+        assert player.current_index == 0 and player.playlist_retry_count == 0
+        print('OK: real HTTP underrun, 15-second refill gate and >80-second audio reserve', flush=True)
+    finally:
+        stop.set()
+        refill.set()
+        finish.set()
+        player.command('stop', start=False)
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=2)
 
 
 def main():
@@ -72,8 +168,11 @@ def main():
             player.command('loadfile', str(root / 'a.wav'), 'replace', -1,
                            {'cache': 'no', 'cache-pause-initial': 'no', 'keep-open': 'no'})
             time.sleep(.2)
-            assert player.property('cache') == 'no', 'Soundboard must not inherit song caching'
+            cache = player.property('cache')
+            # mpv's JSON IPC represents the flag-choice "no" as false on 0.40.
+            assert cache is False or cache == 'no', f'Soundboard must not inherit song caching: {cache!r}'
             print('OK: real per-file buffer profiles, short songs and refill threshold', flush=True)
+            check_network_buffer(player)
             player.queue[0]['url'] = str(root / 'missing.wav')
             player.current_index = 0
             player.load_current()
