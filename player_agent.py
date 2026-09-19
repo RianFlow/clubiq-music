@@ -35,6 +35,21 @@ BLUETOOTH_LOCK = threading.RLock()
 RUNTIME_BIN = Path('/opt/clubiq-music-runtime/bin')
 YTDLP_BIN = str(RUNTIME_BIN / 'yt-dlp')
 
+# Seconds of media, not seconds of wall-clock waiting. Radio deliberately uses
+# a smaller reserve; soundboard clips must never inherit the song profile.
+BUFFER_PROFILES = {
+    'playlist': {'target': 90, 'start': 10, 'refill': 15},
+    'radio': {'target': 30, 'start': 1, 'refill': 3},
+}
+
+
+def buffer_options(mode: str) -> dict:
+    profile = BUFFER_PROFILES[mode]
+    return {'cache': 'yes', 'cache-secs': str(profile['target']),
+            'demuxer-readahead-secs': str(profile['target']),
+            'demuxer-max-bytes': '32MiB', 'cache-pause': 'yes',
+            'cache-pause-initial': 'yes', 'cache-pause-wait': str(profile['start'])}
+
 
 def player_environment() -> dict:
     return {**os.environ, 'PATH': f"{RUNTIME_BIN}:{os.environ.get('PATH', '/usr/bin:/bin')}",
@@ -241,6 +256,10 @@ class MpvController:
         self.playlist_retry_count = 0
         self.playlist_retry_at = 0.0
         self.end_handled = False
+        self.initial_buffer_pending = False
+        self.buffer_start_position = 0.0
+        self.last_buffer_phase = ''
+        self.last_bluetooth_connected = None
         self.history = []
         self.history_dirty = False
         self.history_recorded = False
@@ -466,14 +485,16 @@ class MpvController:
         prepared = None if retry else self.preparer.get(item['url'])
         options = {**(prepared['options'] if prepared else {}), 'keep-open': 'yes',
                    'start': str(self.resume_position),
-                   'cache-pause-initial': 'yes', 'cache-pause-wait': '3'}
+                   **buffer_options('playlist')}
+        self.begin_buffering(self.resume_position)
         self.command("loadfile", prepared['url'] if prepared else item["url"], "replace", -1, options)
         self.track_was_active = False
         self.command("set_property", "pause", not play)
         self.save_state()
 
-    def fail_current(self, detail: str) -> None:
+    def fail_current(self, detail: str, reason: str = 'load_failed') -> None:
         """Retry the SAME item once. Never turn a failed load into a song end."""
+        self.log_diagnostic(reason)
         self.playlist_loading = False
         self.track_was_active = False
         self.command('stop', start=False)
@@ -518,14 +539,14 @@ class MpvController:
         if not self.track_was_active or self.end_handled:
             return
         if idle:
-            self.fail_current('Die Wiedergabe ist unerwartet abgebrochen.')
+            self.fail_current('Die Wiedergabe ist unerwartet abgebrochen.', 'stream_aborted')
             return
         # keep-open keeps the real EOF visible, unlike the old idle heuristic.
         if self.property('eof-reached', False):
             duration = float(self.property('duration', 0) or 0)
             position = float(self.property('time-pos', self.resume_position) or 0)
             if duration > 0 and position + 5 < duration:
-                self.fail_current('Der Audiostream ist vor dem Liedende abgebrochen.')
+                self.fail_current('Der Audiostream ist vor dem Liedende abgebrochen.', 'stream_premature_eof')
                 return
             self.end_handled = True
             self.track_was_active = False
@@ -543,6 +564,49 @@ class MpvController:
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
             return None
         return round(max(0.0, value), 1)
+
+    def log_diagnostic(self, event: str, buffered: float | None = None) -> None:
+        # No stream URLs, tokens, cookies, member names or raw extractor errors.
+        print(json.dumps({'component': 'playback', 'event': event,
+                          'source': self.source_mode, 'queue_index': self.current_index,
+                          'buffer_seconds': buffered}, ensure_ascii=False), flush=True)
+
+    def observe_bluetooth(self, connected: bool) -> None:
+        if connected != self.last_bluetooth_connected:
+            self.log_diagnostic('bluetooth_connected' if connected else 'bluetooth_disconnected')
+            self.last_bluetooth_connected = connected
+
+    def begin_buffering(self, position: float = 0.0) -> None:
+        self.initial_buffer_pending = True
+        self.buffer_start_position = position
+        self.last_buffer_phase = ''
+
+    def check_buffering(self) -> None:
+        """Raise the refill threshold only after playback really progressed.
+
+        Decoded audio parameters alone are not proof: they are already present
+        during the initial cache pause. Manual pause must not release it either.
+        """
+        if self.sound_active or self.property('idle-active', True):
+            return
+        paused = self.property('pause', None)
+        buffering = self.property('paused-for-cache', None)
+        if paused is None or buffering is None:
+            return  # IPC failure is not a successful start or a buffer underrun.
+        position = self.property('time-pos', None)
+        if (self.initial_buffer_pending and not paused and not buffering
+                and isinstance(position, (int, float)) and not isinstance(position, bool)
+                and math.isfinite(position) and position > self.buffer_start_position + .05
+                and self.property('audio-params', None)):
+            self.command('set_property', 'cache-pause-wait',
+                         BUFFER_PROFILES[self.source_mode]['refill'], start=False)
+            self.initial_buffer_pending = False
+        if paused:
+            return
+        phase = ('starting' if self.initial_buffer_pending else 'refilling') if buffering else 'ready'
+        if phase != self.last_buffer_phase:
+            self.log_diagnostic('buffer_' + phase, self.buffered_seconds())
+            self.last_buffer_phase = phase
 
     def ready_to_prepare_next(self) -> bool:
         # Give the current stream priority over a second yt-dlp/network request.
@@ -696,7 +760,8 @@ class MpvController:
 
         def worker() -> None:
             try:
-                self.command("loadfile", url, "replace", start=False)
+                self.command("loadfile", url, "replace", -1,
+                             {'cache': 'no', 'cache-pause-initial': 'no', 'keep-open': 'no'}, start=False)
                 self.command("set_property", "pause", False, start=False)
                 active_seen = False
                 deadline = time.monotonic() + 35
@@ -743,7 +808,8 @@ class MpvController:
             "logo_url": str(station.get("logo_url") or "")[:1000],
             "genre": str(station.get("genre") or "")[:80],
         }
-        self.command("loadfile", stream_url, "replace", start=False)
+        self.begin_buffering()
+        self.command("loadfile", stream_url, "replace", -1, buffer_options('radio'), start=False)
         self.command("set_property", "pause", not play, start=False)
         self.resume_paused = not play
         self.track_was_active = False
@@ -760,7 +826,9 @@ class MpvController:
         stream_url = fallback_url if use_fallback else str(self.radio_station["stream_url"])
         self.radio_retry_count += 1
         self.radio_last_load_at = time.monotonic()
-        self.command("loadfile", stream_url, "replace", start=False)
+        self.log_diagnostic('radio_reconnect')
+        self.begin_buffering()
+        self.command("loadfile", stream_url, "replace", -1, buffer_options('radio'), start=False)
         self.command("set_property", "pause", False, start=False)
         source = "Ersatz-Stream" if use_fallback else "Haupt-Stream"
         self.last_error = f"Internetradio: {source} wird erneut verbunden."
@@ -951,11 +1019,15 @@ class MpvController:
         return {
             "available": True,
             "running": running,
-            "playing": not idle and not paused and not self.playlist_loading and not self.playlist_retry_at,
+            "playing": not idle and not paused and not buffering and not self.playlist_loading and not self.playlist_retry_at,
             "loading": self.playlist_loading or bool(self.playlist_retry_at),
             "buffering": buffering,
             "buffer_seconds": self.buffered_seconds() if running and not idle and not self.sound_active else None,
-            "buffer_target_seconds": 30,
+            "buffer_target_seconds": BUFFER_PROFILES[self.source_mode]['target'],
+            "buffer_start_seconds": BUFFER_PROFILES[self.source_mode]['start'],
+            "buffer_refill_seconds": BUFFER_PROFILES[self.source_mode]['refill'],
+            "buffer_phase": ('idle' if idle or self.sound_active else 'paused' if paused else
+                             'starting' if self.initial_buffer_pending else 'refilling' if buffering else 'ready'),
             "next_prepared": bool(self.preparer.get(self.next_url())) if self.source_mode == 'playlist' else False,
             "paused": paused,
             "position": round(float(position), 1),
@@ -1122,12 +1194,14 @@ def reconnect_loop(stop: threading.Event) -> None:
         if address and BLUETOOTH_LOCK.acquire(blocking=False):
             try:
                 connected = bool(device_info(address)["connected"])
+                PLAYER.observe_bluetooth(connected)
                 if not connected:
                     PLAYER.checkpoint_playback()
                     PLAYER.stop_mpv()
                     bluetoothctl("power on")
                     bluetoothctl(f"connect {address}", timeout=12)
                     connected = bool(device_info(address)["connected"])
+                    PLAYER.observe_bluetooth(connected)
                 if connected and not (PLAYER.process and PLAYER.process.poll() is None):
                     with PLAYER.lock:
                         PLAYER.restore_session()
@@ -1144,6 +1218,7 @@ def playback_loop(stop: threading.Event) -> None:
             continue
         try:
             with PLAYER.lock:
+                PLAYER.check_buffering()
                 PLAYER.check_playlist()
                 PLAYER.record_playback()
                 PLAYER.check_fallback()

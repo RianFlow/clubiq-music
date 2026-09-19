@@ -43,7 +43,7 @@ function renderComfort() {
   $("#miniTitle").textContent = current?.title || "";
   $("#miniPause").hidden = !state.member?.can_control_player;
   $("#miniPause").disabled = playerStale || playerMutationsPending > 0;
-  $("#miniPause").textContent = p.playing || p.loading ? "Pause" : "Start";
+  $("#miniPause").textContent = musicCanPause(p) ? "Pause" : "Start";
   $("#miniFavorite").hidden = !state.member || !currentSong();
   $("#openEvening").hidden = !state.member?.can_control_player;
   $("#fallbackMessage").textContent = p.fallback_active ? "Ersatzsender läuft nach einer Stream-Störung. Mit „Radio beenden“ zur pausierten Playlist zurückkehren."
@@ -131,7 +131,7 @@ $("#disableFallback").addEventListener("click", async () => {
   finally { playerMutationsPending--; $("#disableFallback").disabled = false; renderPlayer(); }
 });
 $("#miniOpen").addEventListener("click", () => { setTab("player"); $("#tab-player").scrollIntoView({block:"start",behavior:"smooth"}); });
-$("#miniPause").addEventListener("click", () => playerCommand(state.player.playing || state.player.loading ? "pause" : "play"));
+$("#miniPause").addEventListener("click", () => playerCommand(musicCanPause(state.player) ? "pause" : "play"));
 $("#miniFavorite").addEventListener("click", () => { const song = currentSong(); if (song) saveMusicFavorite(song, $("#miniFavorite")); });
 
 function eveningSummary() {

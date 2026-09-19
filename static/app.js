@@ -834,8 +834,7 @@ function renderPlayer() {
   $("#playerBuffer").hidden = !knownBuffer;
   $("#playerBuffer").max = target;
   $("#playerBuffer").value = knownBuffer ? Math.min(target, buffer) : 0;
-  $("#playerBufferText").textContent = knownBuffer ? `Ca. ${buffer.toLocaleString("de-DE", {maximumFractionDigits:1})} s im Puffer · Ziel ${target} s`
-    : playerStale ? "Pufferstand derzeit unbekannt" : "Pufferstand noch nicht verfügbar";
+  $("#playerBufferText").textContent = musicBufferText(player, playerStale);
   $("#playerNextTrack").textContent = musicNextTrack(player);
   $("#playerPreparation").textContent = playerStale ? "Reihenfolge: letzter bekannter Stand"
     : player.next_prepared ? "Stream-Adresse vorbereitet · Audio wird beim Titelwechsel geladen"
@@ -849,8 +848,8 @@ function renderPlayer() {
     disabled: radioMode || !canControl || !Number(player.duration), max: Math.max(1, Number(player.duration) || 1),
   });
   $("#playerDuration").textContent = mediaTime(player.duration);
-  $("#playerPlay").textContent = player.playing || player.loading ? "❚❚" : "▶";
-  $("#playerPlay").title = player.playing || player.loading ? "Pause" : "Wiedergabe";
+  $("#playerPlay").textContent = musicCanPause(player) ? "❚❚" : "▶";
+  $("#playerPlay").title = musicCanPause(player) ? "Pause" : "Wiedergabe";
   $("#playerPlay").setAttribute("aria-label", $("#playerPlay").title);
   playerRangeControls?.volume.update(player.volume ?? 70, { disabled: !canControl });
   $("#playerMute").textContent = player.muted ? "🔇" : "🔊";
@@ -1163,7 +1162,7 @@ async function handlePlayerAction(button) {
   if (playerMutationsPending) return;
   let action = button.dataset.playerAction;
   let value = null;
-  if (action === "play" && (state.player.playing || state.player.loading)) action = "pause";
+  if (action === "play" && musicCanPause(state.player)) action = "pause";
   if (action === "shuffle") value = !state.player.shuffle;
   if (action === "repeat") {
     value = state.player.repeat === "off" ? "all" : state.player.repeat === "all" ? "one" : "off";

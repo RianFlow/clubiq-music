@@ -41,6 +41,7 @@ def main():
             player.load_current()
             deadline = time.monotonic() + 12
             while time.monotonic() < deadline:
+                player.check_buffering()
                 player.check_playlist()
                 if player.current_index == 1 and player.end_handled:
                     break
@@ -48,6 +49,31 @@ def main():
             assert player.current_index == 1 and player.end_handled, 'Real EOF did not advance/stop correctly'
             assert player.property('pause'), 'Final EOF must remain paused'
             print('OK: real mpv EOF advances exactly once and stops at queue end', flush=True)
+            # Inspect the actual per-file mpv options, not only the Python mocks.
+            player.current_index = 0
+            player.load_current(play=False)
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline and not player.property('audio-params', None):
+                time.sleep(.1)
+            assert float(player.property('cache-secs')) == 90, 'Song target must be 90 seconds'
+            assert float(player.property('cache-pause-wait')) == 10, 'Initial reserve must be 10 seconds'
+            player.command('set_property', 'pause', False)
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline and player.initial_buffer_pending:
+                player.check_buffering()
+                time.sleep(.1)
+            assert not player.initial_buffer_pending, 'Short fully cached songs must start without ten seconds of media'
+            assert float(player.property('cache-pause-wait')) == 15, 'Refill reserve must rise only after playback starts'
+            # A real file change must clear the song settings even after runtime changes.
+            player.command('loadfile', str(root / 'b.wav'), 'replace', -1, module.buffer_options('radio'))
+            time.sleep(.2)
+            assert float(player.property('cache-secs')) == 30, 'Radio must not inherit song target'
+            assert float(player.property('cache-pause-wait')) == 1, 'Radio starts with one second'
+            player.command('loadfile', str(root / 'a.wav'), 'replace', -1,
+                           {'cache': 'no', 'cache-pause-initial': 'no', 'keep-open': 'no'})
+            time.sleep(.2)
+            assert player.property('cache') == 'no', 'Soundboard must not inherit song caching'
+            print('OK: real per-file buffer profiles, short songs and refill threshold', flush=True)
             player.queue[0]['url'] = str(root / 'missing.wav')
             player.current_index = 0
             player.load_current()

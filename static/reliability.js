@@ -54,6 +54,23 @@ function createMusicPoller(refresh, {interval=3000, maxDelay=30000, enabled=()=>
   return {refresh:run, start() { active=true; schedule(); }, stop() { active=false; clearTimeout(timer); }};
 }
 
+function musicCanPause(player = {}) {
+  return !player.paused && Boolean(player.playing || player.loading || player.buffering);
+}
+
+function musicBufferText(player = {}, stale = false) {
+  if (stale) return "Pufferstand derzeit unbekannt";
+  const seconds = player.buffer_seconds;
+  if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0 || player.sound_active) return "Pufferstand noch nicht verfügbar";
+  const format = value => value.toLocaleString("de-DE", {maximumFractionDigits:1});
+  const target = Number(player.buffer_target_seconds) || 30;
+  const phase = player.buffer_phase;
+  const threshold = Number(phase === "starting" ? player.buffer_start_seconds : player.buffer_refill_seconds);
+  const reserve = (phase === "starting" || phase === "refilling") && threshold > 0
+    ? ` · ${phase === "starting" ? "Startreserve" : "Weiter ab"} ${format(threshold)} s` : "";
+  return `Ca. ${format(seconds)} s im Puffer${reserve} · Ziel ${format(target)} s`;
+}
+
 function musicPlaybackSummary(player = {}, stale = false) {
   if (stale) return {level:"warn", title:"Verbindung unterbrochen", hint:"Letzter bekannter Stand – die Musik kann weiterhin laufen. Der Status wird automatisch erneut abgefragt."};
   if (player.available === false) return {level:"error", title:"Player-Dienst nicht erreichbar", hint:"Der Musikserver antwortet, aber der Player auf dem Raspberry ist nicht bereit. Bitte den Dienst im Wartungsbereich prüfen."};
@@ -61,9 +78,10 @@ function musicPlaybackSummary(player = {}, stale = false) {
   if (player.sound_active) return {level:"ok", title:"Soundboard läuft", hint:"Danach wird die Musik automatisch fortgesetzt."};
   if (player.last_error) return {level:"error", title:"Wiedergabe braucht Aufmerksamkeit", hint:player.last_error};
   if (player.muted || Number(player.volume) === 0) return {level:"warn", title:"Ton ist ausgeschaltet", hint:player.muted ? "Stummschaltung am Lautsprechersymbol aufheben." : "Die Lautstärke steht auf 0 %."};
-  if (player.buffering) return {level:"warn", title:"Musik puffert nach", hint:"Der Audiopuffer wird aufgefüllt. Bitte kurz warten; wiederholtes Starten leert den Puffer erneut."};
+  if (player.paused && !player.loading) return {level:"info", title:"Wiedergabe pausiert", hint:"Mit Start setzt du die Musik fort."};
+  if (player.buffering && player.buffer_phase === "starting") return {level:"info", title:"Startpuffer wird geladen", hint:`${musicBufferText(player)}. Die Musik startet automatisch, sobald genügend Reserve geladen ist; kurze Titel können früher starten.`};
+  if (player.buffering) return {level:"warn", title:"Musik puffert nach", hint:`${musicBufferText(player)}. Bitte kurz warten; wiederholtes Starten leert den Puffer erneut.`};
   if (player.loading) return {level:"info", title:"Titel wird vorbereitet", hint:"Stream wird geöffnet und ein Startpuffer aufgebaut. Die Wiedergabe beginnt automatisch."};
-  if (player.paused) return {level:"info", title:"Wiedergabe pausiert", hint:"Mit Start setzt du die Musik fort."};
   if (player.playing) return {level:"ok", title:player.source_mode === "radio" ? "Internetradio läuft" : "Musik läuft", hint:"Falls nichts zu hören ist: zusätzlich die Lautstärke direkt an der Box prüfen."};
   return {level:"info", title:player.current ? "Bereit zum Abspielen" : "Noch keine Musik gewählt", hint:player.current ? "Mit Start beginnt die Wiedergabe." : "Eine Playlist auswählen oder einen Radiosender starten."};
 }
