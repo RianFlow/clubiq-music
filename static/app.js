@@ -295,7 +295,7 @@ function setCycleFormDefaults() {
 }
 
 function setTab(name) {
-  if (!["voting", "playlists", "player"].includes(name)) return;
+  if (!["voting", "playlists", "player", "library"].includes(name)) return;
   state.tab = name;
   $$(".tab").forEach(button => {
     const active = button.dataset.tab === name;
@@ -307,6 +307,8 @@ function setTab(name) {
   if (name === "voting") loadActivity(true).catch(() => {});
   if (name === "playlists") refreshResults().catch(error => toast(error.message, true));
   if (name === "player") Promise.all([loadPlayerState(), loadSoundboard(), loadRadioStations(), loadSavedSpeakers()]).catch(error => toast(error.message, true));
+  if (name === "library" && typeof loadMusicLibrary === "function") loadMusicLibrary();
+  if (typeof renderComfort === "function") renderComfort();
 }
 
 function setAdminTab(name) {
@@ -520,9 +522,9 @@ function renderPlaylist() {
   renderPreviousPlaylist();
 }
 
-function previewButton(song) {
+function previewButton(song, alreadyFavorite = false) {
   if (!/^[a-zA-Z0-9_-]{11}$/.test(song.external_id || "")) return "";
-  return `<button type="button" class="button ghost small preview-button" data-preview="${esc(song.external_id)}" data-preview-title="${esc(song.title)}">▶ Hörprobe</button>`;
+  return `<small class="song-info">${esc(musicSongInfo(song))}</small><button type="button" class="button ghost small preview-button" data-preview="${esc(song.external_id)}" data-preview-title="${esc(song.title)}">▶ Hörprobe</button>${state.member && !alreadyFavorite ? `<button type="button" class="button ghost small" data-save-favorite="${esc(song.external_id)}" data-title="${esc(song.title)}" data-channel="${esc(song.channel_title || song.artist || "")}" data-duration="${Number(song.duration_ms) || ""}">☆ Merken</button>` : ""}`;
 }
 
 function wirePreviewButtons(root) {
@@ -701,7 +703,7 @@ async function searchSongs(event) {
   const cycleId = state.displayedCycle.id;
   root.innerHTML = '<div class="empty">Suche läuft …</div>';
   try {
-    const data = await api(`/api/v1/music/provider/search?q=${encodeURIComponent(query)}`);
+    const data = await api(`/api/v1/music/provider/search?q=${encodeURIComponent(query)}`, {timeoutMs:20000});
     if (generation !== searchGeneration || state.displayedCycle?.id !== cycleId || !canVoteInDisplayedCycle()) return;
     const results = data.results || [];
     root.innerHTML = results.length ? results.map((song, index) => `
@@ -709,7 +711,8 @@ async function searchSongs(event) {
         <div class="song-visual">${song.thumbnail_url ? `<img class="song-cover" src="${esc(song.thumbnail_url)}" alt="" loading="lazy">` : '<span class="song-cover song-fallback">♪</span>'}<span class="song-rank">${index + 1}</span></div>
         <div class="song-copy"><strong>${esc(song.title)}</strong><span>${esc(song.channel_title || "")}</span>${previewButton(song)}</div>
         <button class="button primary small" type="button" data-suggest="${esc(song.external_id)}"
-          data-title="${esc(song.title)}" data-channel="${esc(song.channel_title || "")}">Vorschlagen</button>
+          data-title="${esc(song.title)}" data-channel="${esc(song.channel_title || "")}" data-duration="${Number(song.duration_ms) || ""}"
+          ${musicDuplicate(song, state.playlist) === "exact" ? "disabled" : ""}>${musicDuplicate(song, state.playlist) === "exact" ? "Bereits vorgeschlagen" : musicDuplicate(song, state.playlist) === "similar" ? "Ähnlicher Titel vorhanden – prüfen" : "Vorschlagen"}</button>
       </article>`).join("") : '<div class="empty">Keine Treffer gefunden.</div>';
     $$('[data-suggest]', root).forEach(button => button.addEventListener("click", () => suggestSong(button)));
     wirePreviewButtons(root);
@@ -723,6 +726,9 @@ async function suggestSong(button) {
   if (suggestionPending) return;
   if (!state.member) return openMemberDialog();
   if (!canVoteInDisplayedCycle()) return toast("Zurzeit ist keine Abstimmung geöffnet.", true);
+  const duplicate = musicDuplicate({external_id:button.dataset.suggest, title:button.dataset.title}, state.playlist);
+  if (duplicate === "exact") return toast("Dieser Song ist bereits in der Abstimmung.", true);
+  if (duplicate === "similar" && !confirm("Ein sehr ähnlicher Titel ist bereits vorgeschlagen. Möchtest du diesen Upload trotzdem hinzufügen?")) return;
   const cycleId = state.displayedCycle.id;
   suggestionPending = true;
   button.disabled = true;
@@ -734,6 +740,7 @@ async function suggestSong(button) {
         external_id: button.dataset.suggest,
         title: button.dataset.title,
         channel_title: button.dataset.channel,
+        duration_ms: Number(button.dataset.duration) || null,
       }),
     });
     await loadPlaylist();
@@ -827,8 +834,7 @@ function renderPlayer() {
   $("#playerBuffer").hidden = !knownBuffer;
   $("#playerBuffer").max = target;
   $("#playerBuffer").value = knownBuffer ? Math.min(target, buffer) : 0;
-  $("#playerBufferText").textContent = knownBuffer ? `Ca. ${buffer.toLocaleString("de-DE", {maximumFractionDigits:1})} s im Puffer · Ziel ${target} s`
-    : playerStale ? "Pufferstand derzeit unbekannt" : "Pufferstand noch nicht verfügbar";
+  $("#playerBufferText").textContent = musicBufferText(player, playerStale);
   $("#playerNextTrack").textContent = musicNextTrack(player);
   $("#playerPreparation").textContent = playerStale ? "Reihenfolge: letzter bekannter Stand"
     : player.next_prepared ? "Stream-Adresse vorbereitet · Audio wird beim Titelwechsel geladen"
@@ -842,8 +848,8 @@ function renderPlayer() {
     disabled: radioMode || !canControl || !Number(player.duration), max: Math.max(1, Number(player.duration) || 1),
   });
   $("#playerDuration").textContent = mediaTime(player.duration);
-  $("#playerPlay").textContent = player.playing || player.loading ? "❚❚" : "▶";
-  $("#playerPlay").title = player.playing || player.loading ? "Pause" : "Wiedergabe";
+  $("#playerPlay").textContent = musicCanPause(player) ? "❚❚" : "▶";
+  $("#playerPlay").title = musicCanPause(player) ? "Pause" : "Wiedergabe";
   $("#playerPlay").setAttribute("aria-label", $("#playerPlay").title);
   playerRangeControls?.volume.update(player.volume ?? 70, { disabled: !canControl });
   $("#playerMute").textContent = player.muted ? "🔇" : "🔊";
@@ -867,6 +873,7 @@ function renderPlayer() {
   });
   if (state.radioStations.length) renderRadioStations();
   renderResultSelection();
+  if (typeof renderComfort === "function") renderComfort();
 }
 
 function renderPlayerQueue() {
@@ -1057,7 +1064,7 @@ async function searchDjSongs(event) {
   const root = $("#djSearchResults");
   root.innerHTML = '<div class="empty">Suche läuft …</div>';
   try {
-    const data = await api(`/api/v1/music/admin/player/search?q=${encodeURIComponent(query)}`, {}, true);
+    const data = await api(`/api/v1/music/admin/player/search?q=${encodeURIComponent(query)}`, {timeoutMs:20000}, true);
     root.innerHTML = (data.results || []).map(song => `
       <div class="dj-result">
         <img src="${esc(song.thumbnail_url || "/pics/logo.png")}" alt="" loading="lazy">
@@ -1155,7 +1162,7 @@ async function handlePlayerAction(button) {
   if (playerMutationsPending) return;
   let action = button.dataset.playerAction;
   let value = null;
-  if (action === "play" && (state.player.playing || state.player.loading)) action = "pause";
+  if (action === "play" && musicCanPause(state.player)) action = "pause";
   if (action === "shuffle") value = !state.player.shuffle;
   if (action === "repeat") {
     value = state.player.repeat === "off" ? "all" : state.player.repeat === "all" ? "one" : "off";

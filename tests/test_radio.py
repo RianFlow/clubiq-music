@@ -161,7 +161,7 @@ class RadioPlayerTests(unittest.TestCase):
             self.player.resume_paused = paused
             with patch.object(self.player, "play_radio") as radio:
                 self.player.restore_session()
-                radio.assert_called_once_with(self.player.radio_station, play=not paused)
+                radio.assert_called_once_with(self.player.radio_station, play=not paused, new_entry=False)
 
     def test_paused_radio_does_not_retry_or_start_playing(self):
         self.player.source_mode = "radio"

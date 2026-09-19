@@ -29,7 +29,7 @@ function render() {
   $("#remotePlaybackStatus").hidden=!$("#remotePlaybackStatus").textContent;
   remoteRanges.progress.update(player.position, {max:Math.max(1,Number(player.duration)||1), disabled:stale||player.source_mode==="radio"||!Number(player.duration)});
   $("#remoteDuration").textContent=time(player.duration);
-  $("#remotePlay").textContent=player.playing||player.loading?"Pause":"Start";
+  $("#remotePlay").textContent=musicCanPause(player)?"Pause":"Start";
   remoteRanges.volume.update(player.volume??70, {disabled:stale});
   $("#remoteMute").textContent=player.muted?"Ton an":"Stumm";
   document.querySelectorAll('[data-action]').forEach(button=>{
@@ -73,7 +73,7 @@ const remoteRanges={
   volume:createRangeControl({input:$("#remoteVolume"),label:$("#remoteVolumeValue"),format:value=>`${Math.round(value)} %`,commit:value=>command("volume",value),onError:error=>setConnection(false,error.message)}),
 };
 $("#remoteLoginForm").addEventListener("submit",login);
-document.querySelectorAll("[data-action]").forEach(button=>button.addEventListener("click",()=>{if(mutationsPending)return;let action=button.dataset.action;let value=null;if(action==="play"&&(player.playing||player.loading))action="pause";if(action==="mute")value=!player.muted;command(action,value).catch(error=>setConnection(false,error.message));}));
+document.querySelectorAll("[data-action]").forEach(button=>button.addEventListener("click",()=>{if(mutationsPending)return;let action=button.dataset.action;let value=null;if(action==="play"&&musicCanPause(player))action="pause";if(action==="mute")value=!player.muted;command(action,value).catch(error=>setConnection(false,error.message));}));
 $("#remoteRefresh").addEventListener("click",()=>refresh().catch(error=>setConnection(false,error.message)));
 $("#remoteLogout").addEventListener("click",()=>{sessionStorage.removeItem("clubiq_music_admin");location.reload();});
 if(password){$("#remoteLogin").hidden=true;$("#remoteArea").hidden=false;refresh().catch(error=>setConnection(false,error.message));}

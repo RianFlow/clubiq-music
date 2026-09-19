@@ -150,7 +150,7 @@ class PlaybackTests(unittest.TestCase):
                 self.assertIsNone(self.player.state()['buffer_seconds'])
             self.props['demuxer-cache-duration'] = 12.34
             self.assertEqual(self.player.state()['buffer_seconds'], 12.3)
-            self.assertEqual(self.player.state()['buffer_target_seconds'], 30)
+            self.assertEqual(self.player.state()['buffer_target_seconds'], 90)
             self.player.sound_active = True
             self.assertIsNone(self.player.state()['buffer_seconds'])
 
@@ -158,7 +158,99 @@ class PlaybackTests(unittest.TestCase):
         self.begin()
         options = self.player.command.call_args_list[0].args[-1]
         self.assertEqual(options['cache-pause-initial'], 'yes')
-        self.assertEqual(options['cache-pause-wait'], '3')
+        self.assertEqual(options['cache-pause-wait'], '10')
+        self.assertEqual(options['cache-secs'], '90')
+        self.assertEqual(options['demuxer-readahead-secs'], '90')
+        self.assertEqual(options['demuxer-max-bytes'], '32MiB')
+
+    def test_refill_threshold_changes_only_after_real_progress(self):
+        self.player.load_current(position=42)
+        self.player.command.reset_mock()
+        self.props.update({'audio-params': {'samplerate': 44100}, 'paused-for-cache': True, 'time-pos': 42})
+        self.player.check_buffering()
+        self.player.command.assert_not_called()
+        self.assertTrue(self.player.initial_buffer_pending)
+        self.props.update({'paused-for-cache': False, 'pause': True, 'time-pos': 43})
+        self.player.check_buffering()
+        self.player.command.assert_not_called()
+        self.props['pause'] = False
+        self.player.check_buffering()
+        self.player.check_buffering()
+        self.player.command.assert_called_once_with('set_property', 'cache-pause-wait', 15, start=False)
+        self.assertFalse(self.player.initial_buffer_pending)
+
+    def test_missing_or_invalid_telemetry_never_releases_start_buffer(self):
+        self.begin()
+        self.player.command.reset_mock()
+        self.props.update({'audio-params': {'samplerate': 44100}, 'paused-for-cache': False})
+        for position in (None, True, float('nan'), float('inf'), 0, '1'):
+            self.props['time-pos'] = position
+            self.player.check_buffering()
+        self.props.update({'time-pos': 1, 'paused-for-cache': None})
+        self.player.check_buffering()
+        self.player.command.assert_not_called()
+        self.assertTrue(self.player.initial_buffer_pending)
+
+    def test_next_song_and_retry_reset_start_reserve(self):
+        self.loaded()
+        self.props.update({'time-pos': 2, 'paused-for-cache': False})
+        self.player.check_buffering()
+        self.assertFalse(self.player.initial_buffer_pending)
+        for retry in (False, True):
+            self.player.load_current(retry=retry)
+            self.assertTrue(self.player.initial_buffer_pending)
+            self.assertEqual(self.player.command.call_args_list[-2].args[-1]['cache-pause-wait'], '10')
+
+    def test_radio_uses_short_separate_buffer_and_retry_profile(self):
+        station = {'id': 1, 'name': 'Test', 'stream_url': 'https://example.com/live'}
+        self.player.ensure_mpv = MagicMock()
+        self.player.checkpoint_playback = MagicMock()
+        self.player.play_radio(station)
+        self.player.retry_radio()
+        loads = [call.args for call in self.player.command.call_args_list if call.args[0] == 'loadfile']
+        self.assertEqual(len(loads), 2)
+        for load in loads:
+            self.assertEqual(load[-1]['cache-secs'], '30')
+            self.assertEqual(load[-1]['cache-pause-wait'], '1')
+        self.props.update({'time-pos': 1, 'paused-for-cache': False, 'audio-params': {'samplerate': 44100}})
+        self.player.check_buffering()
+        self.player.command.assert_any_call('set_property', 'cache-pause-wait', 3, start=False)
+
+    def test_buffering_is_not_reported_as_playing(self):
+        self.begin()
+        self.player.process = MagicMock()
+        self.player.process.poll.return_value = None
+        self.props['paused-for-cache'] = True
+        with patch.object(agent, 'MPV_SOCKET', MagicMock()):
+            self.assertFalse(self.player.state()['playing'])
+            self.assertEqual(self.player.state()['buffer_phase'], 'starting')
+            self.player.initial_buffer_pending = False
+            self.assertEqual(self.player.state()['buffer_phase'], 'refilling')
+            self.assertEqual(self.player.state()['buffer_refill_seconds'], 15)
+            self.props['pause'] = True
+            self.assertEqual(self.player.state()['buffer_phase'], 'paused')
+
+    def test_diagnostics_are_transition_only_and_contain_no_media_urls(self):
+        self.begin()
+        self.props.update({'paused-for-cache': True, 'audio-params': {'samplerate': 44100}})
+        with patch('builtins.print') as output:
+            for _ in range(5):
+                self.player.check_buffering()
+            self.player.observe_bluetooth(False)
+            self.player.observe_bluetooth(False)
+            self.player.observe_bluetooth(True)
+        events = [json.loads(call.args[0]) for call in output.call_args_list]
+        self.assertEqual([event['event'] for event in events],
+                         ['buffer_starting', 'bluetooth_disconnected', 'bluetooth_connected'])
+        self.assertNotIn('https:', json.dumps(events))
+
+    def test_soundboard_monitor_does_not_change_buffer_threshold(self):
+        self.loaded()
+        self.player.command.reset_mock()
+        self.player.sound_active = True
+        self.props.update({'time-pos': 1, 'paused-for-cache': False})
+        self.player.check_buffering()
+        self.player.command.assert_not_called()
 
     def test_manual_start_resets_failure_budget(self):
         self.player.playlist_retry_count = 1

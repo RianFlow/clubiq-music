@@ -62,6 +62,16 @@ function testPlaybackSummaries() {
   assert.equal(run('musicPlaybackSummary(connected).title'),'Musik läuft');
   assert.match(run('musicPlaybackSummary(connected,true).hint'),/weiterhin laufen/);
   assert.match(run('musicPlaybackSummary({...connected,buffering:true}).title'),/puffert/);
+  assert.match(run('musicPlaybackSummary({...connected,buffering:true,buffer_phase:"starting",buffer_seconds:4,buffer_start_seconds:10,buffer_target_seconds:90}).title'),/Startpuffer/);
+  assert.match(run('musicBufferText({buffer_seconds:4,buffer_phase:"starting",buffer_start_seconds:10,buffer_target_seconds:90})'),/4 s im Puffer · Startreserve 10 s · Ziel 90 s/);
+  assert.match(run('musicBufferText({buffer_seconds:8,buffer_phase:"refilling",buffer_refill_seconds:15,buffer_target_seconds:90})'),/Weiter ab 15 s/);
+  assert.match(run('musicBufferText({buffer_seconds:80},true)'),/unbekannt/);
+  assert.match(run('musicBufferText({buffer_seconds:null})'),/nicht verfügbar/);
+  assert.match(run('musicBufferText({buffer_seconds:NaN})'),/nicht verfügbar/);
+  assert.match(run('musicPlaybackSummary({...connected,paused:true,buffering:true}).title'),/pausiert/);
+  assert.equal(run('musicCanPause({playing:false,buffering:true,paused:false})'),true);
+  assert.equal(run('musicCanPause({playing:false,buffering:true,paused:true})'),false);
+  assert.equal(run('musicCanPause({loading:true,paused:true})'),false);
   assert.match(run('musicPlaybackSummary({...connected,muted:true}).title'),/ausgeschaltet/);
   assert.match(run('musicPlaybackSummary({...connected,speaker:null}).title'),/Keine Box/);
   assert.match(run('musicPlaybackSummary({...connected,last_error:"Fehler"}).hint'),/Fehler/);

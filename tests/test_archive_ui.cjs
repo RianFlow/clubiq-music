@@ -18,6 +18,7 @@ const context = vm.createContext({
 });
 const source = fs.readFileSync('static/app.js', 'utf8');
 vm.runInContext(fs.readFileSync('static/reliability.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('static/song-info.js', 'utf8'), context);
 vm.runInContext(source.slice(0, source.indexOf('\nstart();')), context);
 const run = code => vm.runInContext(code, context);
 
