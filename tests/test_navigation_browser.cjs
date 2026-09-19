@@ -33,6 +33,8 @@ const server = http.createServer((req, res) => {
     let failResults = false;
     let failPlayer = false;
     let failAuth = false;
+    let favorites = [];
+    const eveningRequests = [];
     const now = Date.now();
     const date = delta => new Date(now + delta).toISOString();
     const closed = {id:1,name:'Letzter Vereinsabend',status:'closed',starts_at:date(-172800000),closes_at:date(-86400000),max_budget:10};
@@ -58,7 +60,15 @@ const server = http.createServer((req, res) => {
       else if (p.endsWith('/auth/login') || p.endsWith('/auth/me')) data = {token:'fixture-session',member,budget:{maximum:10,remaining:8},active_cycle_id:2};
       else if (p.endsWith('/state')) data = player;
       else if (p.endsWith('/soundboard')) data = {items:soundpack.map((item, i) => ({...item,id:i+1,builtin:true}))};
-      else if (p.endsWith('/bluetooth/saved')) data = {devices:[]};
+      else if (p.endsWith('/bluetooth/saved')) data = {devices:[{address:'AA:BB:CC:DD:EE:FF',name:'Test-Box',paired:true}]};
+      else if (p.endsWith('/radio/stations')) data = {stations:[{id:1,name:'Test-Radio',active:true}]};
+      else if (p.endsWith('/library/favorites')) {
+        if (req.method() === 'PUT') favorites.push(req.postDataJSON());
+        data = {favorites};
+      }
+      else if (p.includes('/library/favorites/')) { favorites = favorites.filter(s => !p.endsWith(s.external_id)); data = {ok:true}; }
+      else if (p.endsWith('/library/history')) data = {last_sync:date(0),history:[{external_id:'hhhhhhhhhhh',title:'Wirklich gestartet',artist:'Test',source:'youtube',started_at:date(-60000)}]};
+      else if (p.endsWith('/evening/start')) { eveningRequests.push(req.postDataJSON()); data = player; }
       else if (p.endsWith('/previous-playlist')) data = {cycle:closed,cycles:[closed,{id:0,name:'Vorletzte Runde'}],songs:oldSongs.map(item=>({...item,source_cycle_name:closed.name}))};
       else if (p.endsWith('/playlist')) {
         if (failResults && p.includes('/cycles/1/')) return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({detail:'Test: kurz nicht erreichbar'})});
@@ -76,7 +86,7 @@ const server = http.createServer((req, res) => {
     await page.goto(origin);
     await page.getByRole('heading',{name:'Training am Freitag',exact:true}).waitFor();
     const nav = page.getByRole('navigation',{name:'Musikbereiche'});
-    assert.deepEqual(await nav.getByRole('button').allTextContents(), ['Abstimmen','Playlists','Player ✓']);
+    assert.deepEqual(await nav.getByRole('button').allTextContents(), ['Abstimmen','Playlists','Player ✓','Meine Musik']);
     assert.equal(await page.locator('#budgetCard').isVisible(),true);
     assert.equal(await page.locator('#cycleSelect').isVisible(),false);
     await nav.getByRole('button',{name:'Playlists',exact:true}).click();
@@ -227,6 +237,59 @@ const server = http.createServer((req, res) => {
       assert.equal(await page.locator('#queueSelectedPlaylist').isDisabled(),true);
       assert.equal(await page.locator('#cycleSelect').isDisabled(),true);
     }
+    // Personal library and guided start: inspecting never starts audio.
+    mode = 'active';
+    await page.locator('#refreshResults').click();
+    await page.getByRole('heading',{name:'Letzter Vereinsabend',exact:true}).waitFor();
+    await page.locator('#resultSongs [data-save-favorite]').first().click();
+    await page.getByRole('button',{name:'Meine Musik',exact:true}).click();
+    await page.locator('#favoriteSongs').getByText('Bohemian Rhapsody',{exact:true}).waitFor();
+    assert.equal(await page.locator('#favoriteSongs [data-save-favorite]').count(),0,'saved favorites should not offer saving themselves again');
+    await page.locator('#historySongs').getByText('Wirklich gestartet',{exact:true}).waitFor();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),true,'mobile library must fit');
+    if (process.env.NAV_SCREENSHOT_DIR) {
+      await page.locator('#toast.show').waitFor({state:'hidden'});
+      await page.setViewportSize({width:1280,height:1000});
+      await page.evaluate(() => window.scrollTo(0,0));
+      await page.screenshot({path:path.join(process.env.NAV_SCREENSHOT_DIR,'music-library-desktop.png'),fullPage:true});
+      await page.setViewportSize({width:820,height:1180});
+      await page.screenshot({path:path.join(process.env.NAV_SCREENSHOT_DIR,'music-library-tablet.png'),fullPage:true});
+      await page.setViewportSize({width:390,height:844});
+    }
+    await page.locator('#favoriteSongs [data-remove-favorite]').click();
+    await page.locator('#favoriteSongs').getByText(/Noch keine Favoriten/).waitFor();
+    await page.locator('#miniOpen').click();
+    await page.locator('#openEvening').click();
+    await page.locator('#eveningSpeaker').selectOption('AA:BB:CC:DD:EE:FF');
+    await page.locator('#eveningSource').selectOption('cycle:1');
+    assert.equal(await page.locator('#eveningVolume').inputValue(),'40');
+    assert.equal(await page.locator('#eveningFallback').inputValue(),'');
+    assert.equal(eveningRequests.length,0,'opening the wizard must never start playback');
+    await page.locator('#eveningFallback').selectOption('1');
+    assert.match(await page.locator('#eveningSummary').textContent(),/Test-Radio/);
+    assert.equal(await page.locator('#eveningDialog').evaluate(el => el.scrollWidth <= el.clientWidth),true);
+    if (process.env.NAV_SCREENSHOT_DIR) {
+      await page.screenshot({path:path.join(process.env.NAV_SCREENSHOT_DIR,'music-evening-mobile.png')});
+      await page.setViewportSize({width:1280,height:1100});
+      await page.locator('#eveningDialog').evaluate(el => {el.scrollTop=0;});
+      await page.screenshot({path:path.join(process.env.NAV_SCREENSHOT_DIR,'music-evening-desktop.png')});
+      await page.setViewportSize({width:390,height:844});
+    }
+    await page.evaluate(() => { Object.defineProperty(crypto,'randomUUID',{value:undefined,configurable:true}); });
+    await page.locator('#confirmEvening').click();
+    await page.locator('#eveningDialog').waitFor({state:'hidden'});
+    assert.equal(eveningRequests.length,1);
+    assert.equal(eveningRequests[0].fallback_station_id,1);
+    assert.equal(eveningRequests[0].volume,40);
+    assert.match(eveningRequests[0].request_id,/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    await page.locator('#openEvening').click();
+    await page.locator('#eveningSource').selectOption('radio:1');
+    assert.equal(await page.locator('#eveningFallback').isDisabled(),true);
+    await page.locator('#closeEvening').click();
+    assert.equal(eveningRequests.length,1,'cancel must not mutate the player');
+    await page.evaluate(() => clearMemberSession(false));
+    assert.equal(await page.locator('#openEvening').isVisible(),false);
+    assert.equal(await page.locator('#favoriteSongs').textContent(),'');
     // Companion screens share recovery behavior without erasing the last song.
     const companion = await context.newPage();
     companion.on('pageerror', error => errors.push(error.message));

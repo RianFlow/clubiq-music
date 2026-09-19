@@ -12,7 +12,10 @@
   <script defer src="/static/images.js?v=20260902-3"></script>
   <script defer src="/static/range-control.js?v=20260902-3"></script>
   <script defer src="/static/reliability.js?v=20260915-1"></script>
-  <script defer src="/static/app.js?v=20260915-1"></script>
+  <script defer src="/static/song-info.js?v=20260917-1"></script>
+  <script defer src="/static/app.js?v=20260917-1"></script>
+  <script defer src="/static/comfort.js?v=20260917-1"></script>
+  <link rel="stylesheet" href="/static/comfort.css?v=20260917-1">
 </head>
 <body>
   <header class="topbar">
@@ -36,6 +39,7 @@
       <button class="tab active" data-tab="voting" type="button" aria-current="page">Abstimmen</button>
       <button class="tab" data-tab="playlists" type="button">Playlists</button>
       <button class="tab" data-tab="player" type="button">Player <span id="playerIndicator">–</span></button>
+      <button class="tab" data-tab="library" type="button">Meine Musik</button>
     </nav>
 
     <section id="tab-voting" class="tab-panel active">
@@ -126,6 +130,7 @@
     </section>
 
     <section id="tab-player" class="tab-panel">
+      <button id="openEvening" class="button primary" data-player-control type="button" hidden>Vereinsabend starten</button>
       <div class="section-head branded-heading">
         <div><p class="eyebrow">Zentrale Wiedergabe</p><h2>ClubIQ Player</h2></div>
         <img class="section-brand-mark" src="/pics/clubiq-symbol-gold.png" alt="" aria-hidden="true">
@@ -428,6 +433,26 @@
     <span class="footer-club">für SV Barver Darts</span>
   </footer>
 
+  <dialog id="eveningDialog" aria-labelledby="eveningTitle" class="comfort-dialog">
+    <form id="eveningForm">
+      <div class="section-head"><h2 id="eveningTitle">Vereinsabend starten</h2><button id="closeEvening" class="button ghost" type="button" aria-label="Abendstart schließen">Schließen</button></div>
+      <p>Einmal auswählen, prüfen und starten. Die bisherige Musik wird ersetzt. Zufall und Wiederholung werden ausgeschaltet.</p>
+      <label>1 · Gespeicherte Box<select id="eveningSpeaker" required></select></label>
+      <label>2 · Musikquelle<select id="eveningSource" required></select></label>
+      <label>3 · Startlautstärke <output id="eveningVolumeLabel">40 %</output><input id="eveningVolume" type="range" min="0" max="100" value="40"></label>
+      <label id="eveningFallbackLabel">Optionaler Ersatzsender<select id="eveningFallback"><option value="">Aus – Musik bei Fehler anhalten</option></select></label>
+      <p class="muted">Nur für diesen Abend: Bei 45 Sekunden anhaltender Stream-Störung einmal zum gewählten Radio wechseln. Radio benötigt ebenfalls Internet und hilft nicht bei Bluetooth-Ausfall. Kein automatischer Wechsel zurück; nach Raspberry-Neustart wieder ausgeschaltet.</p>
+      <p id="eveningSummary" class="comfort-summary"></p>
+      <p id="eveningError" role="alert"></p>
+      <button id="confirmEvening" class="button primary" type="submit">Jetzt mit diesen Einstellungen starten</button>
+    </form>
+  </dialog>
+  <div id="miniPlayer" class="mini-player" hidden>
+    <button id="miniOpen" class="button ghost" type="button">Zum Player</button>
+    <span id="miniTitle"></span>
+    <button id="miniPause" class="button primary" type="button" hidden>Pause</button>
+    <button id="miniFavorite" class="button ghost" type="button" hidden>☆ Merken</button>
+  </div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

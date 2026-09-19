@@ -27,6 +27,7 @@ function harness() {
   const run = code => vm.runInContext(code, context);
   run(fs.readFileSync('static/range-control.js', 'utf8'));
   run(fs.readFileSync('static/reliability.js', 'utf8'));
+  run(fs.readFileSync('static/song-info.js', 'utf8'));
   return { node, run, context };
 }
 

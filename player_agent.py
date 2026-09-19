@@ -21,6 +21,7 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from socketserver import UnixStreamServer
 from urllib.parse import urlsplit, parse_qs
+from uuid import UUID, uuid4
 
 
 SOCKET_PATH = Path(os.getenv("PLAYER_AGENT_SOCKET", "/run/clubiq-music/player.sock"))
@@ -240,6 +241,15 @@ class MpvController:
         self.playlist_retry_count = 0
         self.playlist_retry_at = 0.0
         self.end_handled = False
+        self.history = []
+        self.history_dirty = False
+        self.history_recorded = False
+        self.fallback_station = None
+        self.fallback_active = False
+        self.fallback_since = None
+        self.wants_playback = False
+        self.last_evening_request = ""
+        self.evening_requests = []
         self.load_state()
 
     def load_state(self) -> None:
@@ -257,11 +267,27 @@ class MpvController:
             self.resume_paused = bool(saved.get("resume_paused", True))
             self.source_mode = saved.get("source_mode", "playlist")
             self.radio_station = saved.get("radio_station")
+            self.history_recorded = bool(saved.get("history_recorded", False))
+            self.last_evening_request = str(saved.get("last_evening_request", ""))
+            self.evening_requests = list(saved.get("evening_requests") or [self.last_evening_request])[-50:]
+            # Automatic fallback is deliberately disarmed after a restart.
+            self.wants_playback = not self.resume_paused
+        except (OSError, ValueError, TypeError):
+            pass
+        try:
+            history = json.loads(STATE_FILE.with_name("history.json").read_text(encoding="utf-8"))
+            self.history = history[-500:] if isinstance(history, list) else []
         except (OSError, ValueError, TypeError):
             pass
 
     def save_state(self) -> None:
         STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        if self.history_dirty:
+            history_file = STATE_FILE.with_name("history.json")
+            history_tmp = history_file.with_suffix(".tmp")
+            history_tmp.write_text(json.dumps(self.history, ensure_ascii=False), encoding="utf-8")
+            history_tmp.replace(history_file)
+            self.history_dirty = False
         temp = STATE_FILE.with_suffix(".tmp")
         temp.write_text(json.dumps({
             "queue": self.queue,
@@ -276,6 +302,9 @@ class MpvController:
             "resume_paused": self.resume_paused,
             "source_mode": self.source_mode,
             "radio_station": self.radio_station,
+            "history_recorded": self.history_recorded,
+            "last_evening_request": self.last_evening_request,
+            "evening_requests": self.evening_requests,
         }, ensure_ascii=False), encoding="utf-8")
         temp.replace(STATE_FILE)
 
@@ -324,11 +353,11 @@ class MpvController:
     def restore_session(self) -> None:
         """Reconnect mpv to the saved track without losing queue or position."""
         if self.source_mode == "radio" and self.radio_station:
-            self.play_radio(self.radio_station, play=not self.resume_paused)
+            self.play_radio(self.radio_station, play=not self.resume_paused, new_entry=False)
             return
         if not (0 <= self.current_index < len(self.queue)):
             return
-        self.load_current(play=not self.resume_paused, position=self.resume_position)
+        self.load_current(play=not self.resume_paused, position=self.resume_position, new_entry=False)
         self.command("set_property", "mute", self.muted, start=False)
         self.restored_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         self.last_error = ""
@@ -409,7 +438,7 @@ class MpvController:
         except (OSError, ValueError, RuntimeError):
             return default
 
-    def load_current(self, play: bool = True, *, position: float = 0.0, retry: bool = False) -> None:
+    def load_current(self, play: bool = True, *, position: float = 0.0, retry: bool = False, new_entry: bool = True) -> None:
         if not self.queue:
             self.current_index = -1
             self.command("stop")
@@ -417,6 +446,12 @@ class MpvController:
             return
         self.current_index %= len(self.queue)
         self.source_mode = "playlist"
+        self.fallback_active = False
+        self.wants_playback = play
+        if not retry:
+            self.fallback_since = None
+        if new_entry and not retry:
+            self.history_recorded = False
         self.radio_station = None
         item = self.queue[self.current_index]
         self.resume_position = max(0.0, position)
@@ -523,6 +558,10 @@ class MpvController:
 
     def set_queue(self, items: list[dict]) -> None:
         with self.lock:
+            self.wants_playback = False
+            self.fallback_since = None
+            self.fallback_active = False
+            self.history_recorded = False
             self.playlist_loading = False
             self.playlist_retry_at = 0.0
             self.track_was_active = False
@@ -638,6 +677,9 @@ class MpvController:
         elif self.repeat == "all":
             self.current_index = 0
             self.load_current()
+        else:
+            self.wants_playback = False
+            self.fallback_since = None
 
     def play_sound(self, url: str) -> None:
         if not url.startswith("http://127.0.0.1:"):
@@ -666,12 +708,12 @@ class MpvController:
                         break
                     time.sleep(.15)
                 if saved_mode == "radio" and saved_station:
-                    self.play_radio(saved_station)
+                    self.play_radio(saved_station, new_entry=False)
                     if saved_paused:
                         self.command("set_property", "pause", True)
                 elif 0 <= saved_index < len(self.queue):
                     self.current_index = saved_index
-                    self.load_current(play=not saved_paused, position=saved_position)
+                    self.load_current(play=not saved_paused, position=saved_position, new_entry=False)
             except Exception as exc:
                 self.last_error = f"Soundboard: {exc}"
             finally:
@@ -679,7 +721,7 @@ class MpvController:
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def play_radio(self, station: dict, play: bool = True) -> None:
+    def play_radio(self, station: dict, play: bool = True, *, new_entry: bool = True) -> None:
         stream_url = str(station.get("stream_url", ""))
         if not stream_url.startswith(("http://", "https://")):
             raise ValueError("Nicht erlaubte Radio-Adresse.")
@@ -689,6 +731,10 @@ class MpvController:
         self.playlist_loading = False
         self.playlist_retry_at = 0.0
         self.source_mode = "radio"
+        self.wants_playback = play
+        if new_entry:
+            self.history_recorded = False
+            self.fallback_active = False
         self.radio_station = {
             "id": int(station["id"]),
             "name": str(station["name"])[:120],
@@ -735,6 +781,8 @@ class MpvController:
     def act(self, action: str, value=None) -> dict:
         with self.lock:
             if action == "play":
+                self.wants_playback = True
+                self.fallback_since = None
                 if self.source_mode == "radio" and self.radio_station:
                     if bool(self.property("idle-active", True)):
                         self.play_radio(self.radio_station)
@@ -750,6 +798,8 @@ class MpvController:
                 self.resume_paused = False
                 self.save_state()
             elif action == "pause":
+                self.wants_playback = False
+                self.fallback_since = None
                 self.resume_paused = True
                 self.playlist_retry_at = 0.0
                 self.command("set_property", "pause", True)
@@ -785,6 +835,96 @@ class MpvController:
             else:
                 raise ValueError("Unbekannter Player-Befehl.")
         return self.state()
+
+    def record_playback(self) -> None:
+        """Record once after decoded audio is actually running, never on queueing."""
+        if (self.history_recorded or self.sound_active or self.playlist_loading
+                or self.property("idle-active", True) or self.property("pause", True)
+                or self.property("paused-for-cache", True) or not self.property("audio-params", None)):
+            return
+        if self.source_mode == "radio" and self.radio_station:
+            item = {"title": self.radio_station["name"], "artist": "Internetradio", "external_id": "", "source": "radio"}
+        elif 0 <= self.current_index < len(self.queue):
+            current = self.queue[self.current_index]
+            external_id = parse_qs(urlsplit(current.get("url", "")).query).get("v", [""])[0]
+            item = {"title": str(current.get("title", ""))[:255], "artist": str(current.get("artist", ""))[:255],
+                    "external_id": external_id if re.fullmatch(r"[A-Za-z0-9_-]{6,20}", external_id) else "", "source": "youtube"}
+        else:
+            return
+        self.history.append({**item, "event_id": str(uuid4()), "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+        self.history = self.history[-500:]
+        self.history_recorded = True
+        self.history_dirty = True
+        self.save_state()
+
+    def check_fallback(self) -> None:
+        if not self.fallback_station or self.source_mode != "playlist" or not self.wants_playback or self.sound_active:
+            self.fallback_since = None
+            return
+        unhealthy = (self.playlist_loading or self.playlist_retry_at
+                     or self.property("paused-for-cache", False) or self.property("idle-active", False))
+        if not unhealthy:
+            self.fallback_since = None
+            return
+        now = time.monotonic()
+        if self.fallback_since is None:
+            self.fallback_since = now
+        if now - self.fallback_since < 45:
+            return
+        if not self.connected_speaker or not device_info(self.connected_speaker)["connected"]:
+            self.fallback_since = None  # Radio cannot repair a lost speaker connection.
+            return
+        station = self.fallback_station
+        self.fallback_station = None  # One attempt, no automatic source-switching loop.
+        self.play_radio(station)
+        self.fallback_active = True
+        self.fallback_since = None
+
+    def start_evening(self, data: dict) -> None:
+        request_id = str(UUID(str(data.get("request_id", ""))))
+        address = str(data.get("address", "")).upper()
+        volume = data.get("volume")
+        items, station, fallback = data.get("items", []), data.get("station"), data.get("fallback_station")
+        if not MAC_RE.fullmatch(address) or type(volume) is not int or not 0 <= volume <= 100:
+            raise ValueError("Box oder Lautstärke ungültig.")
+        if bool(items) == bool(station) or len(items) > 250 or (station and fallback):
+            raise ValueError("Bitte eine gültige Musikquelle wählen.")
+        for item in items:
+            if not re.fullmatch(r"https://www\.youtube\.com/watch\?v=[A-Za-z0-9_-]{6,20}", str(item.get("url", ""))):
+                raise ValueError("Nicht erlaubte Medienadresse.")
+        for radio in (station, fallback):
+            if radio and (not str(radio.get("stream_url", "")).startswith(("https://", "http://")) or not radio.get("id") or not radio.get("name")):
+                raise ValueError("Ungültiger Radiosender.")
+        with BLUETOOTH_LOCK, self.lock:
+            if request_id == self.last_evening_request or request_id in self.evening_requests:
+                return
+            if self.sound_active:
+                raise RuntimeError("Bitte warten, bis der Soundboard-Clip beendet ist.")
+            info = device_info(address)
+            if not (info.get("paired") or info.get("trusted")):
+                raise ValueError("Diese Box bitte zuerst in der Verwaltung koppeln.")
+            # Pause before reconnecting; never restore the old queue at its old volume.
+            if self.process and self.process.poll() is None:
+                self.act("pause")
+            connect_bluetooth_device(address, allow_pair=False)
+            self.stop_mpv()
+            self.connected_speaker = self.last_speaker = address
+            self.volume, self.muted = volume, False
+            self.repeat, self.shuffle = "off", False
+            self.resume_paused = True
+            self.fallback_station = fallback
+            self.fallback_active = False
+            self.fallback_since = None
+            self.last_error = ""
+            if station:
+                self.play_radio(station)
+            else:
+                self.queue = items
+                self.current_index = 0
+                self.load_current()
+            self.last_evening_request = request_id
+            self.evening_requests = (self.evening_requests + [request_id])[-50:]
+            self.save_state()
 
     def state(self) -> dict:
         playlist_item = self.queue[self.current_index] if 0 <= self.current_index < len(self.queue) else None
@@ -828,6 +968,9 @@ class MpvController:
             "current_index": self.current_index,
             "current": item,
             "source_mode": self.source_mode,
+            "fallback_enabled": bool(self.fallback_station),
+            "fallback_active": self.fallback_active,
+            "fallback_name": self.fallback_station.get("name", "") if self.fallback_station else "",
             "radio_station": self.radio_station,
             "speaker": speaker,
             "sound_active": self.sound_active,
@@ -877,6 +1020,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, {"ok": True, "mpv": bool(PLAYER.process and PLAYER.process.poll() is None)})
             if self.path == "/state":
                 return self.reply(200, PLAYER.state())
+            if self.path == "/history":
+                with PLAYER.lock:
+                    return self.reply(200, {"history": list(PLAYER.history)})
             if self.path in {"/bluetooth/devices", "/bluetooth/saved"}:
                 return self.reply(200, {"devices": saved_bluetooth_devices(),
                                         "selected_address": PLAYER.connected_speaker or PLAYER.last_speaker})
@@ -889,6 +1035,14 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(403, {"error": "Nicht autorisiert."})
         try:
             data = self.body()
+            if self.path == "/evening/start":
+                PLAYER.start_evening(data)
+                return self.reply(200, PLAYER.state())
+            if self.path == "/fallback/disable":
+                with PLAYER.lock:
+                    PLAYER.fallback_station = None
+                    PLAYER.fallback_since = None
+                return self.reply(200, PLAYER.state())
             if self.path == "/bluetooth/scan":
                 return self.reply(200, {"devices": scan_bluetooth_devices()})
             if self.path.startswith("/bluetooth/"):
@@ -991,6 +1145,8 @@ def playback_loop(stop: threading.Event) -> None:
         try:
             with PLAYER.lock:
                 PLAYER.check_playlist()
+                PLAYER.record_playback()
+                PLAYER.check_fallback()
                 idle = PLAYER.property("idle-active", None)
                 if idle is False:
                     if PLAYER.source_mode == "radio":

@@ -1,0 +1,12 @@
+const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
+const context = vm.createContext({});
+vm.runInContext(fs.readFileSync('static/song-info.js','utf8'), context);
+const info = context.musicSongInfo, duplicate = context.musicDuplicate;
+assert.equal(info({duration_ms:205000,title:'Example (Live Remix)'}),'3:25 min · Live (laut Titel) · Remix (laut Titel)');
+assert.equal(info({title:'Example'}),'');
+const existing = [{external_id:'aaaaaaaaaaa',title:'Queen - Bohemian Rhapsody (Official Video)'}];
+assert.equal(duplicate({external_id:'aaaaaaaaaaa',title:'Different'},existing),'exact');
+assert.equal(duplicate({external_id:'bbbbbbbbbbb',title:'Queen - Bohemian Rhapsody [Lyrics]'},existing),'similar');
+assert.equal(duplicate({external_id:'bbbbbbbbbbb',title:'Queen - Bohemian Rhapsody Live'},existing),'');
+assert.equal(duplicate({external_id:'bbbbbbbbbbb',title:'Hello'},[{title:'Hello'}]),'');
+console.log('Song information: duration, version hints and conservative duplicate warnings OK');

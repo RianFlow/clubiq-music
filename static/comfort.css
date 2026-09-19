@@ -1,0 +1,20 @@
+.comfort-dialog { max-width: 640px; width: calc(100% - 24px); max-height: 90dvh; overflow: auto; padding: 24px; border:1px solid var(--line); border-radius:22px; color:var(--ink); background:var(--card, white); box-shadow:var(--shadow); }
+.comfort-dialog::backdrop { background:#081311a3; backdrop-filter:blur(4px); }
+.comfort-dialog p { line-height:1.6; }
+.comfort-dialog input[type="range"] { accent-color:#204f43; min-height:44px; }
+.comfort-dialog label { display: grid; gap: 8px; margin: 18px 0; }
+.comfort-dialog button, .comfort-dialog select, #tab-library button { min-height: 44px; }
+.comfort-dialog button[type="submit"] { width:100%; }
+.comfort-summary { background: #edf1e8; padding: 16px; border-radius: 12px; line-height: 1.6; }
+#eveningError { color: #963e23; }
+.comfort-song { grid-template-columns: minmax(0,1fr) auto; }
+.comfort-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.song-info { display:block; color:var(--muted, #586c66); margin:4px 0; }
+#tab-library h3 { margin-top:30px; }
+.mini-player { position:fixed; bottom:0; left:0; right:0; z-index:35; background:#fff; border-top:1px solid #ccd8ce; box-shadow:0 -4px 20px #0001; display:flex; gap:12px; align-items:center; padding:10px max(12px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)); }
+.mini-player[hidden] { display:none; }
+#miniTitle { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.has-mini-player { padding-bottom:100px; }
+.mini-player button { min-height:44px; }
+#openEvening { margin-bottom:20px; min-height:48px; }
+@media(max-width:600px) { .comfort-song { grid-template-columns:1fr; } .mini-player { gap:6px; flex-wrap:wrap; } #miniTitle { flex-basis:55%; } .comfort-dialog { padding:16px; } }

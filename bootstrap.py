@@ -162,6 +162,24 @@ ALTER TABLE music_cycles ALTER COLUMN fallback_genre SET DEFAULT 'Party';
 ALTER TABLE music_cycles ALTER COLUMN fallback_genre SET NOT NULL;
 """
 
+SCHEMA_SQL += """
+CREATE TABLE IF NOT EXISTS music_member_favorites (
+    member_id VARCHAR(100) NOT NULL REFERENCES club_members(member_id) ON DELETE CASCADE,
+    external_id VARCHAR(100) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    channel_title VARCHAR(255) NOT NULL DEFAULT '',
+    duration_ms INTEGER,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (member_id, external_id)
+);
+CREATE TABLE IF NOT EXISTS music_playback_history (
+    event_id UUID PRIMARY KEY,
+    started_at TIMESTAMPTZ NOT NULL,
+    track_json JSONB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_music_history_time ON music_playback_history(started_at DESC);
+"""
+
 DEFAULTS_SQL = """
 INSERT INTO music_profiles (id, name, slug, active)
 VALUES (1, 'Standard', 'standard', true)

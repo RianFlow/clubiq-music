@@ -70,6 +70,11 @@ Entscheidungen.
 
 ## Prüfung und Veröffentlichung
 
+Nachfolgepaket: Der geführte Abendstart, persönliche Songfavoriten und der
+Wiedergabeverlauf sind separat in [MUSIK-ABENDSTART.md](MUSIK-ABENDSTART.md)
+beschrieben. Die folgenden Prüfhinweise beziehen sich auf das ursprüngliche
+Zuverlässigkeitspaket; das Nachfolgepaket ergänzt zwei Datenbanktabellen.
+
 Lokale Prüfungen: Python-Regressionssuite, JavaScript-Syntax, UI-Tests für
 Anmeldungen/Verbindungen/Abstimmungsarchive und echter Chrome-Browsertest mit
 Testdaten einschließlich schmalem Display, Radio-/Player-Status, Sound-Decodierung

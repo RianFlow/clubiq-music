@@ -29,9 +29,12 @@ steht in [DJ, Warteschlange und Aktivitätsliste](docs/DJ-UND-AKTIVITAET.md).
 Die Überarbeitung von Pufferanzeige, Verbindungsfehlern und Bedienung sowie die
 nächsten Qualitätsziele stehen im [Musik-Qualitätsplan](docs/MUSIK-QUALITAETSPLAN-2026-09.md).
 
+Neu: [Vereinsabend starten, persönliche Favoriten und Wiedergabeverlauf](docs/MUSIK-ABENDSTART.md)
+mit optionalem Ersatzsender und einem kleinen Player für kurze Wege beim Abstimmen.
+
 ## Abgeschlossene Abstimmungen abspielen
 
-Die drei Hauptbereiche sind getrennt: **Abstimmen** zeigt nur die aktuelle bzw.
+Die Hauptbereiche sind getrennt: **Abstimmen** zeigt nur die aktuelle bzw.
 kommende Runde, **Playlists** enthält die auswählbaren Ergebnisse und **Player**
 steuert Musik, Warteschlange, Radio und Soundboard. Unter **Abstimmen** öffnet
 **+ Song vorschlagen** die Suche und die Songs der letzten Runde in einem Dialog.

@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 from db_config import connection_kwargs
 from radio_directory import DirectoryUnavailable, get_station, search_stations
 from radio_logos import CACHE_SECONDS, FAILURE_SECONDS, cached_logo
+from music_library import duration_ms, register_library
 
 load_dotenv()
 
@@ -252,6 +253,7 @@ def close_expired_cycles() -> None:
 async def lifespan(_: FastAPI):
     scheduler = BackgroundScheduler()
     scheduler.add_job(close_expired_cycles, "interval", minutes=1)
+    scheduler.add_job(collect_playback_history, "interval", seconds=30, max_instances=1, next_run_time=datetime.now(timezone.utc))
     scheduler.start()
     yield
     scheduler.shutdown()
@@ -615,7 +617,7 @@ def youtube_search(q: str) -> list[dict]:
         )
         response.raise_for_status()
         items = response.json().get("items", [])
-        return [
+        results = [
             {
                 "external_id": item["id"]["videoId"],
                 "title": html.unescape(item["snippet"]["title"]),
@@ -624,6 +626,17 @@ def youtube_search(q: str) -> list[dict]:
             }
             for item in items
         ]
+        if not results:
+            return []
+        # One batched metadata request, never one request per search result.
+        try:
+            metadata = requests.get("https://www.googleapis.com/youtube/v3/videos",
+                params={"part": "contentDetails", "id": ",".join(s["external_id"] for s in results), "key": YOUTUBE_API_KEY}, timeout=4)
+            metadata.raise_for_status()
+            durations = {item["id"]: duration_ms(item.get("contentDetails", {}).get("duration")) for item in metadata.json().get("items", [])}
+        except (requests.RequestException, ValueError, KeyError, TypeError):
+            durations = {}
+        return [{**song, "duration_ms": durations.get(song["external_id"])} for song in results]
     except requests.RequestException as exc:
         raise HTTPException(status_code=502, detail="Musiksuche ist derzeit nicht erreichbar.") from exc
 
@@ -843,7 +856,7 @@ def get_playlist(cycle_id: int, member: dict | None = Depends(optional_member)):
             """
             SELECT s.id, s.title, s.channel_title, s.member_id, s.provider, s.external_id,
                    COALESCE(SUM(v.points), 0),
-                   COALESCE(MAX(v.points) FILTER (WHERE v.member_id = %s), 0)
+                   COALESCE(MAX(v.points) FILTER (WHERE v.member_id = %s), 0), s.duration_ms
             FROM music_suggestions s
             LEFT JOIN music_votes v ON s.id = v.suggestion_id
             WHERE s.cycle_id = %s AND s.status = 'approved'
@@ -868,6 +881,7 @@ def get_playlist(cycle_id: int, member: dict | None = Depends(optional_member)):
             "thumbnail_url": f"/api/v1/music/thumbnails/youtube/{row[5]}"
             if row[4] == "youtube" and YOUTUBE_VIDEO_ID.fullmatch(row[5] or "") else None,
             "total_points": total_points, "my_points": int(row[7]),
+            "duration_ms": row[8] if len(row) > 8 else None,
         })
     return {"playlist": playlist}
 
@@ -1035,7 +1049,7 @@ def use_cycle_ranking(cycle_id: int, member: dict = Depends(require_player_opera
     return queue_cycle_ranking(cycle_id, member)
 
 
-def queue_cycle_ranking(cycle_id: int | None, member: dict):
+def queue_cycle_ranking(cycle_id: int | None, member: dict, *, prepare_only=False):
     close_expired_cycles()
     with db_connect() as conn, conn.cursor() as cur:
         columns = """SELECT id, starts_at, playlist_target_count, reuse_previous_playlist,
@@ -1062,7 +1076,7 @@ def queue_cycle_ranking(cycle_id: int | None, member: dict):
             saved = cur.fetchone()
             if saved:
                 generated = json.loads(saved[0]) if isinstance(saved[0], str) else saved[0]
-                return send_ranked_playlist(generated, cycle_id, name, target, use_genre, fallback_genre, member, True)
+                return send_ranked_playlist(generated, cycle_id, name, target, use_genre, fallback_genre, member, True, prepare_only=prepare_only)
         cur.execute(
             """
             SELECT s.title, s.channel_title, s.external_id, COALESCE(SUM(v.points), 0) AS points
@@ -1114,11 +1128,15 @@ def queue_cycle_ranking(cycle_id: int | None, member: dict):
         stored = cur.fetchone()[0]
         generated = json.loads(stored) if isinstance(stored, str) else stored
         conn.commit()
-    return send_ranked_playlist(generated, cycle_id, name, target, use_genre, fallback_genre, member, archived)
+    return send_ranked_playlist(generated, cycle_id, name, target, use_genre, fallback_genre, member, archived, prepare_only=prepare_only)
 
 
-def send_ranked_playlist(generated, cycle_id, name, target, use_genre, fallback_genre, member, archived):
+def send_ranked_playlist(generated, cycle_id, name, target, use_genre, fallback_genre, member, archived, *, prepare_only=False):
     items = [player_item(item) for item in generated]
+    if prepare_only:
+        if not items:
+            raise HTTPException(409, "Diese Playlist enthält noch keine abspielbaren Titel.")
+        return items
     counts = {source: sum(1 for item in generated if item.get('source') == source)
               for source in ('votes', 'previous', 'genre')}
     with db_connect() as conn, conn.cursor() as cur:
@@ -1815,3 +1833,51 @@ def get_all_votes():
             {"member": r[0], "title": r[1], "points": r[2], "created_at": r[3]}
             for r in cur.fetchall()
         ]}
+
+
+collect_playback_history = register_library(app, db_connect, require_member, player_agent, lambda: bool(PLAYER_AGENT_TOKEN))
+
+
+class EveningStart(BaseModel):
+    request_id: UUID
+    address: str = Field(pattern=r"^[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}$")
+    volume: int = Field(ge=0, le=100)
+    cycle_id: int | None = Field(default=None, ge=1)
+    station_id: int | None = Field(default=None, ge=1)
+    fallback_station_id: int | None = Field(default=None, ge=1)
+
+
+def active_station(station_id):
+    if station_id is None:
+        return None
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT id,name,stream_url,fallback_url,logo_url,genre,active,sort_order FROM music_radio_stations WHERE id=%s AND active=TRUE;", (station_id,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(404, "Radiosender nicht mehr verfügbar.")
+        return radio_station_dict(row)
+
+
+@app.post("/api/v1/music/player/evening/start")
+def start_evening(data: EveningStart, member: dict = Depends(require_player_operator)):
+    if (data.cycle_id is None) == (data.station_id is None):
+        raise HTTPException(422, "Bitte genau eine Musikquelle auswählen.")
+    if data.station_id and data.fallback_station_id:
+        raise HTTPException(422, "Ein Ersatzsender ist nur für Playlists vorgesehen.")
+    station = active_station(data.station_id)
+    fallback = active_station(data.fallback_station_id)
+    items = queue_cycle_ranking(data.cycle_id, member, prepare_only=True) if data.cycle_id else []
+    result = player_agent("POST", "/evening/start", {
+        "request_id": str(data.request_id), "address": data.address.upper(),
+        "volume": data.volume, "items": items, "station": station, "fallback_station": fallback,
+    }, timeout=100)
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("INSERT INTO music_player_audit (member_id,action,detail_json) VALUES (%s,'evening_start',%s);",
+                    (member["member_id"], json.dumps({"cycle_id": data.cycle_id, "station_id": data.station_id, "fallback_station_id": data.fallback_station_id, "volume": data.volume})))
+        conn.commit()
+    return result
+
+
+@app.post("/api/v1/music/player/fallback/disable")
+def disable_fallback(member: dict = Depends(require_player_operator)):
+    return player_agent("POST", "/fallback/disable")
