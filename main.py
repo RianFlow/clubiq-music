@@ -267,9 +267,12 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     response = await call_next(request)
+    frame_sources = "https://www.youtube-nocookie.com"
+    if request.url.path == "/darts":
+        frame_sources = "https://portal.3k-darts.com https://live.3k-darts.com"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
-        "script-src 'self'; connect-src 'self'; frame-src https://www.youtube-nocookie.com; "
+        f"script-src 'self'; connect-src 'self'; frame-src {frame_sources}; "
         "base-uri 'none'; frame-ancestors 'none'"
     )
     response.headers["Referrer-Policy"] = "same-origin"
@@ -404,6 +407,11 @@ def dj_remote():
 @app.get("/party")
 def party_display():
     return FileResponse("party.html")
+
+
+@app.get("/darts")
+def darts_display():
+    return FileResponse("darts.html")
 
 
 @app.get("/manifest.webmanifest")

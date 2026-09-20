@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#163c36">
+  <title>ClubIQ · Darts-Zentrale</title>
+  <meta name="description" content="SV Barver Darts A, B, C und D: Spielpläne, Spielberichte und Live-Ansichten gemeinsam verfolgen.">
+  <link rel="icon" href="/pics/logo.png">
+  <link rel="stylesheet" href="/static/darts.css?v=20260920-1">
+  <script defer src="/static/darts.js?v=20260920-1"></script>
+</head>
+<body>
+  <header class="darts-header">
+    <a class="brand" href="/" aria-label="Zur Musik-App"><img src="/pics/logo.png" alt=""><span>ClubIQ <b>Darts-Zentrale</b></span></a>
+    <nav aria-label="Anzeige"><button id="gridView" type="button">Alle Mannschaften</button><button id="trainingView" type="button">Training</button><button id="fullscreen" type="button">Vollbild</button><a href="/" target="_blank" rel="noopener">Musik öffnen ↗</a></nav>
+  </header>
+  <main>
+    <section class="intro">
+      <div><p class="eyebrow">SV Barver Darts · Saison 2026 / 2027</p><h1>Vier Teams. Ein Vereinsabend.</h1><p>A–C: Kreisligen 04 · D: Kreisklasse 11</p></div>
+      <button id="loadAll" class="primary" type="button">Alle vier anzeigen</button>
+    </section>
+    <p class="source-note">Offizielle 3K-Ansichten. Beim Anzeigen verbindet sich dein Browser mit 3K Darts. Spielstände werden dort bereitgestellt – keine eigene Ergebniserfassung. Live funktioniert nur bei einer aktiven Übertragung.</p>
+    <p id="pageStatus" class="message" role="status" hidden></p>
+    <section id="teamGrid" class="team-grid" aria-label="Unsere vier Mannschaften"></section>
+    <section id="trainingPanel" class="team-card" aria-labelledby="trainingHeading" hidden>
+      <div class="team-head"><span class="team-letter">T</span><div><h2 id="trainingHeading">Vereinstraining</h2><p id="trainingLabel">Beispiel: Training Doppel 10.09.</p></div></div>
+      <form id="trainingForm" class="training-form">
+        <label for="trainingUrl">3K-Link zum Training<input id="trainingUrl" type="url" required maxlength="600" autocomplete="off"></label>
+        <button type="submit">Training übernehmen</button>
+        <p class="subtle">Einmal pro Training den Teilnehmer- oder Gruppenlink einfügen. Die Auswahl bleibt auf diesem Gerät gespeichert. Ein Gruppenlink ermöglicht den direkten Aufruf der Spiele.</p>
+        <p id="trainingError" class="error" role="alert" hidden></p>
+      </form>
+      <div class="team-tools"><select id="trainingMode" aria-label="Trainingsansicht"><option value="participants">Teilnehmer</option><option value="games">Spiele & Tabelle</option><option value="performances">Bestleistungen · 180 & Highfinish</option><option value="placement">Platzierungen</option></select><button id="loadTraining" type="button">Training anzeigen</button><a id="trainingExternal" class="external" target="_blank" rel="noopener noreferrer">Bei 3K öffnen ↗</a></div>
+      <div id="trainingFrame" class="frame-wrap"><div class="placeholder"><strong>Euer Trainingsabend</strong><p>Teilnehmer, Spiele und Bestleistungen in der offiziellen 3K-Ansicht. Erst „Training anzeigen“ stellt die Verbindung her.</p></div></div>
+      <p id="trainingNote" class="frame-note">Keine automatische 180-Animation oder Sieger-Meldung. Platzierungen sind erst verfügbar, wenn das Event in 3K abgeschlossen wurde.</p>
+    </section>
+    <footer>Begegnungen werden nur auf diesem Gerät gespeichert. Für einen anderen Spieltag den neuen Link auswählen. <a href="https://portal.3k-darts.com/frontend/events" target="_blank" rel="noopener noreferrer">3K Darts öffnen ↗</a></footer>
+  </main>
+  <dialog id="matchDialog" aria-labelledby="matchHeading">
+    <form id="matchForm">
+      <div class="dialog-head"><h2 id="matchHeading">Begegnung auswählen</h2><button id="closeMatch" type="button" aria-label="Schließen">×</button></div>
+      <p>In 3K die gewünschte Begegnung öffnen und den vollständigen Link hier einfügen. Ein Mannschaftslink allein wählt noch kein Spiel aus.</p>
+      <label for="matchUrl">Spielbericht- oder Live-Link<input id="matchUrl" type="url" maxlength="600" required placeholder="https://portal.3k-darts.com/…?matchId=…" autocomplete="off"></label>
+      <p class="subtle">Bitte prüfen, dass die Begegnung zur ausgewählten Mannschaft gehört. 3K bietet keine öffentliche Schnittstelle für eine automatische Zuordnung.</p>
+      <p id="matchError" class="error" role="alert" hidden></p>
+      <div class="dialog-actions"><button id="clearMatch" type="button">Auswahl entfernen</button><button class="primary" type="submit">Auf diesem Gerät speichern</button></div>
+    </form>
+  </dialog>
+</body>
+</html>

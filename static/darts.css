@@ -1,0 +1,88 @@
+:root { font-family: Inter, system-ui, sans-serif; color: #13211f; background: #f4f4ef; --green:#163c36; --line:#d9ddd7; }
+* { box-sizing: border-box; }
+[hidden] { display:none !important; }
+body { margin:0; }
+button,input,select { font:inherit; }
+button,a { touch-action:manipulation; }
+button,.darts-header a:not(.brand),.external { min-height:44px; padding:10px 14px; border:1px solid var(--line); border-radius:10px; color:var(--green); background:#fffef9; font-weight:650; cursor:pointer; text-decoration:none; }
+button:hover,a.external:hover { background:#e6eee8; }
+button:disabled { opacity:.5; cursor:not-allowed; }
+button.primary { color:white; background:var(--green); border-color:var(--green); }
+:is(button,a,input,select):focus-visible { outline:3px solid #c79f45; outline-offset:3px; }
+.darts-header { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:16px 24px; background:#fffef9; border-bottom:1px solid var(--line); }
+.brand { display:flex; align-items:center; gap:12px; color:var(--green); text-decoration:none; }
+.brand img { width:44px; height:44px; border-radius:12px; }
+.brand span { display:grid; gap:2px; font-size:.85rem; }
+.brand b { font-size:1rem; }
+.darts-header nav { display:flex; flex-wrap:wrap; gap:8px; }
+main { padding:22px 24px; max-width:2400px; margin:auto; }
+.intro { display:flex; align-items:center; justify-content:space-between; gap:20px; }
+.eyebrow { color:#245c51; text-transform:uppercase; letter-spacing:.12em; font-size:.8rem; font-weight:750; margin:0 0 6px; }
+h1 { font:500 clamp(1.7rem,3vw,2.7rem)/1.15 Georgia,serif; margin:0; }
+.intro p:last-child { margin:8px 0; color:#52635e; }
+.source-note,footer { color:#52635e; font-size:.88rem; line-height:1.5; }
+.source-note { max-width:1100px; margin:12px 0 22px; }
+.team-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
+.team-card { min-width:0; border:1px solid var(--line); border-radius:18px; background:#fffef9; overflow:hidden; }
+.team-head { display:flex; align-items:center; gap:12px; padding:16px; }
+.team-letter { display:grid; place-items:center; width:46px; height:46px; border-radius:12px; background:var(--green); color:#f0d991; font:700 1.6rem Georgia,serif; flex-shrink:0; }
+.team-head h2 { font-size:1.1rem; margin:0 0 4px; }
+.team-head p { margin:0; color:#52635e; font-size:.88rem; }
+.team-head button { margin-left:auto; }
+.team-tools { display:flex; flex-wrap:wrap; gap:8px; padding:0 16px 14px; align-items:center; }
+.team-tools select { min-width:0; max-width:100%; min-height:44px; padding:8px; border:1px solid var(--line); border-radius:10px; background:white; color:var(--green); }
+.team-tools .external { margin-left:auto; font-size:.88rem; }
+.frame-wrap { position:relative; height:560px; background:#eef1ec; border-top:1px solid var(--line); }
+.frame-wrap iframe { width:100%; height:100%; border:0; background:white; display:block; }
+.placeholder { height:100%; min-height:190px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:26px; text-align:center; }
+.placeholder p { max-width:38ch; color:#52635e; line-height:1.5; margin:0; }
+.frame-note { margin:0; padding:10px 16px; color:#52635e; font-size:.8rem; line-height:1.4; }
+.team-grid.focused { grid-template-columns:1fr; }
+.training-form { padding:0 16px 16px; display:grid; gap:12px; }
+.training-form button { justify-self:start; }
+.training-form p { margin:0; line-height:1.5; }
+body:fullscreen #trainingPanel { height:100%; overflow:auto; }
+body:fullscreen #trainingFrame { flex:1 0 360px; }
+.focused .frame-wrap { height:calc(100dvh - 260px); min-height:440px; }
+.message { padding:12px; border:1px solid #c7d9d0; border-radius:10px; background:#e6eee8; }
+footer { margin:20px 0; }
+footer a { color:var(--green); }
+dialog { width:min(620px,calc(100% - 24px)); max-height:calc(100dvh - 24px); overflow:auto; padding:24px; border:1px solid var(--line); border-radius:18px; color:#13211f; background:#fffef9; }
+dialog::backdrop { background:#081311a3; }
+dialog h2 { font-size:1.35rem; margin:0; }
+.dialog-head { display:flex; align-items:center; gap:12px; justify-content:space-between; }
+.dialog-head button { font-size:1.4rem; }
+dialog p { line-height:1.5; }
+label { display:grid; gap:8px; font-weight:650; }
+input { width:100%; min-height:48px; padding:12px; border:1px solid #a8bab2; border-radius:10px; font-size:16px; }
+.subtle { color:#52635e; font-size:.88rem; }
+.error { color:#982e24; background:#ffebe6; padding:10px; border-radius:8px; }
+.dialog-actions { display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-top:20px; }
+body:fullscreen { overflow:auto; background:#f4f4ef; display:flex; flex-direction:column; height:100dvh; }
+body:fullscreen .darts-header { flex-shrink:0; }
+body:fullscreen .intro,body:fullscreen .source-note,body:fullscreen footer { display:none; }
+body:fullscreen main { padding:12px; flex:1; min-height:0; width:100%; }
+body:fullscreen .team-grid { height:100%; grid-template-rows:repeat(2,minmax(0,1fr)); }
+body:fullscreen .team-grid.focused { grid-template-rows:minmax(0,1fr); }
+body:fullscreen .team-card { display:flex; flex-direction:column; min-height:0; }
+body:fullscreen .frame-wrap { height:auto; min-height:0; flex:1; }
+body:fullscreen .team-head,body:fullscreen .team-tools,body:fullscreen .frame-note { flex-shrink:0; }
+body:fullscreen .placeholder { min-height:0; overflow:auto; }
+@media(min-width:1600px) { .frame-wrap { height:640px; } }
+@media(max-width:800px) {
+  .darts-header { flex-wrap:wrap; padding:12px; }
+  main { padding:16px 12px; }
+  .team-grid { grid-template-columns:1fr; }
+  .intro { align-items:start; flex-direction:column; gap:10px; }
+  .intro > button { width:100%; }
+  .team-head { padding:12px; }
+  .team-head h2 { font-size:1rem; }
+  .team-tools { padding:0 12px 12px; }
+  .team-tools .external { margin-left:0; }
+  .frame-wrap { height:65dvh; min-height:380px; }
+  body:fullscreen .frame-wrap { height:65dvh; }
+  body:fullscreen .team-grid { height:auto; grid-template-rows:none; }
+  body:fullscreen .frame-wrap { flex:auto; }
+  .team-tools select { flex:1 1 140px; font-size:16px; }
+  .dialog-actions button { width:100%; }
+}
