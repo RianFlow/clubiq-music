@@ -29,8 +29,12 @@ for (const url of [
 assert.deepEqual(Array.from(DARTS_TEAMS,t=>t.participant),['174110','174111','174112','174266']);
 const html = fs.readFileSync('darts.html','utf8');
 assert.match(html,/id="teamGrid"/);
+assert.match(html,/https:\/\/musik\.clubiq\.party\//);
 assert.doesNotMatch(html,/<iframe|https:\/\/portal[^" ]+\.js/,'external content is opt-in');
 const script = fs.readFileSync('static/darts.js','utf8');
 assert.doesNotMatch(script,/fetch\(|\/api\/v1\/music\/.*command/,'darts view does not control music');
 assert.match(fs.readFileSync('sw.js','utf8'),/"\/darts"/);
+const backend = fs.readFileSync('main.py','utf8');
+assert.match(backend,/DARTS_PUBLIC_HOST = "barverdarts\.clubiq\.party"/);
+assert.match(backend,/darts\.html" if is_darts_host\(request\) else "index\.html"/);
 console.log('Darts: four verified teams, strict links, wrong-league guard, opt-in embedding and no playback writes OK.');

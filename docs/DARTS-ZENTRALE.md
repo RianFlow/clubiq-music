@@ -2,6 +2,8 @@
 
 Die Route `/darts` zeigt die offiziellen 3K-Ansichten für SV Barver Darts A–D. Im Player führt „Darts-Zentrale · A–D“ in einem neuen Tab dorthin. Keine Veränderung der Musikwiedergabe.
 
+Der öffentliche Host `barverdarts.clubiq.party` liefert am Pfad `/` direkt die Darts-Zentrale aus. Andere Hosts – insbesondere `musik.clubiq.party` – behalten am Pfad `/` die Musik-App. Der Musik-Link in der Darts-Kopfzeile verwendet deshalb die feste Adresse `https://musik.clubiq.party/`.
+
 ## Teams 2026 / 2027
 
 | Team | Wettbewerb | 3K-Mannschaft |
