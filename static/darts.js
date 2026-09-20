@@ -6,6 +6,15 @@ const DARTS_TEAMS = [
   {id:'d',name:'SV Barver Darts D',event:'1460',participant:'174266',league:'Kreisklasse 11'},
 ];
 const DARTS_STORAGE = 'clubiq_darts_matches_2026_27';
+function dartsLayout(raw) {
+  const ids = DARTS_TEAMS.map(t=>t.id);
+  const count = [1,2,3,4].includes(raw?.count) ? raw.count : 4;
+  const selected = [...new Set(Array.isArray(raw?.selected) ? raw.selected.filter(id=>ids.includes(id)) : [])];
+  for (const id of ids) if (selected.length < count && !selected.includes(id)) selected.push(id);
+  const modes = {};
+  for (const id of ids) modes[id] = ['team','report','live'].includes(raw?.modes?.[id]) ? raw.modes[id] : 'team';
+  return {count,selected:selected.slice(0,count),modes,auto:raw?.auto === true};
+}
 function dartsMatch(raw, team) {
   const error = () => { throw new Error('Bitte einen vollständigen 3K-Spielbericht-Link mit matchId oder einen 3K-Live-Link einfügen.'); };
   if (typeof raw !== 'string' || raw.length > 600) return error();
@@ -43,6 +52,30 @@ if (typeof document !== 'undefined') initDarts();
 function initDarts() {
   const q = selector => document.querySelector(selector);
   const grid = q('#teamGrid'), cards = new Map(), selections = {};
+  const activityUrl = 'https://portal.3k-darts.com/frontend/events/5/mandant/1931';
+  let activityLoaded = false;
+  const layoutKey = 'clubiq_darts_layout';
+  let layout = dartsLayout(null), focused = null;
+  try { layout = dartsLayout(JSON.parse(localStorage.getItem(layoutKey))); } catch (_) { /* Use defaults. */ }
+  function saveLayout() {
+    for (const [id,c] of cards) layout.modes[id] = c.select.value;
+    try { localStorage.setItem(layoutKey,JSON.stringify(layout)); }
+    catch (_) { message('Diese Auswahl gilt nur für die aktuelle Sitzung.'); }
+  }
+  function applyLayout() {
+    const ids = focused ? [focused] : layout.selected;
+    grid.dataset.count = String(ids.length);
+    grid.classList.toggle('focused',ids.length === 1);
+    q('#gameCount').value = String(layout.count);
+    q('#autoLoad').checked = layout.auto;
+    for (const [id,c] of cards) {
+      c.card.hidden = !ids.includes(id);
+      c.focus.textContent = focused === id ? 'Zurück' : 'Groß';
+      c.focus.setAttribute('aria-pressed',String(focused === id));
+      c.focus.setAttribute('aria-label',focused === id ? 'Zurück zur Auswahl' : `${DARTS_TEAMS.find(t=>t.id===id).name} vergrößern`);
+    }
+    for (const button of q('#teamChoices').querySelectorAll('button')) button.setAttribute('aria-pressed',String(layout.selected.includes(button.dataset.team)));
+  }
   const trainingKey = 'clubiq_darts_training';
   const exampleTraining = 'https://portal.3k-darts.com/frontend/events/5/event/31849/phase/53660/group/403948';
   let training = dartsTraining(exampleTraining);
@@ -64,13 +97,29 @@ function initDarts() {
     q('#trainingFrame').replaceChildren(iframe);
     q('#trainingNote').textContent = '3K-Ansicht angefordert. Bleibt sie leer, nutze „Bei 3K öffnen“. Keine eigene Live-Erkennung von 180 oder Leg-Siegern; die Aktualisierung übernimmt 3K.';
   }
-  function showTraining(show) {
-    q('#trainingPanel').hidden = !show; grid.hidden = show;
-    q('.intro').hidden = show;
-    q('#trainingView').setAttribute('aria-pressed',String(show));
+  function setSection(section) {
+    const teams = section === 'teams';
+    grid.hidden = !teams; q('.intro').hidden = !teams;
+    q('#layoutControls').hidden = !teams;
+    q('#activityPanel').hidden = section !== 'activity';
+    q('#trainingPanel').hidden = section !== 'training';
+    q('#activityView').setAttribute('aria-pressed',String(section === 'activity'));
+    q('#trainingView').setAttribute('aria-pressed',String(section === 'training'));
+  }
+  function loadActivity() {
+    const iframe = document.createElement('iframe');
+    iframe.title = 'Aktuelle Veranstaltungen von SV Barver bei 3K Darts';
+    iframe.referrerPolicy = 'no-referrer';
+    iframe.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox');
+    iframe.src = activityUrl;
+    q('#activityFrame').replaceChildren(iframe);
+    q('#activityNote').textContent = 'Aktuelle 3K-Veranstalterübersicht angefordert. Neue Einträge erscheinen nach „Aktualisieren“. Bleibt die Ansicht leer, nutze „Bei 3K öffnen“.';
+    activityLoaded = true;
   }
   syncTraining();
-  q('#trainingView').addEventListener('click',()=>showTraining(true));
+  q('#activityView').addEventListener('click',()=>{ setSection('activity'); if (!activityLoaded) loadActivity(); });
+  q('#reloadActivity').addEventListener('click',loadActivity);
+  q('#trainingView').addEventListener('click',()=>setSection('training'));
   q('#loadTraining').addEventListener('click',loadTraining);
   q('#trainingMode').addEventListener('change',loadTraining);
   q('#trainingForm').addEventListener('submit',event=>{
@@ -127,15 +176,8 @@ function initDarts() {
     c.note.textContent = '3K-Ansicht angefordert. Leer oder keine Übertragung? „Bei 3K öffnen“ verwenden. Aktualisierung und Inhalte steuert 3K.';
   }
   function focusTeam(id) {
-    showTraining(false);
-    grid.classList.toggle('focused',Boolean(id));
-    for (const [key,c] of cards) {
-      c.card.hidden = Boolean(id) && key!==id;
-      c.focus.textContent = key===id ? 'Raster' : 'Groß';
-      c.focus.setAttribute('aria-pressed',String(key===id));
-      c.focus.setAttribute('aria-label',key===id ? 'Zurück zum Vierer-Raster' : `SV Barver Darts ${key.toUpperCase()} vergrößern`);
-    }
-    q('#gridView').textContent = id ? 'Zurück zu allen vier' : 'Alle Mannschaften';
+    setSection('teams');
+    focused = id; applyLayout();
   }
   for (const team of DARTS_TEAMS) {
     const card = document.createElement('article'); card.className='team-card'; card.id=`team-${team.id}`;
@@ -145,9 +187,9 @@ function initDarts() {
       <div class="frame-wrap"><div class="placeholder"><strong>${team.league}</strong><p>Spielplan und Ergebnisse dieser Mannschaft von 3K Darts laden.</p><button class="load-team primary" type="button">${team.id.toUpperCase()} anzeigen</button></div></div><p class="frame-note">Noch keine Verbindung zu 3K. Die Musik wird durch diese Ansicht nicht gesteuert.</p>`;
     grid.append(card);
     const c = {card,wrap:card.querySelector('.frame-wrap'),select:card.querySelector('select'),open:card.querySelector('.external'),note:card.querySelector('.frame-note'),matchNote:card.querySelector('.match-note'),focus:card.querySelector('.focus-team'),loaded:false};
-    cards.set(team.id,c); sync(team);
-    c.focus.addEventListener('click',()=>focusTeam(grid.classList.contains('focused') && !card.hidden ? null : team.id));
-    c.select.addEventListener('change',()=>load(team));
+    cards.set(team.id,c); c.select.value = layout.modes[team.id]; sync(team);
+    c.focus.addEventListener('click',()=>focusTeam(focused === team.id ? null : team.id));
+    c.select.addEventListener('change',()=>{ load(team); saveLayout(); });
     card.querySelector('.load-team').addEventListener('click',()=>load(team));
     card.querySelector('.reload').addEventListener('click',()=>load(team));
     card.querySelector('.configure').addEventListener('click',()=>{
@@ -155,8 +197,27 @@ function initDarts() {
       q('#matchUrl').value=selections[team.id]?.report || selections[team.id]?.live || '';
       q('#matchError').hidden=true; q('#clearMatch').disabled=!selections[team.id]; q('#matchDialog').showModal();
     });
+    const choice = document.createElement('button');
+    choice.type = 'button'; choice.dataset.team = team.id; choice.textContent = `Barver ${team.id.toUpperCase()}`;
+    choice.addEventListener('click',()=>{
+      if (layout.selected.includes(team.id)) {
+        if (layout.count === 1) return;
+        layout.selected = layout.selected.filter(id=>id!==team.id); layout.count = layout.selected.length;
+      } else { layout.selected = [...layout.selected.slice(1),team.id]; }
+      focused = null; applyLayout(); saveLayout();
+      if (layout.auto && layout.selected.includes(team.id) && !c.loaded) load(team);
+    });
+    q('#teamChoices').append(choice);
   }
-  q('#loadAll').addEventListener('click',()=>{ focusTeam(null); DARTS_TEAMS.forEach(load); });
+  applyLayout();
+  q('#gameCount').addEventListener('change',()=>{
+    layout = dartsLayout({...layout,count:Number(q('#gameCount').value)});
+    focused = null; applyLayout(); saveLayout();
+    if (layout.auto) DARTS_TEAMS.filter(t=>layout.selected.includes(t.id) && !cards.get(t.id).loaded).forEach(load);
+  });
+  q('#autoLoad').addEventListener('change',()=>{ layout.auto=q('#autoLoad').checked; saveLayout(); if (layout.auto) DARTS_TEAMS.filter(t=>layout.selected.includes(t.id)).forEach(load); });
+  if (layout.auto) DARTS_TEAMS.filter(t=>layout.selected.includes(t.id)).forEach(load);
+  q('#loadAll').addEventListener('click',()=>{ focusTeam(null); DARTS_TEAMS.filter(t=>layout.selected.includes(t.id)).forEach(load); });
   q('#gridView').addEventListener('click',()=>focusTeam(null));
   q('#closeMatch').addEventListener('click',()=>q('#matchDialog').close());
   q('#matchForm').addEventListener('submit',event=>{
@@ -164,11 +225,12 @@ function initDarts() {
     try {
       selections[editing.id]=dartsMatch(q('#matchUrl').value,editing); save(); sync(editing);
       cards.get(editing.id).select.value=selections[editing.id].report ? 'report' : 'live';
-      load(editing); q('#matchDialog').close();
+      load(editing); saveLayout(); q('#matchDialog').close();
     } catch (error) { q('#matchError').textContent=error.message; q('#matchError').hidden=false; }
   });
   q('#clearMatch').addEventListener('click',()=>{
     delete selections[editing.id]; save(); sync(editing);
+    saveLayout();
     if (cards.get(editing.id).loaded) load(editing);
     q('#matchDialog').close();
   });

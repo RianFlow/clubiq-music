@@ -17,8 +17,8 @@ Die Links wurden am 20.09.2026 im öffentlichen Portal geprüft. Nach einem Sais
 
 ## Bedienung
 
-1. „Alle vier anzeigen“ lädt vier unabhängige 3K-Fenster. Vorher findet keine Verbindung zu 3K statt.
-2. „Groß“ zeigt ein Team; „Alle Mannschaften“ kehrt zum Raster zurück. Auf kleinen Displays stehen die Fenster untereinander.
+1. „Gleichzeitig anzeigen“ wählt 1–4 Fenster. Die Team-Schaltflächen passen die Auswahl an; „Auswahl anzeigen“ lädt die ausgewählten 3K-Fenster.
+2. „Groß“ zeigt ein Team. Auf kleinen Displays stehen mehrere Fenster lesbar untereinander. Auswahl, Anzahl und Ansichten werden auf diesem Gerät gespeichert. „Meine Auswahl beim Öffnen automatisch laden“ erlaubt ausdrücklich das automatische Laden von 3K beim nächsten Besuch; standardmäßig ist es aus.
 3. „Spiel wählen“: Link der konkreten Begegnung aus dem 3K-Portal einfügen (`?matchId=…`) oder den passenden Link von `live.3k-darts.com/event/10/…`. Die Auswahl gilt nur auf diesem Gerät, nicht vereinsweit.
 4. Zwischen Mannschaftsübersicht, gespeichertem Spielbericht und Live-Ansicht wechseln. Bei einem reinen Live-Link gibt es keinen abgeleiteten Spielbericht-Link.
 5. „Neu laden“ aktualisiert das betreffende Fenster. „Bei 3K öffnen“ dient als Ausweichmöglichkeit, wenn Einbettung, Internet oder Browser Probleme machen.
@@ -30,6 +30,10 @@ Keine automatische Ermittlung des nächsten Spiels: Es gibt keine öffentliche E
 Über „Training“ wird ein separater Bereich geöffnet. Das verifizierte Beispiel ist Event 31849 („Training Doppel 10.09.“), Gruppe 403948 in Phase 53660. Teilnehmer, Bestleistungen und Platzierungen sind direkt wählbar; Spiele & Tabelle benötigen den Gruppenlink. Andere Trainings im 3K-Mandanten 5 können über einen validierten Portal-Link ausgewählt werden. Die Auswahl wird ausschließlich auf diesem Gerät unter `clubiq_darts_training` gespeichert. Keine Fremdverbindung vor dem Anzeigen/Übernehmen oder dem Wechsel einer Ansicht.
 
 Die offizielle 3K-Dokumentation bestätigt am 20.09.2026 ausdrücklich, dass keine öffentliche API angeboten wird. Eine eigene Darstellung mit automatisch erkannten 180-/Leg-Sieg-Ereignissen und eine automatische Auswahl der nächsten Begegnung sind deshalb nicht implementiert. Dafür ist eine abgestimmte Datenschnittstelle mit 3K erforderlich. Keine internen Endpunkte, kein Scraping und keine Umgehung der fremden Oberfläche.
+
+## Aktuelles von SV Barver
+
+Die öffentliche Veranstalterübersicht `https://portal.3k-darts.com/frontend/events/5/mandant/1931` ist unter „Aktuelles“ eingebunden. Sie wird von 3K gepflegt und enthält neue Trainings, Turniere und andere Veranstaltungen von SV Barver, ohne dass ClubIQ pro Veranstaltung einen neuen Link benötigt. „Aktualisieren“ lädt die Übersicht neu; ClubIQ liest oder speichert dabei keine fremden Veranstaltungsdaten. Falls die Einbettung vom Browser blockiert wird, führt „Bei 3K öffnen“ zur gleichen offiziellen Übersicht.
 
 Prüfstatus: URL- und Sicherheitstests bestanden; lokale Trainingsnavigation und Auswahl des korrekten Bestleistungslinks im Browser geprüft. Externe iFrames bleiben im verfügbaren In-App-Testbrowser leer; erfolgreiche Einbettung ist daher noch nicht bestätigt. „Bei 3K öffnen“ ist die Ausweichmöglichkeit. Die erste Veröffentlichung erfolgt auf Benutzerwunsch mit dieser Einschränkung; zusätzlich im normalen Vereinsbrowser prüfen.
 
