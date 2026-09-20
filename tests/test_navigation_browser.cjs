@@ -25,7 +25,7 @@ const server = http.createServer((req, res) => {
   const origin = `http://127.0.0.1:${server.address().port}`;
   const browser = await chromium.launch({ headless:true, ...(process.env.PLAYWRIGHT_CHANNEL ? {channel:process.env.PLAYWRIGHT_CHANNEL} : {}) });
   try {
-    const context = await browser.newContext({ viewport:{width:1280,height:900}, serviceWorkers:'block' });
+    const context = await browser.newContext({ viewport:{width:1280,height:900}, hasTouch:true, serviceWorkers:'block' });
     const page = await context.newPage();
     const errors = [];
     const writes = [];
@@ -297,9 +297,80 @@ const server = http.createServer((req, res) => {
     assert.equal(await page.locator('#eveningFallback').isDisabled(),true);
     await page.locator('#closeEvening').click();
     assert.equal(eveningRequests.length,1,'cancel must not mutate the player');
+    // Responsive layout uses the same controls and never issues playback commands.
+    const writesBeforeResponsive = writes.length;
+    favorites = [{external_id:'mmmmmmmmmmm',title:'Ein langer Favorit mit Live-Version vom Vereinsabend',channel_title:'Beispielinterpret'}];
+    for (const viewport of [{width:320,height:740},{width:390,height:844},{width:768,height:1024},{width:1024,height:768},{width:844,height:390}]) {
+      await page.setViewportSize(viewport);
+      for (const tab of ['voting','playlists','library','player']) {
+        await page.locator(`.tabs [data-tab="${tab}"]`).click();
+        await page.waitForFunction(() => document.documentElement.scrollWidth <= innerWidth);
+        const bounds = await page.locator('.tabs').boundingBox();
+        if (viewport.width <= 720) {
+          assert.ok(bounds.y >= viewport.height - 80 && bounds.y + bounds.height <= viewport.height + 1, 'navigation stays at the bottom');
+          for (const button of await page.locator('.tabs button').all()) {
+            const box = await button.boundingBox();
+            assert.ok(box.width >= 44 && box.height >= 44, 'navigation has touch-sized targets');
+          }
+          if (tab !== 'player') {
+            const mini = await page.locator('#miniPlayer').boundingBox();
+            assert.ok(mini.y + mini.height <= bounds.y + 1,'mini player does not cover navigation');
+          }
+        }
+      }
+      for (const button of await page.locator('#playerControls button').all()) {
+        const box = await button.boundingBox();
+        assert.ok(box.width >= 44 && box.height >= 44,'player controls are touch-sized');
+      }
+      if (process.env.NAV_SCREENSHOT_DIR && viewport.width === 1024) {
+        await page.locator('#toast.show').waitFor({state:'hidden'});
+        await page.locator('.player-layout').evaluate(el => el.scrollIntoView({block:'start'}));
+        await page.screenshot({path:path.join(process.env.NAV_SCREENSHOT_DIR,'tablet-player.png')});
+      }
+    }
+    await page.setViewportSize({width:390,height:844});
+    await nav.getByRole('button',{name:'Abstimmen',exact:true}).click();
+    await page.locator('#playlist .song-card').first().evaluate(el => el.scrollIntoView({block:'start'}));
+    await page.waitForFunction(() => {
+      const root = document.documentElement;
+      return parseFloat(root.style.getPropertyValue('--mini-player-height')) > 0;
+    });
+    if (process.env.NAV_SCREENSHOT_DIR) await page.screenshot({path:path.join(process.env.NAV_SCREENSHOT_DIR,'phone-voting.png')});
+    const firstVote = await page.locator('#playlist [data-vote="1"]').first().boundingBox();
+    const miniBounds = await page.locator('#miniPlayer').boundingBox();
+    assert.ok(firstVote.y + firstVote.height < miniBounds.y, 'scrolling a song into view keeps vote buttons above the dock');
+    await page.evaluate(() => toast('Gespeichert – diese Meldung verdeckt keine Player-Schaltflächen.'));
+    await page.locator('#toast').evaluate(el => Promise.all(el.getAnimations().map(animation => animation.finished)));
+    const toastBounds = await page.locator('#toast').boundingBox();
+    assert.ok(toastBounds.x >= 0 && toastBounds.x + toastBounds.width <= 390, 'toast stays within phone width');
+    assert.ok(toastBounds.y + toastBounds.height <= miniBounds.y, 'toast stays above the mini player');
+    await nav.getByRole('button',{name:'Playlists',exact:true}).click();
+    assert.equal(await page.evaluate(() => scrollY),0,'mobile area change resets scroll');
+    // Long titles and an install prompt must not push account controls off screen.
+    await page.evaluate(() => {
+      document.querySelector('#memberOpen').textContent = 'Ein sehr langer Mitgliedername · Abmelden';
+      document.querySelector('#installPwa').hidden = false;
+      document.querySelector('#resultSongs .song-copy strong').textContent = 'Ein sehr langer Songtitel mit einer ausführlichen Live-Version vom Vereinsabend';
+    });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),true);
+    const headerBrand = await page.locator('.topbar .brand').boundingBox();
+    const headerActions = await page.locator('.top-actions').boundingBox();
+    assert.ok(headerBrand.x + headerBrand.width <= headerActions.x, 'install button and long name stay separate from brand');
+    await page.evaluate(() => { document.querySelector('#installPwa').hidden = true; renderSession(); });
+    await nav.getByRole('button',{name:'Abstimmen',exact:true}).click();
+    await page.locator('#openSuggest').click();
+    await page.setViewportSize({width:390,height:440});
+    await page.locator('#searchInput').focus();
+    assert.equal(await page.locator('#suggestDialog').evaluate(el => el.scrollWidth <= el.clientWidth),true,'short viewport dialog fits');
+    await page.getByRole('button',{name:'Songvorschläge schließen'}).click();
+    assert.equal(writes.length,writesBeforeResponsive,'responsive browsing sends no player commands');
     await page.evaluate(() => clearMemberSession(false));
     assert.equal(await page.locator('#openEvening').isVisible(),false);
     assert.equal(await page.locator('#favoriteSongs').textContent(),'');
+    await page.setViewportSize({width:320,height:740});
+    await page.locator('.tabs [data-tab="voting"]').tap();
+    assert.equal(await page.locator('#miniPause').isVisible(),false,'guest cannot control playback from the dock');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),true,'guest voting fits small phones');
     // Companion screens share recovery behavior without erasing the last song.
     const companion = await context.newPage();
     companion.on('pageerror', error => errors.push(error.message));

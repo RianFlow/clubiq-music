@@ -1,0 +1,127 @@
+/* Touch layout: shared DOM and permissions, no separate mobile player. */
+:root { --mobile-nav-height: 70px; --mini-player-height: 76px; --topbar-height: 76px; }
+html { scroll-padding-top: calc(var(--topbar-height) + 76px); }
+.toast { transition: opacity .2s ease, transform .2s ease; }
+:is(button, a, input, select):focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+button, a { touch-action: manipulation; }
+.tab-icon { display: none; }
+.has-mini-player { padding-bottom: calc(var(--mini-player-height) + 24px); }
+.has-mini-player .toast { bottom: calc(var(--mini-player-height) + 12px); }
+.mini-player { padding-left: max(12px, env(safe-area-inset-left)); }
+.mini-player #miniTitle { line-height: 1.4; }
+.queue-row > div, .player-layout > *, .top-actions { min-width: 0; }
+
+@media (pointer: coarse), (max-width: 1024px) {
+  .button.small, .button.tiny, .icon-button, .subtab, .auth-switch button,
+  .points button, .player-icon.compact { min-width: 44px; min-height: 44px; }
+  input, select { font-size: 16px; }
+  input[type="range"] { min-height: 44px; padding-inline: 0; }
+  .filter-check, .check-control { min-height: 44px; }
+}
+
+/* Portrait tablets keep player and queue readable; landscape uses both columns. */
+@media (min-width: 721px) and (max-width: 1100px) {
+  .shell { width: calc(100% - 40px); margin-top: 16px; }
+  .topbar { padding-inline: 20px; gap: 12px; }
+  .club-signature, .brand-copy small { display: none; }
+  .top-actions { flex-wrap: wrap; justify-content: flex-end; }
+  .status-pill { display: none; }
+  .tabs { top: var(--topbar-height); }
+  .tabs .tab { flex: 1; }
+  .player-layout { grid-template-columns: minmax(0, 1.15fr) minmax(260px, .85fr); }
+  .player-console { padding: 20px; }
+  .now-playing { grid-template-columns: 72px minmax(0,1fr); gap: 12px; }
+  .player-cover { width: 72px; height: 72px; }
+  .player-actions { flex-wrap: wrap; }
+  .section-head { flex-wrap: wrap; }
+  .song-card { gap: 12px; }
+}
+@media (min-width: 721px) and (max-width: 900px) {
+  .player-layout { grid-template-columns: 1fr; }
+  .now-playing { grid-template-columns: 100px minmax(0,1fr); }
+  .player-cover { width: 100px; height: 100px; }
+}
+
+@media (max-width: 720px) {
+  :root { --topbar-height: 71px; }
+  html { scroll-padding-top: calc(var(--topbar-height) + 12px); scroll-padding-bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + 16px); }
+  html:has(.has-mini-player) { scroll-padding-bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + var(--mini-player-height) + 16px); }
+  body { padding-bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + 20px); }
+  body.has-mini-player { padding-bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + var(--mini-player-height) + 20px); }
+  .shell { width: calc(100% - 28px); margin: 16px auto 36px; }
+  .topbar { padding: 10px max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left)); gap: 8px; }
+  .top-actions { flex: 1; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+  .top-actions .button { min-height: 44px; font-size: .82rem; }
+  #memberOpen { max-width: 155px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #installPwa { flex-basis: 100%; order: 3; }
+  .tabs {
+    position: fixed; top: auto; bottom: 0; left: 0; right: 0; z-index: 40;
+    display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 4px;
+    height: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
+    padding: 6px max(8px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    border-top: 1px solid var(--line); background: var(--card); box-shadow: 0 -4px 24px #13211f0b;
+    overflow: visible;
+  }
+  .tab { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; position: relative; padding: 5px 2px; font-size: .72rem; border-radius: 12px; }
+  .tab.active { background: var(--mint); color: var(--green); }
+  .tab-icon { display: block; width: 22px; height: 22px; flex: 0 0 auto; }
+  .tab #playerIndicator { position: absolute; top: 2px; right: 7px; min-width: 16px; min-height: 16px; margin: 0; font-size: .65rem; background: var(--mint); color: var(--green); }
+  .mini-player {
+    bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
+    display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 6px 8px;
+    padding: 10px max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left));
+    background: var(--green); color: white; border-color: #386159;
+  }
+  #miniTitle { grid-column: 1; grid-row: 1; font-size: .85rem; font-weight: 750; }
+  #miniOpen { grid-column: 1; grid-row: 2; justify-self: start; font-size: .75rem; min-height: 44px; padding: 5px 8px; }
+  #miniPause { grid-column: 2; grid-row: 1 / 3; background: #eef5f0; color: var(--green); }
+  #miniFavorite { grid-column: 3; grid-row: 1 / 3; }
+  .mini-player .button.ghost { color: white; border-color: #6b9288; }
+  .mini-player button { padding-inline: 10px; }
+  .toast { bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + 12px); }
+  .has-mini-player .toast { bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + var(--mini-player-height) + 12px); }
+  .hero { padding: 12px 0 20px; gap: 16px; }
+  h1 { font-size: clamp(2.2rem, 9vw, 3.4rem); line-height: 1.08; }
+  h2 { font-size: clamp(1.6rem, 6vw, 2rem); }
+  .tab-panel { padding-top: 8px; }
+  .budget-card { padding: 14px 16px; box-shadow: none; }
+  .budget-card strong b { font-size: 1.65rem; }
+  .notice { padding: 14px; gap: 12px; }
+  .section-head { flex-wrap: wrap; gap: 12px; }
+  .branded-heading .section-brand-mark { display: none; }
+  .branded-heading .speaker-badge { margin-left: 0; }
+  .section-head .list-actions { width: 100%; flex-direction: row; align-items: center; justify-content: space-between; }
+  .song-card, .song-card.result-song { padding: 14px; grid-template-columns: 64px minmax(0,1fr); gap: 12px; }
+  .song-visual, .song-cover { width: 64px; height: 52px; }
+  .song-copy strong { white-space: normal; line-height: 1.4; }
+  .song-copy span { line-height: 1.4; }
+  .song-card .points { grid-column: 1 / -1; grid-row: 2; justify-self: stretch; padding-top: 10px; border-top: 1px solid var(--line); }
+  .points button { width: 48px; height: 48px; }
+  .points strong { min-width: 48px; }
+  .song-card .total { grid-column: 1 / -1; justify-self: end; }
+  .song-card:has(.points) .total { grid-row: 2; align-self: end; padding-bottom: 4px; pointer-events: none; }
+  .song-card .login-to-vote { grid-column: 1 / -1; white-space: normal; }
+  .total strong { font-size: 1rem; }
+  .total small { font-size: .72rem; }
+  .song-card.result-song .total { margin-top: 0; }
+  .comfort-song { grid-template-columns: minmax(0,1fr); }
+  .comfort-actions { display: grid; }
+  .player-console, .queue-panel, .soundboard-panel, .activity-panel { padding: 16px; border-radius: 16px; }
+  .player-controls { gap: clamp(4px, 2vw, 10px); }
+  .player-icon { width: 44px; height: 44px; flex-shrink: 0; }
+  .player-icon.primary { width: 60px; height: 60px; }
+  .soundboard-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .radio-grid { grid-template-columns: 1fr; }
+  .player-login { flex-wrap: wrap; }
+  .player-queue { max-height: 55dvh; }
+  .site-footer { width: calc(100% - 28px); margin: 0 auto 20px; }
+  .footer-club { display: none; }
+  .modal { padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom)); height: 100dvh; overflow-y: auto; overscroll-behavior: contain; }
+  .modal-card { margin: 0 auto; padding: 22px 16px; }
+  .modal-card h2 { padding-right: 44px; }
+  .comfort-dialog { max-height: calc(100dvh - 24px); overscroll-behavior: contain; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+}
