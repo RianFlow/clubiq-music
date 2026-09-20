@@ -263,13 +263,22 @@ app = FastAPI(title="ClubIQ Music Voting API", lifespan=lifespan)
 app.mount("/pics", StaticFiles(directory="pics"), name="pics")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+DARTS_PUBLIC_HOST = "barverdarts.clubiq.party"
+
+
+def is_darts_host(request: Request) -> bool:
+    return (request.url.hostname or "").lower() == DARTS_PUBLIC_HOST
+
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     response = await call_next(request)
+    frame_sources = "https://www.youtube-nocookie.com"
+    if request.url.path == "/darts" or is_darts_host(request):
+        frame_sources = "https://portal.3k-darts.com https://live.3k-darts.com"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
-        "script-src 'self'; connect-src 'self'; frame-src https://www.youtube-nocookie.com; "
+        f"script-src 'self'; connect-src 'self'; frame-src {frame_sources}; "
         "base-uri 'none'; frame-ancestors 'none'"
     )
     response.headers["Referrer-Policy"] = "same-origin"
@@ -392,8 +401,8 @@ class DjQueueMove(BaseModel):
 
 
 @app.get("/")
-def read_root():
-    return FileResponse("index.html")
+def read_root(request: Request):
+    return FileResponse("darts.html" if is_darts_host(request) else "index.html")
 
 
 @app.get("/remote")
@@ -404,6 +413,11 @@ def dj_remote():
 @app.get("/party")
 def party_display():
     return FileResponse("party.html")
+
+
+@app.get("/darts")
+def darts_display():
+    return FileResponse("darts.html")
 
 
 @app.get("/manifest.webmanifest")
