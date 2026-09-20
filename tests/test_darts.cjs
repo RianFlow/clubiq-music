@@ -30,9 +30,11 @@ assert.deepEqual(Array.from(DARTS_TEAMS,t=>t.participant),['174110','174111','17
 const html = fs.readFileSync('darts.html','utf8');
 assert.match(html,/id="teamGrid"/);
 assert.match(html,/https:\/\/musik\.clubiq\.party\//);
+assert.match(html,/id="activityPanel"/);
 assert.doesNotMatch(html,/<iframe|https:\/\/portal[^" ]+\.js/,'external content is opt-in');
 const script = fs.readFileSync('static/darts.js','utf8');
 assert.doesNotMatch(script,/fetch\(|\/api\/v1\/music\/.*command/,'darts view does not control music');
+assert.match(script,/https:\/\/portal\.3k-darts\.com\/frontend\/events\/5\/mandant\/1931/);
 assert.match(fs.readFileSync('sw.js','utf8'),/"\/darts"/);
 const backend = fs.readFileSync('main.py','utf8');
 assert.match(backend,/DARTS_PUBLIC_HOST = "barverdarts\.clubiq\.party"/);

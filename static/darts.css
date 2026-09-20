@@ -41,8 +41,8 @@ h1 { font:500 clamp(1.7rem,3vw,2.7rem)/1.15 Georgia,serif; margin:0; }
 .training-form { padding:0 16px 16px; display:grid; gap:12px; }
 .training-form button { justify-self:start; }
 .training-form p { margin:0; line-height:1.5; }
-body:fullscreen #trainingPanel { height:100%; overflow:auto; }
-body:fullscreen #trainingFrame { flex:1 0 360px; }
+body:fullscreen #trainingPanel,body:fullscreen #activityPanel { height:100%; overflow:auto; }
+body:fullscreen #trainingFrame,body:fullscreen #activityFrame { flex:1 0 360px; }
 .focused .frame-wrap { height:calc(100dvh - 260px); min-height:440px; }
 .message { padding:12px; border:1px solid #c7d9d0; border-radius:10px; background:#e6eee8; }
 footer { margin:20px 0; }

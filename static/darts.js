@@ -43,6 +43,8 @@ if (typeof document !== 'undefined') initDarts();
 function initDarts() {
   const q = selector => document.querySelector(selector);
   const grid = q('#teamGrid'), cards = new Map(), selections = {};
+  const activityUrl = 'https://portal.3k-darts.com/frontend/events/5/mandant/1931';
+  let activityLoaded = false;
   const trainingKey = 'clubiq_darts_training';
   const exampleTraining = 'https://portal.3k-darts.com/frontend/events/5/event/31849/phase/53660/group/403948';
   let training = dartsTraining(exampleTraining);
@@ -64,13 +66,28 @@ function initDarts() {
     q('#trainingFrame').replaceChildren(iframe);
     q('#trainingNote').textContent = '3K-Ansicht angefordert. Bleibt sie leer, nutze „Bei 3K öffnen“. Keine eigene Live-Erkennung von 180 oder Leg-Siegern; die Aktualisierung übernimmt 3K.';
   }
-  function showTraining(show) {
-    q('#trainingPanel').hidden = !show; grid.hidden = show;
-    q('.intro').hidden = show;
-    q('#trainingView').setAttribute('aria-pressed',String(show));
+  function setSection(section) {
+    const teams = section === 'teams';
+    grid.hidden = !teams; q('.intro').hidden = !teams;
+    q('#activityPanel').hidden = section !== 'activity';
+    q('#trainingPanel').hidden = section !== 'training';
+    q('#activityView').setAttribute('aria-pressed',String(section === 'activity'));
+    q('#trainingView').setAttribute('aria-pressed',String(section === 'training'));
+  }
+  function loadActivity() {
+    const iframe = document.createElement('iframe');
+    iframe.title = 'Aktuelle Veranstaltungen von SV Barver bei 3K Darts';
+    iframe.referrerPolicy = 'no-referrer';
+    iframe.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox');
+    iframe.src = activityUrl;
+    q('#activityFrame').replaceChildren(iframe);
+    q('#activityNote').textContent = 'Aktuelle 3K-Veranstalterübersicht angefordert. Neue Einträge erscheinen nach „Aktualisieren“. Bleibt die Ansicht leer, nutze „Bei 3K öffnen“.';
+    activityLoaded = true;
   }
   syncTraining();
-  q('#trainingView').addEventListener('click',()=>showTraining(true));
+  q('#activityView').addEventListener('click',()=>{ setSection('activity'); if (!activityLoaded) loadActivity(); });
+  q('#reloadActivity').addEventListener('click',loadActivity);
+  q('#trainingView').addEventListener('click',()=>setSection('training'));
   q('#loadTraining').addEventListener('click',loadTraining);
   q('#trainingMode').addEventListener('change',loadTraining);
   q('#trainingForm').addEventListener('submit',event=>{
@@ -127,7 +144,7 @@ function initDarts() {
     c.note.textContent = '3K-Ansicht angefordert. Leer oder keine Übertragung? „Bei 3K öffnen“ verwenden. Aktualisierung und Inhalte steuert 3K.';
   }
   function focusTeam(id) {
-    showTraining(false);
+    setSection('teams');
     grid.classList.toggle('focused',Boolean(id));
     for (const [key,c] of cards) {
       c.card.hidden = Boolean(id) && key!==id;

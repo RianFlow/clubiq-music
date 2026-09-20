@@ -31,6 +31,10 @@ Keine automatische Ermittlung des nächsten Spiels: Es gibt keine öffentliche E
 
 Die offizielle 3K-Dokumentation bestätigt am 20.09.2026 ausdrücklich, dass keine öffentliche API angeboten wird. Eine eigene Darstellung mit automatisch erkannten 180-/Leg-Sieg-Ereignissen und eine automatische Auswahl der nächsten Begegnung sind deshalb nicht implementiert. Dafür ist eine abgestimmte Datenschnittstelle mit 3K erforderlich. Keine internen Endpunkte, kein Scraping und keine Umgehung der fremden Oberfläche.
 
+## Aktuelles von SV Barver
+
+Die öffentliche Veranstalterübersicht `https://portal.3k-darts.com/frontend/events/5/mandant/1931` ist unter „Aktuelles“ eingebunden. Sie wird von 3K gepflegt und enthält neue Trainings, Turniere und andere Veranstaltungen von SV Barver, ohne dass ClubIQ pro Veranstaltung einen neuen Link benötigt. „Aktualisieren“ lädt die Übersicht neu; ClubIQ liest oder speichert dabei keine fremden Veranstaltungsdaten. Falls die Einbettung vom Browser blockiert wird, führt „Bei 3K öffnen“ zur gleichen offiziellen Übersicht.
+
 Prüfstatus: URL- und Sicherheitstests bestanden; lokale Trainingsnavigation und Auswahl des korrekten Bestleistungslinks im Browser geprüft. Externe iFrames bleiben im verfügbaren In-App-Testbrowser leer; erfolgreiche Einbettung ist daher noch nicht bestätigt. „Bei 3K öffnen“ ist die Ausweichmöglichkeit. Die erste Veröffentlichung erfolgt auf Benutzerwunsch mit dieser Einschränkung; zusätzlich im normalen Vereinsbrowser prüfen.
 
 ## Offizielle Einbettung

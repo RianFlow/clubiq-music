@@ -13,7 +13,7 @@
 <body>
   <header class="darts-header">
     <a class="brand" href="https://musik.clubiq.party/" aria-label="Zur Musik-App"><img src="/pics/logo.png" alt=""><span>ClubIQ <b>Darts-Zentrale</b></span></a>
-    <nav aria-label="Anzeige"><button id="gridView" type="button">Alle Mannschaften</button><button id="trainingView" type="button">Training</button><button id="fullscreen" type="button">Vollbild</button><a href="https://musik.clubiq.party/" target="_blank" rel="noopener">Musik öffnen ↗</a></nav>
+    <nav aria-label="Anzeige"><button id="gridView" type="button">Alle Mannschaften</button><button id="activityView" type="button">Aktuelles</button><button id="trainingView" type="button">Training</button><button id="fullscreen" type="button">Vollbild</button><a href="https://musik.clubiq.party/" target="_blank" rel="noopener">Musik öffnen ↗</a></nav>
   </header>
   <main>
     <section class="intro">
@@ -23,6 +23,12 @@
     <p class="source-note">Offizielle 3K-Ansichten. Beim Anzeigen verbindet sich dein Browser mit 3K Darts. Spielstände werden dort bereitgestellt – keine eigene Ergebniserfassung. Live funktioniert nur bei einer aktiven Übertragung.</p>
     <p id="pageStatus" class="message" role="status" hidden></p>
     <section id="teamGrid" class="team-grid" aria-label="Unsere vier Mannschaften"></section>
+    <section id="activityPanel" class="team-card" aria-labelledby="activityHeading" hidden>
+      <div class="team-head"><span class="team-letter">N</span><div><h2 id="activityHeading">Neu bei SV Barver</h2><p>Trainings, Turniere und weitere veröffentlichte Veranstaltungen</p></div></div>
+      <div class="team-tools"><button id="reloadActivity" type="button">Aktualisieren</button><a class="external" href="https://portal.3k-darts.com/frontend/events/5/mandant/1931" target="_blank" rel="noopener noreferrer">Bei 3K öffnen ↗</a></div>
+      <div id="activityFrame" class="frame-wrap"><div class="placeholder"><strong>Offizielle Veranstalterübersicht</strong><p>Beim Öffnen von „Aktuelles“ werden die neuesten Einträge von SV Barver direkt bei 3K geladen.</p></div></div>
+      <p id="activityNote" class="frame-note">Die Übersicht wird von 3K gepflegt. Neue dort veröffentlichte Veranstaltungen erscheinen hier ohne neuen Link in ClubIQ.</p>
+    </section>
     <section id="trainingPanel" class="team-card" aria-labelledby="trainingHeading" hidden>
       <div class="team-head"><span class="team-letter">T</span><div><h2 id="trainingHeading">Vereinstraining</h2><p id="trainingLabel">Beispiel: Training Doppel 10.09.</p></div></div>
       <form id="trainingForm" class="training-form">
