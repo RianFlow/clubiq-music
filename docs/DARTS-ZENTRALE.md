@@ -17,8 +17,8 @@ Die Links wurden am 20.09.2026 im öffentlichen Portal geprüft. Nach einem Sais
 
 ## Bedienung
 
-1. „Alle vier anzeigen“ lädt vier unabhängige 3K-Fenster. Vorher findet keine Verbindung zu 3K statt.
-2. „Groß“ zeigt ein Team; „Alle Mannschaften“ kehrt zum Raster zurück. Auf kleinen Displays stehen die Fenster untereinander.
+1. „Gleichzeitig anzeigen“ wählt 1–4 Fenster. Die Team-Schaltflächen passen die Auswahl an; „Auswahl anzeigen“ lädt die ausgewählten 3K-Fenster.
+2. „Groß“ zeigt ein Team. Auf kleinen Displays stehen mehrere Fenster lesbar untereinander. Auswahl, Anzahl und Ansichten werden auf diesem Gerät gespeichert. „Meine Auswahl beim Öffnen automatisch laden“ erlaubt ausdrücklich das automatische Laden von 3K beim nächsten Besuch; standardmäßig ist es aus.
 3. „Spiel wählen“: Link der konkreten Begegnung aus dem 3K-Portal einfügen (`?matchId=…`) oder den passenden Link von `live.3k-darts.com/event/10/…`. Die Auswahl gilt nur auf diesem Gerät, nicht vereinsweit.
 4. Zwischen Mannschaftsübersicht, gespeichertem Spielbericht und Live-Ansicht wechseln. Bei einem reinen Live-Link gibt es keinen abgeleiteten Spielbericht-Link.
 5. „Neu laden“ aktualisiert das betreffende Fenster. „Bei 3K öffnen“ dient als Ausweichmöglichkeit, wenn Einbettung, Internet oder Browser Probleme machen.

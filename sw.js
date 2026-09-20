@@ -1,9 +1,9 @@
 "use strict";
 
-const CACHE = "clubiq-music-shell-20260920-1";
+const CACHE = "clubiq-music-shell-20260920-2";
 const SHELL = [
   "/", "/remote", "/party", "/darts", "/manifest.webmanifest",
-  "/static/darts.css?v=20260920-1", "/static/darts.js?v=20260920-1",
+  "/static/darts.css?v=20260920-2", "/static/darts.js?v=20260920-2",
   "/static/app.css?v=20260915-1", "/static/app.js?v=20260919-1",
   "/static/song-info.js?v=20260917-1", "/static/comfort.js?v=20260919-1", "/static/comfort.css?v=20260917-1",
   "/static/reliability.js?v=20260919-1",

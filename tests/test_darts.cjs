@@ -5,6 +5,20 @@ const context = vm.createContext({URL});
 vm.runInContext(fs.readFileSync('static/darts.js','utf8'),context);
 const {dartsMatch,DARTS_TEAMS} = vm.runInContext('({dartsMatch,DARTS_TEAMS})',context);
 const team = DARTS_TEAMS[3];
+const dartsLayout = vm.runInContext('dartsLayout',context);
+for (const count of [1,2,3,4]) {
+  const layout = dartsLayout({count,selected:['d','d','invalid','b'],modes:{a:'invalid',b:'live'}});
+  assert.equal(layout.selected.length,count);
+  assert.equal(new Set(layout.selected).size,count);
+  assert.equal(layout.selected[0],'d');
+  assert.equal(layout.modes.a,'team');
+  assert.equal(layout.modes.b,'live');
+  assert.equal(layout.auto,false);
+}
+assert.equal(dartsLayout({count:9,auto:'true'}).count,4);
+assert.equal(dartsLayout({auto:'true'}).auto,false);
+assert.equal(dartsLayout({auto:true}).auto,true);
+assert.equal(dartsLayout(null).selected.length,4);
 const dartsTraining = vm.runInContext('dartsTraining',context);
 const trainingLink = 'https://portal.3k-darts.com/frontend/events/5/event/31849/phase/53660/group/403948';
 assert.equal(dartsTraining(trainingLink).games,trainingLink);

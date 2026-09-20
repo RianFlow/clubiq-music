@@ -7,18 +7,24 @@
   <title>ClubIQ · Darts-Zentrale</title>
   <meta name="description" content="SV Barver Darts A, B, C und D: Spielpläne, Spielberichte und Live-Ansichten gemeinsam verfolgen.">
   <link rel="icon" href="/pics/logo.png">
-  <link rel="stylesheet" href="/static/darts.css?v=20260920-1">
-  <script defer src="/static/darts.js?v=20260920-1"></script>
+  <link rel="stylesheet" href="/static/darts.css?v=20260920-2">
+  <script defer src="/static/darts.js?v=20260920-2"></script>
 </head>
 <body>
   <header class="darts-header">
     <a class="brand" href="https://musik.clubiq.party/" aria-label="Zur Musik-App"><img src="/pics/logo.png" alt=""><span>ClubIQ <b>Darts-Zentrale</b></span></a>
-    <nav aria-label="Anzeige"><button id="gridView" type="button">Alle Mannschaften</button><button id="activityView" type="button">Aktuelles</button><button id="trainingView" type="button">Training</button><button id="fullscreen" type="button">Vollbild</button><a href="https://musik.clubiq.party/" target="_blank" rel="noopener">Musik öffnen ↗</a></nav>
+    <nav aria-label="Anzeige"><button id="gridView" type="button">Spiele</button><button id="activityView" type="button">Aktuelles</button><button id="trainingView" type="button">Training</button><button id="fullscreen" type="button">Vollbild</button><a href="https://musik.clubiq.party/" target="_blank" rel="noopener">Zum Voting ↗</a></nav>
   </header>
   <main>
     <section class="intro">
-      <div><p class="eyebrow">SV Barver Darts · Saison 2026 / 2027</p><h1>Vier Teams. Ein Vereinsabend.</h1><p>A–C: Kreisligen 04 · D: Kreisklasse 11</p></div>
-      <button id="loadAll" class="primary" type="button">Alle vier anzeigen</button>
+      <div><p class="eyebrow">SV Barver Darts · Saison 2026 / 2027</p><h1>Barver Darts im Blick</h1><p>Mannschaften, Training und Turniere.</p></div>
+      <button id="loadAll" class="primary" type="button">Auswahl anzeigen</button>
+    </section>
+    <section id="layoutControls" class="layout-controls" aria-label="Spiele anordnen">
+      <label for="gameCount">Gleichzeitig anzeigen<select id="gameCount"><option value="1">1 Spiel</option><option value="2">2 Spiele</option><option value="3">3 Spiele</option><option value="4" selected>4 Spiele</option></select></label>
+      <div id="teamChoices" class="team-choices" role="group" aria-label="Mannschaften auswählen"></div>
+      <label class="auto-load"><input id="autoLoad" type="checkbox">Meine Auswahl beim Öffnen automatisch laden</label>
+      <p>Team antippen zum Austauschen. Auf dem Handy stehen mehrere Spiele lesbar untereinander. Auswahl und Ansichten werden auf diesem Gerät gemerkt.</p>
     </section>
     <p class="source-note">Offizielle 3K-Ansichten. Beim Anzeigen verbindet sich dein Browser mit 3K Darts. Spielstände werden dort bereitgestellt – keine eigene Ergebniserfassung. Live funktioniert nur bei einer aktiven Übertragung.</p>
     <p id="pageStatus" class="message" role="status" hidden></p>
