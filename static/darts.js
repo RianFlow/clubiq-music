@@ -52,6 +52,43 @@ if (typeof document !== 'undefined') initDarts();
 function initDarts() {
   const q = selector => document.querySelector(selector);
   const grid = q('#teamGrid'), cards = new Map(), selections = {};
+  let tickerDelay = 30000;
+  function tickerTime(item) {
+    if (!item.plannedAt) return '';
+    try { return new Intl.DateTimeFormat('de-DE',{weekday:'short',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(item.plannedAt)); }
+    catch (_) { return ''; }
+  }
+  function renderTicker(data) {
+    const track = q('#tickerTrack');
+    if (!Array.isArray(data.items) || !data.items.length) {
+      const empty = document.createElement('span'); empty.className='ticker-loading'; empty.textContent='Derzeit keine Barver-Begegnungen im aktuellen Zeitraum.';
+      track.replaceChildren(empty); return;
+    }
+    const group = document.createElement('div'); group.className='ticker-group';
+    for (const item of data.items) {
+      const link = document.createElement('a'); link.className=`ticker-item ${item.kind}`; link.target='_blank'; link.rel='noopener noreferrer';
+      if (typeof item.url === 'string' && item.url.startsWith('https://portal.3k-darts.com/')) link.href=item.url;
+      const text = document.createElement('span'); text.textContent=item.text; link.append(text);
+      const when = tickerTime(item); if (when) { const time=document.createElement('span'); time.className='ticker-time'; time.textContent=when; link.append(time); }
+      group.append(link);
+    }
+    const duplicate = group.cloneNode(true); duplicate.setAttribute('aria-hidden','true'); duplicate.querySelectorAll('a').forEach(link=>link.tabIndex=-1);
+    track.replaceChildren(group,duplicate);
+    const updated = new Date(data.updatedAt);
+    q('#tickerUpdated').textContent = `${data.stale ? 'Letzter Stand' : 'Stand'} ${updated.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}`;
+  }
+  async function loadTicker() {
+    if (document.hidden) { setTimeout(loadTicker,tickerDelay); return; }
+    const controller = new AbortController(), timeout=setTimeout(()=>controller.abort(),8000);
+    try {
+      const response = await fetch('/api/v1/darts/ticker',{headers:{Accept:'application/json'},signal:controller.signal});
+      if (!response.ok) throw new Error('ticker unavailable');
+      renderTicker(await response.json()); tickerDelay=30000;
+    } catch (_) {
+      q('#tickerUpdated').textContent='3K nicht erreichbar'; tickerDelay=Math.min(120000,tickerDelay*2);
+    } finally { clearTimeout(timeout); setTimeout(loadTicker,tickerDelay); }
+  }
+  loadTicker();
   const activityUrl = 'https://portal.3k-darts.com/frontend/events/5/mandant/1931';
   let activityLoaded = false;
   const layoutKey = 'clubiq_darts_layout';

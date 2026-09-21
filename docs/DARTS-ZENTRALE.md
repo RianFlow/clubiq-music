@@ -17,6 +17,8 @@ Die Links wurden am 20.09.2026 im öffentlichen Portal geprüft. Nach einem Sais
 
 ## Bedienung
 
+Das Laufband „3K Aktuell“ wird alle 30 Sekunden aus den öffentlichen 3K-Spielplänen aktualisiert. Es zeigt laufende Zwischenstände zuerst, danach die nächsten Begegnungen und zuletzt abgeschlossene Ergebnisse. Bei einer Störung bleibt der letzte erfolgreiche Stand gekennzeichnet erhalten; personenbezogene Kontaktdaten aus 3K werden nicht übernommen.
+
 1. „Gleichzeitig anzeigen“ wählt 1–4 Fenster. Die Team-Schaltflächen passen die Auswahl an; „Auswahl anzeigen“ lädt die ausgewählten 3K-Fenster.
 2. „Groß“ zeigt ein Team. Auf kleinen Displays stehen mehrere Fenster lesbar untereinander. Auswahl, Anzahl und Ansichten werden auf diesem Gerät gespeichert. „Meine Auswahl beim Öffnen automatisch laden“ erlaubt ausdrücklich das automatische Laden von 3K beim nächsten Besuch; standardmäßig ist es aus.
 3. „Spiel wählen“: Link der konkreten Begegnung aus dem 3K-Portal einfügen (`?matchId=…`) oder den passenden Link von `live.3k-darts.com/event/10/…`. Die Auswahl gilt nur auf diesem Gerät, nicht vereinsweit.

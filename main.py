@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from db_config import connection_kwargs
+from darts_feed import DartsFeedUnavailable, get_darts_feed
 from radio_directory import DirectoryUnavailable, get_station, search_stations
 from radio_logos import CACHE_SECONDS, FAILURE_SECONDS, cached_logo
 from music_library import duration_ms, register_library
@@ -418,6 +419,14 @@ def party_display():
 @app.get("/darts")
 def darts_display():
     return FileResponse("darts.html")
+
+
+@app.get("/api/v1/darts/ticker")
+def darts_ticker():
+    try:
+        return get_darts_feed()
+    except DartsFeedUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/manifest.webmanifest")
