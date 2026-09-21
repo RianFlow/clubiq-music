@@ -205,15 +205,18 @@ function initDarts() {
     q('#trainingFrame').replaceChildren(iframe);
     q('#trainingNote').textContent = '3K-Ansicht angefordert. Bleibt sie leer, nutze „Bei 3K öffnen“. Keine eigene Live-Erkennung von 180 oder Leg-Siegern; die Aktualisierung übernimmt 3K.';
   }
-  let centerController = null;
+  const centerControllers = new Map();
   function formatDate(value, options={weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'}) {
     try { return new Intl.DateTimeFormat('de-DE',options).format(new Date(value)); } catch (_) { return ''; }
   }
   function renderLeague(data) {
+    const block=q(`.league-block[data-league="${data.league.key}"]`);
+    if (!block) return;
+    const inside=selector=>block.querySelector(selector);
     const round = data.selectedRound || {};
-    q('#roundHeading').textContent = `${round.name || 'Spieltag'} · ${data.league.short}`;
-    q('#roundDate').textContent = formatDate(round.dateFrom);
-    const roundSelect=q('#roundSelect');
+    inside('[data-role="round-heading"]').textContent = `${round.name || 'Spieltag'} · ${data.league.short}`;
+    inside('[data-role="round-date"]').textContent = formatDate(round.dateFrom);
+    const roundSelect=inside('[data-role="round"]');
     const current=String(round.id || '');
     roundSelect.replaceChildren(...(data.rounds || []).map(item=>{
       const option=document.createElement('option'); option.value=String(item.id); option.textContent=`${item.name} · ${formatDate(item.dateFrom,{day:'2-digit',month:'2-digit'})}`; return option;
@@ -228,7 +231,7 @@ function initDarts() {
       const state=document.createElement('small'); state.textContent=item.kind==='final'?'Endstand':item.kind==='live'?'Live':tickerTime(item);
       link.append(home,score,away,state); games.append(link);
     }
-    q('#roundMatches').replaceChildren(games.childNodes.length ? games : Object.assign(document.createElement('p'),{className:'panel-loading',textContent:'Keine Begegnungen an diesem Spieltag.'}));
+    inside('[data-role="matches"]').replaceChildren(games.childNodes.length ? games : Object.assign(document.createElement('p'),{className:'panel-loading',textContent:'Keine Begegnungen an diesem Spieltag.'}));
     const table=document.createDocumentFragment();
     for (const entry of data.standings || []) {
       const row=document.createElement('li'); if (entry.barver) row.className='barver';
@@ -236,7 +239,7 @@ function initDarts() {
       const name=document.createElement('span'); name.textContent=entry.name;
       row.append(rank,name); table.append(row);
     }
-    q('#standings').replaceChildren(table.childNodes.length ? table : Object.assign(document.createElement('li'),{className:'panel-loading',textContent:'Noch keine Rangfolge verfügbar.'}));
+    inside('[data-role="standings"]').replaceChildren(table.childNodes.length ? table : Object.assign(document.createElement('li'),{className:'panel-loading',textContent:'Noch keine Rangfolge verfügbar.'}));
     const eventList=document.createDocumentFragment();
     for (const item of data.events || []) {
       const event=document.createElement('div'); event.className=`darts-event ${item.type}`;
@@ -244,15 +247,16 @@ function initDarts() {
       const copy=document.createElement('div'); const title=document.createElement('strong'); title.textContent=item.title; const text=document.createElement('span'); text.textContent=item.text;
       copy.append(title,text); event.append(icon,copy); eventList.append(event);
     }
-    q('#dartsEvents').replaceChildren(eventList.childNodes.length ? eventList : Object.assign(document.createElement('p'),{className:'panel-loading',textContent:'Für diesen Spieltag sind noch keine Highlights erfasst.'}));
+    inside('[data-role="events"]').replaceChildren(eventList.childNodes.length ? eventList : Object.assign(document.createElement('p'),{className:'panel-loading',textContent:'Für diesen Spieltag sind noch keine Highlights erfasst.'}));
   }
-  async function loadLeague(roundId=null) {
-    if (centerController) centerController.abort();
-    centerController=new AbortController();
-    const league=encodeURIComponent(q('#leagueSelect').value); const round=/^\d+$/.test(String(roundId || '')) ? `&round_id=${encodeURIComponent(roundId)}` : '';
-    q('#roundMatches').innerHTML='<p class="panel-loading">Spiele werden geladen …</p>';
+  async function loadLeague(leagueKey,roundId=null) {
+    centerControllers.get(leagueKey)?.abort();
+    const controller=new AbortController(); centerControllers.set(leagueKey,controller);
+    const block=q(`.league-block[data-league="${leagueKey}"]`); if (!block) return;
+    const round=/^\d+$/.test(String(roundId || '')) ? `&round_id=${encodeURIComponent(roundId)}` : '';
+    block.querySelector('[data-role="matches"]').innerHTML='<p class="panel-loading">Spiele werden geladen …</p>';
     try {
-      const response=await fetch(`/api/v1/darts/center?league=${league}${round}`,{headers:{Accept:'application/json'},signal:centerController.signal});
+      const response=await fetch(`/api/v1/darts/center?league=${encodeURIComponent(leagueKey)}${round}`,{headers:{Accept:'application/json'},signal:controller.signal});
       if (!response.ok) throw new Error('league unavailable');
       renderLeague(await response.json());
     } catch (error) {
@@ -284,12 +288,14 @@ function initDarts() {
   }
   syncTraining();
   q('#todayView').addEventListener('click',()=>setSection('today'));
-  q('#leagueView').addEventListener('click',()=>{ setSection('league'); loadLeague(q('#roundSelect').value); });
+  q('#leagueView').addEventListener('click',()=>{ setSection('league'); for (const block of q('#leagueOverview').querySelectorAll('.league-block')) loadLeague(block.dataset.league,block.querySelector('[data-role="round"]').value); });
   q('#favoriteTeam').value=favorite;
   q('#favoriteTeam').addEventListener('change',()=>{ favorite=q('#favoriteTeam').value; try { localStorage.setItem(favoriteKey,favorite); } catch (_) {} renderTicker(tickerData); });
-  q('#leagueSelect').addEventListener('change',()=>loadLeague());
-  q('#roundSelect').addEventListener('change',()=>loadLeague(q('#roundSelect').value));
-  q('#reloadLeague').addEventListener('click',()=>loadLeague(q('#roundSelect').value));
+  for (const block of q('#leagueOverview').querySelectorAll('.league-block')) {
+    const select=block.querySelector('[data-role="round"]');
+    select.addEventListener('change',()=>loadLeague(block.dataset.league,select.value));
+    block.querySelector('[data-role="reload"]').addEventListener('click',()=>loadLeague(block.dataset.league,select.value));
+  }
   q('#reloadActivity').addEventListener('click',loadActivity);
   q('#trainingView').addEventListener('click',()=>setSection('training'));
   q('#loadTraining').addEventListener('click',loadTraining);

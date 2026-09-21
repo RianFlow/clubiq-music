@@ -90,6 +90,14 @@ h1 { font:500 clamp(1.7rem,3vw,2.7rem)/1.15 Georgia,serif; margin:0; }
 .today-game > strong { grid-column:1/-1; font:650 clamp(1.05rem,2vw,1.5rem)/1.25 Georgia,serif; }
 .today-time { grid-column:1/-1; color:#60706b; }
 .panel-loading { margin:0; padding:18px; color:#60706b; }
+.league-overview { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; padding:12px; background:#e8ebe5; border:1px solid var(--line); border-top:0; }
+.league-block { min-width:0; overflow:hidden; background:#f7f7f2; border:1px solid var(--line); border-radius:14px; }
+.league-block-head { display:grid; grid-template-columns:minmax(0,1fr) minmax(175px,230px) auto; gap:10px; align-items:end; padding:14px; background:#fffef9; border-bottom:1px solid var(--line); }
+.league-block-head h3 { margin:0; font:650 1.35rem Georgia,serif; }
+.league-block-head .eyebrow { margin-bottom:3px; }
+.league-block-head label { font-size:.78rem; }
+.league-block-head select { width:100%; min-height:44px; padding:8px; border:1px solid var(--line); border-radius:9px; background:white; font-size:16px; }
+.league-block .league-dashboard { grid-template-columns:1fr; padding:10px; border:0; }
 .league-controls { display:flex; align-items:end; gap:10px; padding:12px 14px; background:#fffef9; border:1px solid var(--line); border-top:0; }
 .league-controls label { min-width:210px; font-size:.8rem; }
 .league-controls select { width:100%; border-color:var(--line); }
@@ -189,6 +197,9 @@ body:fullscreen .today-game { min-height:0; align-content:center; }
 [data-theme="dark"] .match-center-status { color:#cce6df; background:#29473f; }
 [data-theme="dark"] .match-center-card.final .match-center-status,[data-theme="dark"] .today-game.final>b { color:#f6e8b0; background:#65531e; }
 [data-theme="dark"] .today-grid,[data-theme="dark"] .league-dashboard { background:#0e1916; border-color:#30443e; }
+[data-theme="dark"] .league-overview { background:#0e1916; border-color:#30443e; }
+[data-theme="dark"] .league-block,[data-theme="dark"] .league-block-head { color:#e8f0ec; background:#111f1b; border-color:#30443e; }
+[data-theme="dark"] .league-block-head select { color:#e8f0ec; background:#172722; border-color:#425c54; }
 [data-theme="dark"] .today-game { color:#e8f0ec; border-color:#30443e; }
 [data-theme="dark"] .league-controls select,[data-theme="dark"] .sports-panel-head select,[data-theme="dark"] .team-tools select,[data-theme="dark"] .layout-controls select,[data-theme="dark"] input { color:#e8f0ec; background:#172722; border-color:#425c54; }
 [data-theme="dark"] .round-match { color:#e3ece8; border-color:#293b35; }
@@ -236,6 +247,9 @@ body:fullscreen .today-game { min-height:0; align-content:center; }
   .league-controls label { min-width:0; }
   .league-controls button { grid-column:1/-1; }
   .league-dashboard { grid-template-columns:1fr; padding:9px; }
+  .league-overview { grid-template-columns:1fr; padding:9px; }
+  .league-block-head { grid-template-columns:1fr auto; }
+  .league-block-head>div { grid-column:1/-1; }
   .schedule-card { order:0; }
   .standings-card { order:2; }
   .events-card { order:1; }

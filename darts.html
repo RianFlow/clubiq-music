@@ -8,8 +8,8 @@
   <meta name="description" content="SV Barver Darts A, B, C und D: Spielpläne, Spielberichte und Live-Ansichten gemeinsam verfolgen.">
   <link rel="icon" href="/pics/logo.png">
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
-  <link rel="stylesheet" href="/static/darts.css?v=20260921-6">
-  <script defer src="/static/darts.js?v=20260921-6"></script>
+  <link rel="stylesheet" href="/static/darts.css?v=20260921-7">
+  <script defer src="/static/darts.js?v=20260921-7"></script>
 </head>
 <body>
   <header class="darts-header">
@@ -45,15 +45,15 @@
     </section>
     <section id="leaguePanel" class="sports-panel" aria-labelledby="leagueHeading" hidden>
       <div class="sports-panel-head"><div><p class="eyebrow">Saison 2026 / 2027</p><h2 id="leagueHeading">Liga & Spieltage</h2><p>Spielplan, offizielle Rangfolge und Meldungen aus 3K auf einen Blick.</p></div><span class="club-logo panel-club-logo" aria-hidden="true"></span></div>
-      <div class="league-controls">
-        <label for="leagueSelect">Liga<select id="leagueSelect"><option value="kl04">Kreisligen 04 · A–C</option><option value="kk11">Kreisklasse 11 · D</option></select></label>
-        <label for="roundSelect">Spieltag<select id="roundSelect"><option>Lädt …</option></select></label>
-        <button id="reloadLeague" type="button">Aktualisieren</button>
-      </div>
-      <div class="league-dashboard">
-        <article class="sport-card schedule-card"><div class="sport-card-title"><h3 id="roundHeading">Spieltag</h3><span id="roundDate"></span></div><div id="roundMatches" class="round-matches"><p class="panel-loading">Spiele werden geladen …</p></div></article>
-        <article class="sport-card standings-card"><div class="sport-card-title"><h3>Tabelle</h3><span>Rang laut 3K</span></div><ol id="standings" class="standings"><li class="panel-loading">Tabelle wird geladen …</li></ol></article>
-        <article class="sport-card events-card"><div class="sport-card-title"><h3>Highlights</h3><span>180er & Sieger</span></div><div id="dartsEvents" class="event-list"><p class="panel-loading">Meldungen werden geladen …</p></div></article>
+      <div id="leagueOverview" class="league-overview">
+        <section class="league-block" data-league="kl04" aria-labelledby="league-kl04-heading">
+          <div class="league-block-head"><div><p class="eyebrow">Barver A · B · C</p><h3 id="league-kl04-heading">Kreisligen 04</h3></div><label>Spieltag<select data-role="round"><option>Lädt …</option></select></label><button data-role="reload" type="button">Aktualisieren</button></div>
+          <div class="league-dashboard"><article class="sport-card schedule-card"><div class="sport-card-title"><h3 data-role="round-heading">Spieltag</h3><span data-role="round-date"></span></div><div data-role="matches" class="round-matches"><p class="panel-loading">Spiele werden geladen …</p></div></article><article class="sport-card standings-card"><div class="sport-card-title"><h3>Tabelle</h3><span>Rang laut 3K</span></div><ol data-role="standings" class="standings"><li class="panel-loading">Tabelle wird geladen …</li></ol></article><article class="sport-card events-card"><div class="sport-card-title"><h3>Highlights</h3><span>180er & Sieger</span></div><div data-role="events" class="event-list"><p class="panel-loading">Meldungen werden geladen …</p></div></article></div>
+        </section>
+        <section class="league-block" data-league="kk11" aria-labelledby="league-kk11-heading">
+          <div class="league-block-head"><div><p class="eyebrow">Barver D</p><h3 id="league-kk11-heading">Kreisklasse 11</h3></div><label>Spieltag<select data-role="round"><option>Lädt …</option></select></label><button data-role="reload" type="button">Aktualisieren</button></div>
+          <div class="league-dashboard"><article class="sport-card schedule-card"><div class="sport-card-title"><h3 data-role="round-heading">Spieltag</h3><span data-role="round-date"></span></div><div data-role="matches" class="round-matches"><p class="panel-loading">Spiele werden geladen …</p></div></article><article class="sport-card standings-card"><div class="sport-card-title"><h3>Tabelle</h3><span>Rang laut 3K</span></div><ol data-role="standings" class="standings"><li class="panel-loading">Tabelle wird geladen …</li></ol></article><article class="sport-card events-card"><div class="sport-card-title"><h3>Highlights</h3><span>180er & Sieger</span></div><div data-role="events" class="event-list"><p class="panel-loading">Meldungen werden geladen …</p></div></article></div>
+        </section>
       </div>
       <p class="data-note">ClubIQ zeigt ausschließlich öffentliche Sportdaten. 180er erscheinen, wenn sie im 3K-Spielbericht erfasst wurden.</p>
     </section>
