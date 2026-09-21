@@ -14,7 +14,7 @@ button.primary { color:white; background:var(--green); border-color:var(--green)
 .brand img { width:44px; height:44px; border-radius:12px; }
 .brand span { display:grid; gap:2px; font-size:.85rem; }
 .brand b { font-size:1rem; }
-.club-logo { display:block; background:url('/pics/sv-barver-darts-tight.png') center / contain no-repeat; }
+.club-logo { display:block; flex-shrink:0; background:url('/pics/sv-barver-darts-tight.png') center / contain no-repeat; }
 .header-club-logo { width:70px; height:48px; margin-right:auto; }
 .darts-header nav { display:flex; flex-wrap:wrap; gap:8px; }
 .score-ticker { display:flex; align-items:center; min-height:48px; overflow:hidden; color:#fff; background:#0f2f2a; border-bottom:1px solid #31534d; }
@@ -71,6 +71,51 @@ h1 { font:500 clamp(1.7rem,3vw,2.7rem)/1.15 Georgia,serif; margin:0; }
 .match-center-card > strong { grid-column:1/-1; min-width:0; font-size:.88rem; line-height:1.25; }
 .match-center-time { grid-column:1/-1; color:#60706b; font-size:.75rem; }
 .match-center-card[href]:hover { transform:translateY(-1px); box-shadow:0 6px 18px #173a3420; background:#fff; }
+.sports-panel { margin:14px 0; }
+.sports-panel-head { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:18px 20px; color:white; background:linear-gradient(115deg,#123b34,#1f594e); border-radius:18px 18px 0 0; }
+.sports-panel-head h2 { margin:0; font:600 clamp(1.45rem,3vw,2.2rem)/1.1 Georgia,serif; }
+.sports-panel-head p:not(.eyebrow) { margin:5px 0 0; color:#d6e3df; }
+.sports-panel-head .eyebrow { color:#efd789; }
+.sports-panel-head label { min-width:160px; color:#e5eee9; font-size:.8rem; }
+.sports-panel-head select,.league-controls select { min-height:44px; padding:8px 34px 8px 10px; border:1px solid #8ca59e; border-radius:9px; color:#173b35; background:white; font-size:16px; }
+.panel-club-logo { width:104px; height:72px; }
+.today-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; padding:14px; background:#e8ebe5; border:1px solid var(--line); border-top:0; border-radius:0 0 18px 18px; }
+.today-game { display:grid; grid-template-columns:auto 1fr; gap:8px 12px; min-height:142px; padding:18px; color:#17312c; text-decoration:none; background:#fffef9; border:1px solid #d6ddd8; border-left:6px solid #2c7768; border-radius:12px; }
+.today-game.final { border-left-color:#c79f45; }
+.today-game.live { border-left-color:#c9392d; box-shadow:0 0 0 2px #c9392d18; }
+.today-game > b { width:max-content; padding:4px 8px; color:white; background:#2c7768; border-radius:999px; font-size:.68rem; letter-spacing:.06em; }
+.today-game.final > b { color:#403410; background:#ecd987; }
+.today-game.live > b { background:#c9392d; }
+.today-team { align-self:center; justify-self:end; color:#245c51; font-weight:850; letter-spacing:.06em; }
+.today-game > strong { grid-column:1/-1; font:650 clamp(1.05rem,2vw,1.5rem)/1.25 Georgia,serif; }
+.today-time { grid-column:1/-1; color:#60706b; }
+.panel-loading { margin:0; padding:18px; color:#60706b; }
+.league-controls { display:flex; align-items:end; gap:10px; padding:12px 14px; background:#fffef9; border:1px solid var(--line); border-top:0; }
+.league-controls label { min-width:210px; font-size:.8rem; }
+.league-controls select { width:100%; border-color:var(--line); }
+.league-dashboard { display:grid; grid-template-columns:1.45fr .8fr 1fr; gap:10px; padding:14px; background:#e8ebe5; border:1px solid var(--line); border-top:0; }
+.sport-card { min-width:0; overflow:hidden; background:#fffef9; border:1px solid var(--line); border-radius:12px; }
+.sport-card-title { display:flex; align-items:end; justify-content:space-between; gap:10px; padding:13px 14px; border-bottom:1px solid var(--line); }
+.sport-card-title h3 { margin:0; font:650 1.1rem Georgia,serif; }
+.sport-card-title span { color:#60706b; font-size:.72rem; }
+.round-matches { display:grid; }
+.round-match { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:9px; align-items:center; min-height:49px; padding:8px 12px; color:#20332f; text-decoration:none; border-bottom:1px solid #e6e9e4; }
+.round-match:last-child { border-bottom:0; }
+.round-match span:last-of-type { text-align:right; }
+.round-match b { min-width:40px; padding:4px 7px; text-align:center; color:white; background:#315e55; border-radius:6px; }
+.round-match.upcoming b { color:#315e55; background:#dfe9e5; }
+.round-match small { grid-column:1/-1; margin-top:-7px; color:#71807b; text-align:center; }
+.standings { margin:0; padding:0; list-style:none; }
+.standings li { display:grid; grid-template-columns:32px 1fr; gap:8px; align-items:center; min-height:42px; padding:6px 12px; border-bottom:1px solid #e6e9e4; }
+.standings li.barver { color:#123b34; background:#f4e8b8; font-weight:750; }
+.standings li b { display:grid; place-items:center; width:28px; height:28px; color:white; background:#315e55; border-radius:7px; }
+.event-list { display:grid; gap:1px; background:#e6e9e4; }
+.darts-event { display:grid; grid-template-columns:48px 1fr; gap:10px; align-items:center; padding:11px 12px; background:#fffef9; }
+.darts-event > b { display:grid; place-items:center; width:44px; height:38px; color:#173b35; background:#efd789; border-radius:9px; }
+.darts-event.game > b { color:white; background:#315e55; }
+.darts-event > div { display:grid; gap:3px; min-width:0; }
+.darts-event span { color:#60706b; font-size:.8rem; line-height:1.3; }
+.data-note { margin:0; padding:10px 14px; color:#60706b; background:#fffef9; border:1px solid var(--line); border-top:0; border-radius:0 0 14px 14px; font-size:.78rem; }
 .team-grid[data-count="1"] { grid-template-columns:1fr; }
 @media(min-width:1500px) { .team-grid[data-count="3"] { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 .team-card { min-width:0; border:1px solid var(--line); border-radius:18px; background:#fffef9; overflow:hidden; }
@@ -124,14 +169,19 @@ body:fullscreen .team-card { display:flex; flex-direction:column; min-height:0; 
 body:fullscreen .frame-wrap { height:auto; min-height:0; flex:1; }
 body:fullscreen .team-head,body:fullscreen .team-tools,body:fullscreen .frame-note { flex-shrink:0; }
 body:fullscreen .placeholder { min-height:0; overflow:auto; }
+body:fullscreen .match-center,body:fullscreen .source-note,body:fullscreen #layoutControls { display:none !important; }
+body:fullscreen #todayPanel { display:flex !important; flex:1; min-height:0; margin:0; flex-direction:column; }
+body:fullscreen #todayPanel .sports-panel-head { flex:0 0 auto; }
+body:fullscreen .today-grid { flex:1; min-height:0; grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-rows:minmax(0,1fr); }
+body:fullscreen .today-game { min-height:0; align-content:center; }
 @media(min-width:1600px) { .frame-wrap { height:640px; } }
 @media(max-width:800px) {
   .darts-header { flex-wrap:wrap; padding:12px; }
   main { padding:16px 12px; }
   .team-grid { grid-template-columns:1fr; }
-  .darts-header nav { width:100%; }
+  .darts-header nav { width:100%; flex-wrap:nowrap; overflow-x:auto; padding-bottom:2px; scrollbar-width:thin; }
   .header-club-logo { width:58px; height:40px; }
-  .darts-header nav > * { flex:1 1 auto; text-align:center; }
+  .darts-header nav > * { flex:0 0 auto; text-align:center; }
   .score-ticker > strong { padding:0 9px; font-size:.68rem; }
   .ticker-updated { display:none; }
   .ticker-item,.ticker-loading { padding:0 14px; }
@@ -145,6 +195,18 @@ body:fullscreen .placeholder { min-height:0; overflow:auto; }
   .match-center-head > span { display:none; }
   .match-center-grid { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(235px,82vw); grid-template-columns:none; gap:8px; overflow-x:auto; padding:0 0 6px; scroll-snap-type:x mandatory; }
   .match-center-card { scroll-snap-align:start; min-height:104px; }
+  .sports-panel-head { align-items:flex-start; padding:15px; }
+  .sports-panel-head label { min-width:135px; }
+  .panel-club-logo { width:72px; height:54px; }
+  .today-grid { grid-template-columns:1fr; padding:9px; }
+  .today-game { min-height:124px; padding:14px; }
+  .league-controls { display:grid; grid-template-columns:1fr 1fr; padding:10px; }
+  .league-controls label { min-width:0; }
+  .league-controls button { grid-column:1/-1; }
+  .league-dashboard { grid-template-columns:1fr; padding:9px; }
+  .schedule-card { order:0; }
+  .standings-card { order:2; }
+  .events-card { order:1; }
   .team-head > div { min-width:0; overflow-wrap:anywhere; }
   .team-head button { flex-shrink:0; }
   .intro p:last-child { display:none; }
@@ -161,4 +223,6 @@ body:fullscreen .placeholder { min-height:0; overflow:auto; }
   body:fullscreen .frame-wrap { flex:auto; }
   .team-tools select { flex:1 1 140px; font-size:16px; }
   .dialog-actions button { width:100%; }
+  body:fullscreen .today-grid { grid-template-columns:1fr; overflow:auto; grid-auto-rows:auto; }
+  body:fullscreen .today-game { min-height:150px; }
 }

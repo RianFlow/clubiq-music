@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from db_config import connection_kwargs
-from darts_feed import DartsFeedUnavailable, get_darts_feed
+from darts_feed import DartsFeedUnavailable, get_darts_center, get_darts_feed
 from radio_directory import DirectoryUnavailable, get_station, search_stations
 from radio_logos import CACHE_SECONDS, FAILURE_SECONDS, cached_logo
 from music_library import duration_ms, register_library
@@ -425,6 +425,16 @@ def darts_display():
 def darts_ticker():
     try:
         return get_darts_feed()
+    except DartsFeedUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/v1/darts/center")
+def darts_center(league: str = "kl04", round_id: int | None = None):
+    try:
+        return get_darts_center(league, round_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except DartsFeedUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
