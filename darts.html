@@ -7,8 +7,8 @@
   <title>ClubIQ · Darts-Zentrale</title>
   <meta name="description" content="SV Barver Darts A, B, C und D: Spielpläne, Spielberichte und Live-Ansichten gemeinsam verfolgen.">
   <link rel="icon" href="/pics/logo.png">
-  <link rel="stylesheet" href="/static/darts.css?v=20260921-2">
-  <script defer src="/static/darts.js?v=20260921-2"></script>
+  <link rel="stylesheet" href="/static/darts.css?v=20260921-3">
+  <script defer src="/static/darts.js?v=20260921-3"></script>
 </head>
 <body>
   <header class="darts-header">
@@ -31,6 +31,10 @@
       <div id="teamChoices" class="team-choices" role="group" aria-label="Mannschaften auswählen"></div>
       <button id="loadAll" class="primary" type="button">Teams anzeigen</button>
       <label class="auto-load" title="Ausgewählte 3K-Ansichten beim Öffnen automatisch laden"><input id="autoLoad" type="checkbox"><span>Automatisch laden</span></label>
+    </section>
+    <section class="match-center" aria-labelledby="matchCenterHeading">
+      <div class="match-center-head"><div><p class="eyebrow">Matchcenter</p><h2 id="matchCenterHeading">Barver A–D</h2></div><span>Live · nächste Spiele · letzte Ergebnisse</span></div>
+      <div id="matchCenterGrid" class="match-center-grid"><p class="match-center-loading">3K-Spielplan wird geladen …</p></div>
     </section>
     <details class="source-note"><summary>Hinweis zu den 3K-Ansichten</summary><p>Beim Anzeigen verbindet sich dein Browser mit 3K Darts. Spielstände werden dort bereitgestellt – keine eigene Ergebniserfassung. Live funktioniert nur bei einer aktiven Übertragung.</p></details>
     <p id="pageStatus" class="message" role="status" hidden></p>

@@ -14,7 +14,7 @@ button.primary { color:white; background:var(--green); border-color:var(--green)
 .brand img { width:44px; height:44px; border-radius:12px; }
 .brand span { display:grid; gap:2px; font-size:.85rem; }
 .brand b { font-size:1rem; }
-.club-logo { display:block; background:url('/pics/sv-barver-darts.png') center 57% / 280% auto no-repeat; }
+.club-logo { display:block; background:url('/pics/sv-barver-darts-tight.png') center / contain no-repeat; }
 .header-club-logo { width:70px; height:48px; margin-right:auto; }
 .darts-header nav { display:flex; flex-wrap:wrap; gap:8px; }
 .score-ticker { display:flex; align-items:center; min-height:48px; overflow:hidden; color:#fff; background:#0f2f2a; border-bottom:1px solid #31534d; }
@@ -53,6 +53,24 @@ h1 { font:500 clamp(1.7rem,3vw,2.7rem)/1.15 Georgia,serif; margin:0; }
 .team-choices button[aria-pressed="true"] { background:var(--green); color:white; }
 .auto-load { display:flex; align-items:center; gap:5px; margin-left:auto; white-space:nowrap; font-size:.82rem; font-weight:600; }
 .auto-load input { width:20px; min-height:20px; height:20px; }
+.match-center { margin:12px 0; }
+.match-center-head { display:flex; align-items:end; justify-content:space-between; gap:16px; margin:0 2px 8px; }
+.match-center-head .eyebrow { margin:0 0 2px; }
+.match-center-head h2 { margin:0; font:600 1.25rem/1.1 Georgia,serif; }
+.match-center-head > span { color:#60706b; font-size:.78rem; }
+.match-center-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
+.match-center-loading { grid-column:1/-1; margin:0; padding:16px; color:#60706b; background:#fffef9; border:1px solid var(--line); border-radius:12px; }
+.match-center-card { position:relative; display:grid; grid-template-columns:1fr auto; gap:6px 10px; min-width:0; min-height:112px; padding:12px; color:#172a26; text-decoration:none; background:#fffef9; border:1px solid var(--line); border-radius:12px; border-top:4px solid #c5d4ce; }
+.match-center-card.live { border-top-color:#cc3a2e; }
+.match-center-card.upcoming { border-top-color:#2c7768; }
+.match-center-card.final { border-top-color:#c79f45; }
+.match-center-team { color:var(--green); font-size:.76rem; font-weight:850; letter-spacing:.06em; }
+.match-center-status { justify-self:end; padding:2px 6px; color:#254a42; background:#e1ece7; border-radius:999px; font-size:.63rem; letter-spacing:.04em; }
+.match-center-card.live .match-center-status { color:#fff; background:#cc3a2e; }
+.match-center-card.final .match-center-status { color:#3e3213; background:#ecd987; }
+.match-center-card > strong { grid-column:1/-1; min-width:0; font-size:.88rem; line-height:1.25; }
+.match-center-time { grid-column:1/-1; color:#60706b; font-size:.75rem; }
+.match-center-card[href]:hover { transform:translateY(-1px); box-shadow:0 6px 18px #173a3420; background:#fff; }
 .team-grid[data-count="1"] { grid-template-columns:1fr; }
 @media(min-width:1500px) { .team-grid[data-count="3"] { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 .team-card { min-width:0; border:1px solid var(--line); border-radius:18px; background:#fffef9; overflow:hidden; }
@@ -124,6 +142,9 @@ body:fullscreen .placeholder { min-height:0; overflow:auto; }
   .team-choices button span { display:none; }
   .layout-controls > .primary { justify-self:stretch; }
   .auto-load { grid-column:1/-1; margin-left:0; }
+  .match-center-head > span { display:none; }
+  .match-center-grid { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(235px,82vw); grid-template-columns:none; gap:8px; overflow-x:auto; padding:0 0 6px; scroll-snap-type:x mandatory; }
+  .match-center-card { scroll-snap-align:start; min-height:104px; }
   .team-head > div { min-width:0; overflow-wrap:anywhere; }
   .team-head button { flex-shrink:0; }
   .intro p:last-child { display:none; }

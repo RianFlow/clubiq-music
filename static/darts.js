@@ -58,8 +58,30 @@ function initDarts() {
     try { return new Intl.DateTimeFormat('de-DE',{weekday:'short',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(item.plannedAt)); }
     catch (_) { return ''; }
   }
+  function barverTeam(item) {
+    return `${item.home || ''} ${item.away || ''}`.match(/SV Barver Darts ([A-D])/)?.[1] || '';
+  }
+  function renderMatchCenter(data) {
+    const center = q('#matchCenterGrid');
+    if (!center) return;
+    const labels = {live:'LIVE',upcoming:'NÄCHSTES',final:'ERGEBNIS'};
+    const fragment = document.createDocumentFragment();
+    for (const code of ['A','B','C','D']) {
+      const item = Array.isArray(data.items) ? data.items.find(entry=>barverTeam(entry)===code) : null;
+      const card = document.createElement(item?.url ? 'a' : 'article');
+      card.className=`match-center-card ${item?.kind || 'empty'}`;
+      if (item?.url?.startsWith('https://portal.3k-darts.com/')) { card.href=item.url; card.target='_blank'; card.rel='noopener noreferrer'; }
+      const top=document.createElement('span'); top.className='match-center-team'; top.textContent=`BARVER ${code}`;
+      const status=document.createElement('b'); status.className='match-center-status'; status.textContent=item ? labels[item.kind] : 'KEIN TERMIN';
+      const text=document.createElement('strong'); text.textContent=item?.text || 'Keine Begegnung im aktuellen Zeitraum';
+      const when=document.createElement('span'); when.className='match-center-time'; when.textContent=item ? tickerTime(item) : '3K-Spielplan prüfen';
+      card.append(top,status,text,when); fragment.append(card);
+    }
+    center.replaceChildren(fragment);
+  }
   function renderTicker(data) {
     const track = q('#tickerTrack');
+    renderMatchCenter(data);
     if (!Array.isArray(data.items) || !data.items.length) {
       const empty = document.createElement('span'); empty.className='ticker-loading'; empty.textContent='Derzeit keine Barver-Begegnungen im aktuellen Zeitraum.';
       track.replaceChildren(empty); return;
@@ -68,8 +90,8 @@ function initDarts() {
     for (const item of data.items) {
       const link = document.createElement('a'); link.className=`ticker-item ${item.kind}`; link.target='_blank'; link.rel='noopener noreferrer';
       if (typeof item.url === 'string' && item.url.startsWith('https://portal.3k-darts.com/')) link.href=item.url;
-      const teamMatch = `${item.home || ''} ${item.away || ''}`.match(/SV Barver Darts ([A-D])/);
-      if (teamMatch) { const team=document.createElement('b'); team.className='ticker-team'; team.textContent=`BARVER ${teamMatch[1]}`; link.append(team); }
+      const teamCode = barverTeam(item);
+      if (teamCode) { const team=document.createElement('b'); team.className='ticker-team'; team.textContent=`BARVER ${teamCode}`; link.append(team); }
       const text = document.createElement('span'); text.textContent=item.text; link.append(text);
       const when = tickerTime(item); if (when) { const time=document.createElement('span'); time.className='ticker-time'; time.textContent=when; link.append(time); }
       group.append(link);
