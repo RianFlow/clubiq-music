@@ -6,6 +6,9 @@ const DARTS_TEAMS = [
   {id:'d',name:'SV Barver Darts D',event:'1460',participant:'174266',league:'Kreisklasse 11'},
 ];
 const DARTS_STORAGE = 'clubiq_darts_matches_2026_27';
+function dartsTheme(value, prefersDark=false) {
+  return value === 'dark' || value === 'light' ? value : prefersDark ? 'dark' : 'light';
+}
 function dartsLayout(raw) {
   const ids = DARTS_TEAMS.map(t=>t.id);
   const count = [1,2,3,4].includes(raw?.count) ? raw.count : 4;
@@ -52,6 +55,20 @@ if (typeof document !== 'undefined') initDarts();
 function initDarts() {
   const q = selector => document.querySelector(selector);
   const grid = q('#teamGrid'), cards = new Map(), selections = {};
+  const themeKey = 'clubiq_darts_theme';
+  function applyTheme(theme, remember=false) {
+    const selected=dartsTheme(theme);
+    document.documentElement.dataset.theme=selected;
+    q('meta[name="theme-color"]').content=selected==='dark'?'#0b1412':'#163c36';
+    q('#themeToggle').textContent=selected==='dark'?'☀ Hell':'◐ Dunkel';
+    q('#themeToggle').setAttribute('aria-pressed',String(selected==='dark'));
+    q('#themeToggle').setAttribute('aria-label',selected==='dark'?'Helles Farbschema einschalten':'Dunkles Farbschema einschalten');
+    if (remember) { try { localStorage.setItem(themeKey,selected); } catch (_) {} }
+  }
+  let savedTheme=null;
+  try { savedTheme=localStorage.getItem(themeKey); } catch (_) {}
+  applyTheme(dartsTheme(savedTheme,window.matchMedia?.('(prefers-color-scheme: dark)').matches));
+  q('#themeToggle').addEventListener('click',()=>applyTheme(document.documentElement.dataset.theme==='dark'?'light':'dark',true));
   const favoriteKey = 'clubiq_darts_favorite';
   let tickerDelay = 30000, tickerData = {items:[]}, favorite = 'all';
   try { favorite = ['A','B','C','D'].includes(localStorage.getItem(favoriteKey)) ? localStorage.getItem(favoriteKey) : 'all'; } catch (_) { /* Optional preference. */ }

@@ -7,14 +7,15 @@
   <title>ClubIQ · Darts-Zentrale</title>
   <meta name="description" content="SV Barver Darts A, B, C und D: Spielpläne, Spielberichte und Live-Ansichten gemeinsam verfolgen.">
   <link rel="icon" href="/pics/logo.png">
-  <link rel="stylesheet" href="/static/darts.css?v=20260921-5">
-  <script defer src="/static/darts.js?v=20260921-5"></script>
+  <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
+  <link rel="stylesheet" href="/static/darts.css?v=20260921-6">
+  <script defer src="/static/darts.js?v=20260921-6"></script>
 </head>
 <body>
   <header class="darts-header">
     <a class="brand" href="https://musik.clubiq.party/" aria-label="Zur Musik-App"><img src="/pics/logo.png" alt=""><span>ClubIQ <b>Darts-Zentrale</b></span></a>
     <span class="club-logo header-club-logo" role="img" aria-label="SV Barver Darts"></span>
-    <nav aria-label="Anzeige"><button id="todayView" type="button">Heute</button><button id="leagueView" type="button">Liga</button><button id="gridView" type="button">Teams</button><button id="trainingView" type="button">Training</button><button id="fullscreen" type="button">TV-Modus</button><a href="https://musik.clubiq.party/" target="_blank" rel="noopener">Zum Voting ↗</a></nav>
+    <nav aria-label="Anzeige"><button id="todayView" type="button">Heute</button><button id="leagueView" type="button">Liga</button><button id="gridView" type="button">Teams</button><button id="trainingView" type="button">Training</button><button id="themeToggle" type="button" aria-pressed="false" title="Farbschema wechseln">◐ Dunkel</button><button id="fullscreen" type="button">TV-Modus</button><a href="https://musik.clubiq.party/" target="_blank" rel="noopener">Zum Voting ↗</a></nav>
   </header>
   <section class="score-ticker" aria-label="Aktuelle Spiele und Ergebnisse">
     <strong>3K AKTUELL</strong>

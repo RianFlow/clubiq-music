@@ -174,6 +174,38 @@ body:fullscreen #todayPanel { display:flex !important; flex:1; min-height:0; mar
 body:fullscreen #todayPanel .sports-panel-head { flex:0 0 auto; }
 body:fullscreen .today-grid { flex:1; min-height:0; grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-rows:minmax(0,1fr); }
 body:fullscreen .today-game { min-height:0; align-content:center; }
+[data-theme="dark"] { color-scheme:dark; color:#e8f0ec; background:#0b1412; --green:#82cbb8; --line:#30443e; }
+[data-theme="dark"] body,[data-theme="dark"] body:fullscreen { color:#e8f0ec; background:#0b1412; }
+[data-theme="dark"] button,[data-theme="dark"] .darts-header a:not(.brand),[data-theme="dark"] .external { color:#dff3ed; background:#15231f; border-color:#3a514a; }
+[data-theme="dark"] button:hover,[data-theme="dark"] a.external:hover { background:#20342e; }
+[data-theme="dark"] button.primary { color:#fff; background:#236456; border-color:#377e6e; }
+[data-theme="dark"] .darts-header { background:#101c19; border-color:#30443e; }
+[data-theme="dark"] .brand { color:#dff3ed; }
+[data-theme="dark"] .eyebrow,[data-theme="dark"] .source-note summary,[data-theme="dark"] footer a { color:#8dd0be; }
+[data-theme="dark"] .intro p:last-child,[data-theme="dark"] .source-note,[data-theme="dark"] footer,[data-theme="dark"] .match-center-head>span,[data-theme="dark"] .match-center-time,[data-theme="dark"] .team-head p,[data-theme="dark"] .frame-note,[data-theme="dark"] .subtle,[data-theme="dark"] .sport-card-title span,[data-theme="dark"] .data-note,[data-theme="dark"] .panel-loading { color:#aebdb8; }
+[data-theme="dark"] .layout-controls,[data-theme="dark"] .match-center-loading,[data-theme="dark"] .match-center-card,[data-theme="dark"] .today-game,[data-theme="dark"] .league-controls,[data-theme="dark"] .sport-card,[data-theme="dark"] .team-card,[data-theme="dark"] dialog,[data-theme="dark"] .data-note { color:#e8f0ec; background:#111f1b; border-color:#30443e; }
+[data-theme="dark"] .match-center-card[href]:hover { background:#172924; box-shadow:0 8px 22px #0008; }
+[data-theme="dark"] .match-center-team,[data-theme="dark"] .today-team { color:#91d4c2; }
+[data-theme="dark"] .match-center-status { color:#cce6df; background:#29473f; }
+[data-theme="dark"] .match-center-card.final .match-center-status,[data-theme="dark"] .today-game.final>b { color:#f6e8b0; background:#65531e; }
+[data-theme="dark"] .today-grid,[data-theme="dark"] .league-dashboard { background:#0e1916; border-color:#30443e; }
+[data-theme="dark"] .today-game { color:#e8f0ec; border-color:#30443e; }
+[data-theme="dark"] .league-controls select,[data-theme="dark"] .sports-panel-head select,[data-theme="dark"] .team-tools select,[data-theme="dark"] .layout-controls select,[data-theme="dark"] input { color:#e8f0ec; background:#172722; border-color:#425c54; }
+[data-theme="dark"] .round-match { color:#e3ece8; border-color:#293b35; }
+[data-theme="dark"] .round-match:hover { background:#1a2c27; }
+[data-theme="dark"] .round-match b,[data-theme="dark"] .standings li b,[data-theme="dark"] .team-letter,[data-theme="dark"] .team-choices button b { color:#f6e7a7; background:#1f5e51; }
+[data-theme="dark"] .round-match.upcoming b { color:#b8d8cf; background:#29423b; }
+[data-theme="dark"] .standings li,[data-theme="dark"] .sport-card-title { border-color:#293b35; }
+[data-theme="dark"] .standings li.barver { color:#fff1b7; background:#3c351c; }
+[data-theme="dark"] .event-list { background:#293b35; }
+[data-theme="dark"] .darts-event { background:#111f1b; }
+[data-theme="dark"] .darts-event>div span { color:#aebdb8; }
+[data-theme="dark"] .frame-wrap { background:#0b1412; border-color:#30443e; }
+[data-theme="dark"] .placeholder p { color:#aebdb8; }
+[data-theme="dark"] .message { color:#d6eee7; background:#19342d; border-color:#35695c; }
+[data-theme="dark"] .team-choices button[aria-pressed="true"] { color:#fff; background:#236456; }
+[data-theme="dark"] .team-choices button[aria-pressed="true"] b { color:#19372f; background:#f0d991; }
+[data-theme="dark"] dialog::backdrop { background:#000b; }
 @media(min-width:1600px) { .frame-wrap { height:640px; } }
 @media(max-width:800px) {
   .darts-header { flex-wrap:wrap; padding:12px; }
