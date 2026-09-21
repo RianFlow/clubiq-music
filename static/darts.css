@@ -15,6 +15,20 @@ button.primary { color:white; background:var(--green); border-color:var(--green)
 .brand span { display:grid; gap:2px; font-size:.85rem; }
 .brand b { font-size:1rem; }
 .darts-header nav { display:flex; flex-wrap:wrap; gap:8px; }
+.score-ticker { display:flex; align-items:center; min-height:48px; overflow:hidden; color:#fff; background:#0f2f2a; border-bottom:1px solid #31534d; }
+.score-ticker > strong { align-self:stretch; display:grid; place-items:center; flex:0 0 auto; padding:0 16px; color:#102d28; background:#e7cc75; font-size:.78rem; letter-spacing:.08em; z-index:1; }
+.ticker-window { min-width:0; flex:1; overflow:hidden; }
+.ticker-track { display:flex; align-items:center; width:max-content; min-width:100%; animation:ticker-scroll 42s linear infinite; }
+.ticker-group { display:flex; align-items:center; flex:none; min-width:100vw; }
+.ticker-item,.ticker-loading { display:inline-flex; align-items:center; gap:8px; min-height:48px; padding:0 22px; color:#fff; text-decoration:none; white-space:nowrap; }
+.ticker-item::before { content:'NÄCHSTES'; padding:3px 6px; border-radius:999px; color:#0f2f2a; background:#dbe7df; font-size:.66rem; font-weight:800; }
+.ticker-item.live::before { content:'LIVE'; color:white; background:#c9392d; }
+.ticker-item.final::before { content:'ERGEBNIS'; background:#e7cc75; }
+.ticker-time { color:#c4d2cd; font-size:.82rem; }
+.ticker-updated { flex:0 0 auto; padding:0 12px; color:#c4d2cd; font-size:.72rem; white-space:nowrap; }
+.score-ticker:hover .ticker-track,.score-ticker:focus-within .ticker-track { animation-play-state:paused; }
+@keyframes ticker-scroll { to { transform:translateX(-50%); } }
+@media(prefers-reduced-motion:reduce) { .ticker-track { animation:none; } .ticker-window { overflow-x:auto; } }
 main { padding:22px 24px; max-width:2400px; margin:auto; }
 .intro { display:flex; align-items:center; justify-content:space-between; gap:20px; }
 .eyebrow { color:#245c51; text-transform:uppercase; letter-spacing:.12em; font-size:.8rem; font-weight:750; margin:0 0 6px; }
@@ -89,6 +103,9 @@ body:fullscreen .placeholder { min-height:0; overflow:auto; }
   .team-grid { grid-template-columns:1fr; }
   .darts-header nav { width:100%; }
   .darts-header nav > * { flex:1 1 auto; text-align:center; }
+  .score-ticker > strong { padding:0 9px; font-size:.68rem; }
+  .ticker-updated { display:none; }
+  .ticker-item,.ticker-loading { padding:0 14px; }
   .layout-controls { padding:12px; }
   .layout-controls > label:first-child { width:100%; }
   .team-choices { width:100%; display:grid; grid-template-columns:repeat(4,1fr); }
