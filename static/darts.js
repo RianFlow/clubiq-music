@@ -52,7 +52,9 @@ if (typeof document !== 'undefined') initDarts();
 function initDarts() {
   const q = selector => document.querySelector(selector);
   const grid = q('#teamGrid'), cards = new Map(), selections = {};
-  let tickerDelay = 30000;
+  const favoriteKey = 'clubiq_darts_favorite';
+  let tickerDelay = 30000, tickerData = {items:[]}, favorite = 'all';
+  try { favorite = ['A','B','C','D'].includes(localStorage.getItem(favoriteKey)) ? localStorage.getItem(favoriteKey) : 'all'; } catch (_) { /* Optional preference. */ }
   function tickerTime(item) {
     if (!item.plannedAt) return '';
     try { return new Intl.DateTimeFormat('de-DE',{weekday:'short',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(item.plannedAt)); }
@@ -66,7 +68,8 @@ function initDarts() {
     if (!center) return;
     const labels = {live:'LIVE',upcoming:'NÄCHSTES',final:'ERGEBNIS'};
     const fragment = document.createDocumentFragment();
-    for (const code of ['A','B','C','D']) {
+    const codes = ['A','B','C','D'].sort((a,b)=>favorite === a ? -1 : favorite === b ? 1 : 0);
+    for (const code of codes) {
       const item = Array.isArray(data.items) ? data.items.find(entry=>barverTeam(entry)===code) : null;
       const card = document.createElement(item?.url ? 'a' : 'article');
       card.className=`match-center-card ${item?.kind || 'empty'}`;
@@ -79,9 +82,36 @@ function initDarts() {
     }
     center.replaceChildren(fragment);
   }
+  function renderToday(data) {
+    const target = q('#todayGrid');
+    if (!target) return;
+    const items = Array.isArray(data.items) ? data.items.slice() : [];
+    const wanted = favorite === 'all' ? items : items.filter(item=>barverTeam(item)===favorite);
+    const live = wanted.filter(item=>item.kind==='live');
+    const upcoming = wanted.filter(item=>item.kind==='upcoming');
+    const finals = wanted.filter(item=>item.kind==='final');
+    const shown = (live.length ? live : upcoming.length ? upcoming : finals).slice(0,4);
+    const today = new Date().toLocaleDateString('de-DE');
+    const playingToday = shown.some(item=>item.plannedAt && new Date(item.plannedAt).toLocaleDateString('de-DE')===today);
+    q('#todayHeading').textContent = live.length || playingToday ? 'Heute spielen' : upcoming.length ? 'Nächste Spiele' : 'Letzte Ergebnisse';
+    q('#todaySubtitle').textContent = live.length ? `${live.length} Begegnung${live.length===1?'':'en'} läuft gerade.` : upcoming.length ? 'Die nächsten Begegnungen sind vorbereitet.' : 'Letzte Ergebnisse der Barver-Teams.';
+    if (!shown.length) { const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent='Für die Auswahl ist aktuell keine Begegnung vorhanden.'; target.replaceChildren(empty); return; }
+    const fragment=document.createDocumentFragment();
+    for (const item of shown) {
+      const card=document.createElement('a'); card.className=`today-game ${item.kind}`; card.href=item.url; card.target='_blank'; card.rel='noopener noreferrer';
+      const code=barverTeam(item); const badge=document.createElement('b'); badge.textContent=item.kind==='live'?'LIVE':item.kind==='final'?'ERGEBNIS':'NÄCHSTES SPIEL';
+      const team=document.createElement('span'); team.className='today-team'; team.textContent=code?`BARVER ${code}`:'SV BARVER';
+      const text=document.createElement('strong'); text.textContent=item.text;
+      const when=document.createElement('span'); when.className='today-time'; when.textContent=tickerTime(item);
+      card.append(badge,team,text,when); fragment.append(card);
+    }
+    target.replaceChildren(fragment);
+  }
   function renderTicker(data) {
     const track = q('#tickerTrack');
+    tickerData = data;
     renderMatchCenter(data);
+    renderToday(data);
     if (!Array.isArray(data.items) || !data.items.length) {
       const empty = document.createElement('span'); empty.className='ticker-loading'; empty.textContent='Derzeit keine Barver-Begegnungen im aktuellen Zeitraum.';
       track.replaceChildren(empty); return;
@@ -158,13 +188,71 @@ function initDarts() {
     q('#trainingFrame').replaceChildren(iframe);
     q('#trainingNote').textContent = '3K-Ansicht angefordert. Bleibt sie leer, nutze „Bei 3K öffnen“. Keine eigene Live-Erkennung von 180 oder Leg-Siegern; die Aktualisierung übernimmt 3K.';
   }
+  let centerController = null;
+  function formatDate(value, options={weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'}) {
+    try { return new Intl.DateTimeFormat('de-DE',options).format(new Date(value)); } catch (_) { return ''; }
+  }
+  function renderLeague(data) {
+    const round = data.selectedRound || {};
+    q('#roundHeading').textContent = `${round.name || 'Spieltag'} · ${data.league.short}`;
+    q('#roundDate').textContent = formatDate(round.dateFrom);
+    const roundSelect=q('#roundSelect');
+    const current=String(round.id || '');
+    roundSelect.replaceChildren(...(data.rounds || []).map(item=>{
+      const option=document.createElement('option'); option.value=String(item.id); option.textContent=`${item.name} · ${formatDate(item.dateFrom,{day:'2-digit',month:'2-digit'})}`; return option;
+    }));
+    roundSelect.value=current;
+    const games=document.createDocumentFragment();
+    for (const item of data.matches || []) {
+      const link=document.createElement('a'); link.className=`round-match ${item.kind}`; link.href=item.url; link.target='_blank'; link.rel='noopener noreferrer';
+      const home=document.createElement('span'); home.textContent=item.home;
+      const score=document.createElement('b'); score.textContent=item.score || '–';
+      const away=document.createElement('span'); away.textContent=item.away;
+      const state=document.createElement('small'); state.textContent=item.kind==='final'?'Endstand':item.kind==='live'?'Live':tickerTime(item);
+      link.append(home,score,away,state); games.append(link);
+    }
+    q('#roundMatches').replaceChildren(games.childNodes.length ? games : Object.assign(document.createElement('p'),{className:'panel-loading',textContent:'Keine Begegnungen an diesem Spieltag.'}));
+    const table=document.createDocumentFragment();
+    for (const entry of data.standings || []) {
+      const row=document.createElement('li'); if (entry.barver) row.className='barver';
+      const rank=document.createElement('b'); rank.textContent=entry.rank || '–';
+      const name=document.createElement('span'); name.textContent=entry.name;
+      row.append(rank,name); table.append(row);
+    }
+    q('#standings').replaceChildren(table.childNodes.length ? table : Object.assign(document.createElement('li'),{className:'panel-loading',textContent:'Noch keine Rangfolge verfügbar.'}));
+    const eventList=document.createDocumentFragment();
+    for (const item of data.events || []) {
+      const event=document.createElement('div'); event.className=`darts-event ${item.type}`;
+      const icon=document.createElement('b'); icon.textContent=item.type==='180'?'180':item.type==='match'?'✓':'→';
+      const copy=document.createElement('div'); const title=document.createElement('strong'); title.textContent=item.title; const text=document.createElement('span'); text.textContent=item.text;
+      copy.append(title,text); event.append(icon,copy); eventList.append(event);
+    }
+    q('#dartsEvents').replaceChildren(eventList.childNodes.length ? eventList : Object.assign(document.createElement('p'),{className:'panel-loading',textContent:'Für diesen Spieltag sind noch keine Highlights erfasst.'}));
+  }
+  async function loadLeague(roundId=null) {
+    if (centerController) centerController.abort();
+    centerController=new AbortController();
+    const league=encodeURIComponent(q('#leagueSelect').value); const round=/^\d+$/.test(String(roundId || '')) ? `&round_id=${encodeURIComponent(roundId)}` : '';
+    q('#roundMatches').innerHTML='<p class="panel-loading">Spiele werden geladen …</p>';
+    try {
+      const response=await fetch(`/api/v1/darts/center?league=${league}${round}`,{headers:{Accept:'application/json'},signal:centerController.signal});
+      if (!response.ok) throw new Error('league unavailable');
+      renderLeague(await response.json());
+    } catch (error) {
+      if (error.name!=='AbortError') message('Der 3K-Spieltag konnte gerade nicht geladen werden. Bitte noch einmal aktualisieren.');
+    }
+  }
   function setSection(section) {
     const teams = section === 'teams';
     grid.hidden = !teams; q('.intro').hidden = !teams;
     q('#layoutControls').hidden = !teams;
     q('#activityPanel').hidden = section !== 'activity';
     q('#trainingPanel').hidden = section !== 'training';
-    q('#activityView').setAttribute('aria-pressed',String(section === 'activity'));
+    q('#todayPanel').hidden = section !== 'today';
+    q('#leaguePanel').hidden = section !== 'league';
+    q('#todayView').setAttribute('aria-pressed',String(section === 'today'));
+    q('#leagueView').setAttribute('aria-pressed',String(section === 'league'));
+    q('#gridView').setAttribute('aria-pressed',String(section === 'teams'));
     q('#trainingView').setAttribute('aria-pressed',String(section === 'training'));
   }
   function loadActivity() {
@@ -178,7 +266,13 @@ function initDarts() {
     activityLoaded = true;
   }
   syncTraining();
-  q('#activityView').addEventListener('click',()=>{ setSection('activity'); if (!activityLoaded) loadActivity(); });
+  q('#todayView').addEventListener('click',()=>setSection('today'));
+  q('#leagueView').addEventListener('click',()=>{ setSection('league'); loadLeague(q('#roundSelect').value); });
+  q('#favoriteTeam').value=favorite;
+  q('#favoriteTeam').addEventListener('change',()=>{ favorite=q('#favoriteTeam').value; try { localStorage.setItem(favoriteKey,favorite); } catch (_) {} renderTicker(tickerData); });
+  q('#leagueSelect').addEventListener('change',()=>loadLeague());
+  q('#roundSelect').addEventListener('change',()=>loadLeague(q('#roundSelect').value));
+  q('#reloadLeague').addEventListener('click',()=>loadLeague(q('#roundSelect').value));
   q('#reloadActivity').addEventListener('click',loadActivity);
   q('#trainingView').addEventListener('click',()=>setSection('training'));
   q('#loadTraining').addEventListener('click',loadTraining);
@@ -274,6 +368,7 @@ function initDarts() {
     q('#teamChoices').append(choice);
   }
   applyLayout();
+  setSection('today');
   q('#gameCount').addEventListener('change',()=>{
     layout = dartsLayout({...layout,count:Number(q('#gameCount').value)});
     focused = null; applyLayout(); saveLayout();
@@ -299,8 +394,8 @@ function initDarts() {
     q('#matchDialog').close();
   });
   q('#fullscreen').addEventListener('click',async()=>{
-    try { if (document.fullscreenElement) await document.exitFullscreen(); else if (document.body.requestFullscreen) await document.body.requestFullscreen(); else message('Vollbild wird hier nicht unterstützt. Du kannst eine Mannschaft mit „Groß“ anzeigen.'); }
+    try { if (document.fullscreenElement) await document.exitFullscreen(); else { setSection('today'); if (document.body.requestFullscreen) await document.body.requestFullscreen(); else message('TV-Modus wird hier nicht unterstützt. Du kannst die Heute-Ansicht normal verwenden.'); } }
     catch (_) { message('Vollbild nicht verfügbar. Bitte die Browser-Vollbildfunktion oder „Groß“ verwenden.'); }
   });
-  document.addEventListener('fullscreenchange',()=>{ q('#fullscreen').textContent=document.fullscreenElement ? 'Vollbild beenden' : 'Vollbild'; });
+  document.addEventListener('fullscreenchange',()=>{ q('#fullscreen').textContent=document.fullscreenElement ? 'TV-Modus beenden' : 'TV-Modus'; });
 }
