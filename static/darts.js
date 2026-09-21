@@ -68,6 +68,8 @@ function initDarts() {
     for (const item of data.items) {
       const link = document.createElement('a'); link.className=`ticker-item ${item.kind}`; link.target='_blank'; link.rel='noopener noreferrer';
       if (typeof item.url === 'string' && item.url.startsWith('https://portal.3k-darts.com/')) link.href=item.url;
+      const teamMatch = `${item.home || ''} ${item.away || ''}`.match(/SV Barver Darts ([A-D])/);
+      if (teamMatch) { const team=document.createElement('b'); team.className='ticker-team'; team.textContent=`BARVER ${teamMatch[1]}`; link.append(team); }
       const text = document.createElement('span'); text.textContent=item.text; link.append(text);
       const when = tickerTime(item); if (when) { const time=document.createElement('span'); time.className='ticker-time'; time.textContent=when; link.append(time); }
       group.append(link);
@@ -219,7 +221,7 @@ function initDarts() {
   for (const team of DARTS_TEAMS) {
     const card = document.createElement('article'); card.className='team-card'; card.id=`team-${team.id}`;
     // Only fixed app-owned team labels are interpolated. Links are assigned via DOM properties.
-    card.innerHTML = `<div class="team-head"><span class="team-letter">${team.id.toUpperCase()}</span><div><h2>${team.name}</h2><p class="match-note"></p></div><button class="focus-team" type="button" aria-label="${team.name} vergrößern" aria-pressed="false">Groß</button></div>
+    card.innerHTML = `<div class="team-head"><span class="team-letter">${team.id.toUpperCase()}</span><span class="club-logo team-club-logo" aria-hidden="true"></span><div><h2>${team.name}</h2><p class="match-note"></p></div><button class="focus-team" type="button" aria-label="${team.name} vergrößern" aria-pressed="false">Groß</button></div>
       <div class="team-tools"><select aria-label="Ansicht für ${team.name}"><option value="team">Spielplan & Ergebnisse</option><option value="report" disabled>Gewählter Spielbericht</option><option value="live" disabled>Gewähltes Spiel live</option></select><button class="configure" type="button">Spiel wählen</button><button class="reload" type="button" aria-label="${team.name} neu laden">Neu laden</button><a class="external" target="_blank" rel="noopener noreferrer">Bei 3K öffnen ↗</a></div>
       <div class="frame-wrap"><div class="placeholder"><strong>${team.league}</strong><p>Spielplan und Ergebnisse dieser Mannschaft von 3K Darts laden.</p><button class="load-team primary" type="button">${team.id.toUpperCase()} anzeigen</button></div></div><p class="frame-note">Noch keine Verbindung zu 3K. Die Musik wird durch diese Ansicht nicht gesteuert.</p>`;
     grid.append(card);
@@ -235,7 +237,10 @@ function initDarts() {
       q('#matchError').hidden=true; q('#clearMatch').disabled=!selections[team.id]; q('#matchDialog').showModal();
     });
     const choice = document.createElement('button');
-    choice.type = 'button'; choice.dataset.team = team.id; choice.textContent = `Barver ${team.id.toUpperCase()}`;
+    choice.type = 'button'; choice.dataset.team = team.id; choice.setAttribute('aria-label',`Barver ${team.id.toUpperCase()} auswählen`);
+    const choiceLetter=document.createElement('b'); choiceLetter.textContent=team.id.toUpperCase();
+    const choiceName=document.createElement('span'); choiceName.textContent='Barver';
+    choice.append(choiceLetter,choiceName);
     choice.addEventListener('click',()=>{
       if (layout.selected.includes(team.id)) {
         if (layout.count === 1) return;
