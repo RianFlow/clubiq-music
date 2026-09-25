@@ -9,6 +9,18 @@ assert.equal(dartsTheme('dark'), 'dark');
 assert.equal(dartsTheme('light', true), 'light');
 assert.equal(dartsTheme(null, true), 'dark');
 assert.equal(dartsTheme('invalid', false), 'light');
+const dartsSponsors = vm.runInContext('dartsSponsors',context);
+const sponsorConfig = {displaySeconds:2,sponsors:[
+  {id:'active',name:'Lokaler Betrieb',image:'/pics/sponsors/betrieb.png',href:'https://example.com',placements:['top','inline'],startsAt:'2026-01-01',endsAt:'2026-12-31'},
+  {id:'old',name:'Abgelaufen',startsAt:'2025-01-01',endsAt:'2025-12-31'},
+  {id:'unsafe',name:'Unsicher',image:'https://tracker.test/logo.png',href:'javascript:alert(1)',placements:['inline']},
+]};
+const sponsorResult = dartsSponsors(sponsorConfig,Date.parse('2026-09-21T12:00:00Z'));
+assert.equal(sponsorResult.displaySeconds,6);
+assert.equal(sponsorResult.sponsors.length,2);
+assert.equal(sponsorResult.sponsors[0].href,'https://example.com/');
+assert.equal(sponsorResult.sponsors[1].image,'');
+assert.equal(sponsorResult.sponsors[1].href,'');
 const team = DARTS_TEAMS[3];
 const dartsLayout = vm.runInContext('dartsLayout',context);
 for (const count of [1,2,3,4]) {
@@ -60,11 +72,15 @@ assert.match(html,/Barver A · B · C/);
 assert.match(html,/Barver D/);
 assert.match(html,/id="favoriteTeam"/);
 assert.match(html,/id="themeToggle"/);
+assert.match(html,/role="switch"/);
+assert.match(html,/id="sponsorTop"/);
+assert.match(html,/id="sponsorInline"/);
 assert.doesNotMatch(html,/<iframe|https:\/\/portal[^" ]+\.js/,'external content is opt-in');
 const script = fs.readFileSync('static/darts.js','utf8');
 assert.match(fs.readFileSync('static/darts.css','utf8'),/sv-barver-darts-tight\.png/);
 assert.match(fs.readFileSync('static/darts.css','utf8'),/data-theme="dark"/);
 assert.match(script,/function renderMatchCenter\(data\)/);
+assert.match(script,/fetch\('\/static\/darts-sponsors\.json'/);
 assert.doesNotMatch(script,/\/api\/v1\/music\/.*command/,'darts view does not control music');
 assert.match(script,/fetch\('\/api\/v1\/darts\/ticker'/);
 assert.match(script,/\/api\/v1\/darts\/center\?league=/);

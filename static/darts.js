@@ -9,6 +9,24 @@ const DARTS_STORAGE = 'clubiq_darts_matches_2026_27';
 function dartsTheme(value, prefersDark=false) {
   return value === 'dark' || value === 'light' ? value : prefersDark ? 'dark' : 'light';
 }
+function dartsSponsors(config, now=Date.now()) {
+  const displaySeconds = Number.isFinite(config?.displaySeconds) ? Math.min(60,Math.max(6,Math.round(config.displaySeconds))) : 12;
+  const sponsors = Array.isArray(config?.sponsors) ? config.sponsors.flatMap((item,index)=>{
+    if (!item || typeof item.name !== 'string' || !item.name.trim() || item.name.length > 80) return [];
+    const image = typeof item.image === 'string' && /^\/pics\/sponsors\/[a-z0-9][a-z0-9._-]*\.(?:avif|jpe?g|png|svg|webp)$/i.test(item.image) ? item.image : '';
+    let href = '';
+    if (typeof item.href === 'string' && item.href) {
+      try { const url=new URL(item.href); if (url.protocol==='https:' && !url.username && !url.password) href=url.href; } catch (_) {}
+    }
+    const starts = item.startsAt ? Date.parse(item.startsAt) : -Infinity;
+    const ends = item.endsAt ? Date.parse(item.endsAt) : Infinity;
+    if (Number.isNaN(starts) || Number.isNaN(ends) || starts > ends || now < starts || now > ends) return [];
+    const placements = Array.isArray(item.placements) ? [...new Set(item.placements.filter(value=>value==='top'||value==='inline'))] : ['top','inline'];
+    if (!placements.length) return [];
+    return [{id:String(item.id || index),name:item.name.trim(),image,href,placements}];
+  }) : [];
+  return {displaySeconds,sponsors};
+}
 function dartsLayout(raw) {
   const ids = DARTS_TEAMS.map(t=>t.id);
   const count = [1,2,3,4].includes(raw?.count) ? raw.count : 4;
@@ -60,15 +78,37 @@ function initDarts() {
     const selected=dartsTheme(theme);
     document.documentElement.dataset.theme=selected;
     q('meta[name="theme-color"]').content=selected==='dark'?'#0b1412':'#163c36';
-    q('#themeToggle').textContent=selected==='dark'?'☀ Hell':'◐ Dunkel';
-    q('#themeToggle').setAttribute('aria-pressed',String(selected==='dark'));
-    q('#themeToggle').setAttribute('aria-label',selected==='dark'?'Helles Farbschema einschalten':'Dunkles Farbschema einschalten');
+    q('#themeToggle').setAttribute('aria-checked',String(selected==='dark'));
+    q('#themeToggle').setAttribute('title',selected==='dark'?'Hellen Modus einschalten':'Dunklen Modus einschalten');
     if (remember) { try { localStorage.setItem(themeKey,selected); } catch (_) {} }
   }
   let savedTheme=null;
   try { savedTheme=localStorage.getItem(themeKey); } catch (_) {}
   applyTheme(dartsTheme(savedTheme,window.matchMedia?.('(prefers-color-scheme: dark)').matches));
   q('#themeToggle').addEventListener('click',()=>applyTheme(document.documentElement.dataset.theme==='dark'?'light':'dark',true));
+  function renderSponsor(slot, sponsor) {
+    const content=document.createElement(sponsor.href?'a':'div'); content.className='sponsor-banner';
+    if (sponsor.href) { content.href=sponsor.href; content.target='_blank'; content.rel='noopener noreferrer sponsored'; }
+    const caption=document.createElement('span'); caption.className='sponsor-caption'; caption.textContent='Unterstützt von';
+    const identity=document.createElement('span'); identity.className='sponsor-identity';
+    if (sponsor.image) { const logo=document.createElement('img'); logo.src=sponsor.image; logo.alt=''; logo.loading='lazy'; logo.decoding='async'; identity.append(logo); }
+    const name=document.createElement('strong'); name.textContent=sponsor.name; identity.append(name);
+    content.append(caption,identity); slot.replaceChildren(content); slot.hidden=false;
+  }
+  function startSponsorRotation(config) {
+    const slots=[...document.querySelectorAll('.sponsor-slot')];
+    const states=slots.map((slot,offset)=>({slot,items:config.sponsors.filter(item=>item.placements.includes(slot.dataset.placement)),index:offset}));
+    const show=state=>{
+      if (!state.items.length) { state.slot.hidden=true; state.slot.replaceChildren(); return; }
+      renderSponsor(state.slot,state.items[state.index % state.items.length]); state.index+=1;
+    };
+    states.forEach(show);
+    if (states.some(state=>state.items.length>1)) window.setInterval(()=>states.forEach(show),config.displaySeconds*1000);
+  }
+  fetch('/static/darts-sponsors.json',{headers:{Accept:'application/json'},cache:'no-store'})
+    .then(response=>response.ok?response.json():Promise.reject(new Error('sponsors unavailable')))
+    .then(config=>startSponsorRotation(dartsSponsors(config)))
+    .catch(()=>document.querySelectorAll('.sponsor-slot').forEach(slot=>{ slot.hidden=true; slot.replaceChildren(); }));
   const favoriteKey = 'clubiq_darts_favorite';
   let tickerDelay = 30000, tickerData = {items:[]}, favorite = 'all';
   try { favorite = ['A','B','C','D'].includes(localStorage.getItem(favoriteKey)) ? localStorage.getItem(favoriteKey) : 'all'; } catch (_) { /* Optional preference. */ }

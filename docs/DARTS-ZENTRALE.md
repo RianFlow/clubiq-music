@@ -15,6 +15,33 @@ Der öffentliche Host `barverdarts.clubiq.party` liefert am Pfad `/` direkt die 
 
 Die Links wurden am 20.09.2026 im öffentlichen Portal geprüft. Nach einem Saisonwechsel müssen diese festen Zuordnungen geprüft werden.
 
+## Darstellung und Werbepartner
+
+Der Umschalter „Hell / Dunkel“ in der Kopfzeile wechselt das Farbschema. Die Auswahl wird ausschließlich im Browser des jeweiligen Geräts gespeichert; beim ersten Besuch gilt die Systemeinstellung.
+
+Die zwei optionalen Werbeflächen werden aus `static/darts-sponsors.json` geladen. Ist kein aktuell gültiger Eintrag vorhanden, bleiben beide Flächen vollständig ausgeblendet. Logos werden lokal unter `pics/sponsors/` abgelegt, damit beim bloßen Seitenaufruf keine Verbindung zu Werbepartnern entsteht. Ein externer HTTPS-Link wird erst beim Anklicken geöffnet.
+
+Beispielkonfiguration:
+
+```json
+{
+  "displaySeconds": 12,
+  "sponsors": [
+    {
+      "id": "musterbetrieb",
+      "name": "Musterbetrieb Barver",
+      "image": "/pics/sponsors/musterbetrieb.png",
+      "href": "https://www.example.com/",
+      "placements": ["top", "inline"],
+      "startsAt": "2026-10-01T00:00:00+02:00",
+      "endsAt": "2027-09-30T23:59:59+02:00"
+    }
+  ]
+}
+```
+
+`displaySeconds` liegt technisch zwischen 6 und 60 Sekunden. `placements` kann `top`, `inline` oder beide Werte enthalten. Fehlen Start oder Ende, ist die entsprechende Seite des Zeitraums offen. Ungültige, abgelaufene oder noch nicht begonnene Einträge werden nicht angezeigt. Mehrere gültige Firmen wechseln automatisch; die beiden Positionen starten versetzt.
+
 ## Bedienung
 
 Das Laufband „3K Aktuell“ wird alle 30 Sekunden aus den öffentlichen 3K-Spielplänen aktualisiert. Es zeigt laufende Zwischenstände zuerst, danach die nächsten Begegnungen und zuletzt abgeschlossene Ergebnisse. Bei einer Störung bleibt der letzte erfolgreiche Stand gekennzeichnet erhalten; personenbezogene Kontaktdaten aus 3K werden nicht übernommen.
