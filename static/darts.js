@@ -114,6 +114,32 @@ function initDarts() {
     .then(response=>response.ok?response.json():Promise.reject(new Error('sponsors unavailable')))
     .then(config=>startSponsorRotation(dartsSponsors(config)))
     .catch(()=>document.querySelectorAll('.sponsor-slot').forEach(slot=>{ slot.hidden=true; slot.replaceChildren(); }));
+  let livePushAlertTimer=0;
+  function closeLivePushAlert() {
+    window.clearTimeout(livePushAlertTimer);
+    const alert=q('#livePushAlert');
+    alert.classList.remove('show');
+    alert.hidden=true;
+  }
+  function showLivePushAlert(payload) {
+    if (!payload || typeof payload !== 'object') return;
+    const title=typeof payload.title === 'string' ? payload.title.trim().slice(0,120) : '';
+    const body=typeof payload.body === 'string' ? payload.body.trim().slice(0,240) : '';
+    if (!title && !body) return;
+    q('#livePushTitle').textContent=title || 'ClubIQ Darts';
+    q('#livePushBody').textContent=body || 'Neue Meldung aus dem Darts-Matchcenter.';
+    const alert=q('#livePushAlert');
+    alert.hidden=false;
+    alert.classList.remove('show');
+    void alert.offsetWidth;
+    alert.classList.add('show');
+    window.clearTimeout(livePushAlertTimer);
+    livePushAlertTimer=window.setTimeout(closeLivePushAlert,15000);
+  }
+  q('#closeLivePushAlert').addEventListener('click',closeLivePushAlert);
+  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message',event=>{
+    if (event.data?.type === 'clubiq-darts-push') showLivePushAlert(event.data.payload);
+  });
   async function pushRequest(path, payload) {
     const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-ClubIQ-Push':'1'},body:JSON.stringify(payload)});
     if (!response.ok) { let detail='Push-Aktion fehlgeschlagen.'; try { detail=(await response.json()).detail || detail; } catch (_) {} throw new Error(detail); }

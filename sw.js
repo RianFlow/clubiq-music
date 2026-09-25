@@ -1,9 +1,9 @@
 "use strict";
 
-const CACHE = "clubiq-music-shell-20260925-3";
+const CACHE = "clubiq-music-shell-20260925-4";
 const SHELL = [
   "/", "/remote", "/party", "/darts", "/manifest.webmanifest",
-  "/static/darts.css?v=20260925-3", "/static/darts.js?v=20260925-3", "/static/darts-sponsors.json", "/pics/sv-barver-darts-tight.png",
+  "/static/darts.css?v=20260925-4", "/static/darts.js?v=20260925-4", "/static/darts-sponsors.json", "/pics/sv-barver-darts-tight.png",
   "/static/app.css?v=20260915-1", "/static/app.js?v=20260919-1",
   "/static/song-info.js?v=20260917-1", "/static/comfort.js?v=20260919-1", "/static/comfort.css?v=20260917-1",
   "/static/reliability.js?v=20260919-1",
@@ -41,14 +41,22 @@ self.addEventListener("fetch", event => {
 self.addEventListener("push", event => {
   let payload = {};
   try { payload = event.data ? event.data.json() : {}; } catch (_) { payload = {}; }
-  event.waitUntil(self.registration.showNotification(payload.title || "ClubIQ Darts", {
-    body: payload.body || "Neue Meldung aus dem Darts-Matchcenter.",
+  const message = {
+    title: typeof payload.title === "string" ? payload.title.slice(0, 120) : "ClubIQ Darts",
+    body: typeof payload.body === "string" ? payload.body.slice(0, 240) : "Neue Meldung aus dem Darts-Matchcenter.",
+  };
+  const broadcast = clients.matchAll({type:"window",includeUncontrolled:true}).then(windows => {
+    for (const client of windows) client.postMessage({type:"clubiq-darts-push",payload:message});
+  });
+  const notification = self.registration.showNotification(message.title, {
+    body: message.body,
     icon: "/pics/pwa-512.png",
     badge: "/pics/logo.png",
     tag: payload.tag || "clubiq-darts",
     renotify: true,
     data: {url: payload.url || "https://barverdarts.clubiq.party/"},
-  }));
+  });
+  event.waitUntil(Promise.all([broadcast,notification]));
 });
 
 self.addEventListener("notificationclick", event => {

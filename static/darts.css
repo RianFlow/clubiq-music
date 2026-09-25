@@ -25,6 +25,19 @@ button.primary { color:white; background:var(--green); border-color:var(--green)
 .theme-switch[aria-checked="true"] .theme-track { background:#2e7769; box-shadow:inset 0 0 0 1px #65a99a; }
 .theme-switch[aria-checked="true"] .theme-track span { transform:translateX(14px); }
 .push-toggle[aria-pressed="true"] { color:#173b35; background:#efd789; border-color:#d4b85e; }
+.live-push-alert { position:fixed; top:84px; left:50%; z-index:1000; display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:12px; align-items:center; width:min(720px,calc(100% - 32px)); min-height:104px; padding:16px 18px 20px; overflow:hidden; color:#fff; background:linear-gradient(120deg,#0d302a 0%,#174f45 64%,#1f6d5d 100%); border:1px solid #d9bd5e; border-radius:16px; box-shadow:0 18px 55px #07171380,0 0 0 3px #e4c96b26; transform:translate(-50%,-18px); opacity:0; }
+.live-push-alert.show { animation:live-push-in .28s ease-out forwards; }
+.live-push-alert-mark { display:grid; place-items:center; width:58px; height:58px; color:#183a33; background:#efd789; border-radius:50%; font-size:1.8rem; box-shadow:inset 0 0 0 3px #fff5c74d; }
+.live-push-alert-copy { display:grid; gap:3px; min-width:0; }
+.live-push-alert-copy small { color:#efd789; font-size:.7rem; font-weight:850; letter-spacing:.14em; }
+.live-push-alert-copy strong { overflow:hidden; font:650 clamp(1.05rem,2.4vw,1.35rem)/1.2 Georgia,serif; text-overflow:ellipsis; white-space:nowrap; }
+.live-push-alert-copy > span { color:#edf7f3; line-height:1.35; overflow-wrap:anywhere; }
+.live-push-alert > button { align-self:start; min-width:42px; min-height:42px; padding:0; color:#fff; background:#ffffff14; border-color:#ffffff3d; border-radius:50%; font-size:1.5rem; line-height:1; }
+.live-push-alert > button:hover { background:#ffffff2b; }
+.live-push-alert-progress { position:absolute; left:0; bottom:0; width:100%; height:5px; background:#efd789; transform-origin:left; }
+.live-push-alert.show .live-push-alert-progress { animation:live-push-countdown 15s linear forwards; }
+@keyframes live-push-in { to { opacity:1; transform:translate(-50%,0); } }
+@keyframes live-push-countdown { to { transform:scaleX(0); } }
 .score-ticker { display:flex; align-items:center; min-height:48px; overflow:hidden; color:#fff; background:#0f2f2a; border-bottom:1px solid #31534d; }
 .score-ticker > strong { align-self:stretch; display:grid; place-items:center; flex:0 0 auto; padding:0 16px; color:#102d28; background:#e7cc75; font-size:.78rem; letter-spacing:.08em; z-index:1; }
 .ticker-window { min-width:0; flex:1; overflow:hidden; }
@@ -40,6 +53,7 @@ button.primary { color:white; background:var(--green); border-color:var(--green)
 .score-ticker:hover .ticker-track,.score-ticker:focus-within .ticker-track { animation-play-state:paused; }
 @keyframes ticker-scroll { to { transform:translateX(-50%); } }
 @media(prefers-reduced-motion:reduce) { .ticker-track { animation:none; } .ticker-window { overflow-x:auto; } }
+@media(prefers-reduced-motion:reduce) { .live-push-alert.show { animation:none; opacity:1; transform:translate(-50%,0); } .live-push-alert.show .live-push-alert-progress { animation:none; } }
 .sponsor-slot { max-width:1500px; margin:12px auto; padding:0 24px; }
 .sponsor-slot-inline { margin-top:8px; margin-bottom:14px; padding:0; }
 .sponsor-banner { position:relative; display:flex; align-items:center; justify-content:center; gap:16px; min-height:74px; padding:10px 18px; overflow:hidden; color:#17332d; text-decoration:none; background:linear-gradient(120deg,#fffef9,#f0f3ed); border:1px solid var(--line); border-radius:14px; box-shadow:0 5px 18px #173a340d; animation:sponsor-in .35s ease-out; }
@@ -244,6 +258,10 @@ body:fullscreen .today-game { min-height:0; align-content:center; }
 [data-theme="dark"] dialog::backdrop { background:#000b; }
 @media(min-width:1600px) { .frame-wrap { height:640px; } }
 @media(max-width:800px) {
+  .live-push-alert { top:72px; width:calc(100% - 20px); min-height:94px; grid-template-columns:auto minmax(0,1fr) auto; gap:9px; padding:13px 12px 18px; border-radius:13px; }
+  .live-push-alert-mark { width:46px; height:46px; font-size:1.45rem; }
+  .live-push-alert-copy strong { font-size:1rem; }
+  .live-push-alert-copy > span { font-size:.88rem; }
   .darts-header { flex-wrap:wrap; padding:12px; }
   main { padding:16px 12px; }
   .team-grid { grid-template-columns:1fr; }
