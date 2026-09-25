@@ -8,14 +8,14 @@
   <meta name="description" content="SV Barver Darts A, B, C und D: Spielpläne, Spielberichte und Live-Ansichten gemeinsam verfolgen.">
   <link rel="icon" href="/pics/logo.png">
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
-  <link rel="stylesheet" href="/static/darts.css?v=20260925-4">
-  <script defer src="/static/darts.js?v=20260925-4"></script>
+  <link rel="stylesheet" href="/static/darts.css?v=20260925-5">
+  <script defer src="/static/darts.js?v=20260925-5"></script>
 </head>
 <body>
   <header class="darts-header">
     <a class="brand" href="https://musik.clubiq.party/" aria-label="Zur Musik-App"><img src="/pics/logo.png" alt=""><span>ClubIQ <b>Darts-Zentrale</b></span></a>
     <span class="club-logo header-club-logo" role="img" aria-label="SV Barver Darts"></span>
-    <nav aria-label="Anzeige"><button id="todayView" type="button">Heute</button><button id="leagueView" type="button">Liga</button><button id="gridView" type="button">Teams</button><button id="trainingView" type="button">Training</button><button id="pushToggle" class="push-toggle" type="button" aria-pressed="false">🔔 Push aktivieren</button><button id="themeToggle" class="theme-switch" type="button" role="switch" aria-checked="false" aria-label="Dunkelmodus"><span class="theme-option theme-light">Hell</span><span class="theme-track" aria-hidden="true"><span></span></span><span class="theme-option theme-dark">Dunkel</span></button><button id="fullscreen" type="button">TV-Modus</button><a href="https://musik.clubiq.party/" target="_blank" rel="noopener">Zum Voting ↗</a></nav>
+    <nav aria-label="Anzeige"><button id="todayView" type="button">Heute</button><button id="leagueView" type="button">Liga</button><button id="gridView" type="button">Teams</button><button id="trainingView" type="button">Training</button><button id="pushToggle" class="push-toggle" type="button" aria-pressed="false">🔔 Push aktivieren</button><span id="pushHealth" class="push-health" role="status" hidden></span><button id="themeToggle" class="theme-switch" type="button" role="switch" aria-checked="false" aria-label="Dunkelmodus"><span class="theme-option theme-light">Hell</span><span class="theme-track" aria-hidden="true"><span></span></span><span class="theme-option theme-dark">Dunkel</span></button><button id="fullscreen" type="button">TV-Modus</button><a href="https://musik.clubiq.party/" target="_blank" rel="noopener">Zum Voting ↗</a></nav>
   </header>
   <aside id="livePushAlert" class="live-push-alert" role="alert" aria-live="assertive" aria-atomic="true" hidden>
     <span class="live-push-alert-mark" aria-hidden="true">🎯</span>
@@ -48,7 +48,7 @@
     <details class="source-note"><summary>Hinweis zu den 3K-Ansichten</summary><p>Beim Anzeigen verbindet sich dein Browser mit 3K Darts. Spielstände werden dort bereitgestellt – keine eigene Ergebniserfassung. Live funktioniert nur bei einer aktiven Übertragung.</p></details>
     <p id="pageStatus" class="message" role="status" hidden></p>
     <section id="todayPanel" class="sports-panel" aria-labelledby="todayHeading" hidden>
-      <div class="sports-panel-head"><div><p class="eyebrow">Schnellansicht</p><h2 id="todayHeading">Heute spielen</h2><p id="todaySubtitle">Live-Spiele und die nächsten Begegnungen.</p></div><label for="favoriteTeam">Mein Team<select id="favoriteTeam"><option value="all">Alle Teams</option><option value="A">Barver A</option><option value="B">Barver B</option><option value="C">Barver C</option><option value="D">Barver D</option></select></label></div>
+      <div class="sports-panel-head"><div><p class="eyebrow">Live-Matchcenter</p><h2 id="todayHeading">Heute spielen</h2><p id="todaySubtitle">Live-Spiele und die nächsten Begegnungen.</p></div><div class="today-actions"><span id="liveDataStatus" class="live-data-status">3K wird geladen</span><label for="favoriteTeam">Mein Team<select id="favoriteTeam"><option value="all">Alle Teams</option><option value="A">Barver A</option><option value="B">Barver B</option><option value="C">Barver C</option><option value="D">Barver D</option></select></label></div></div>
       <div id="todayGrid" class="today-grid"><p class="panel-loading">Spielstände werden geladen …</p></div>
     </section>
     <section id="leaguePanel" class="sports-panel" aria-labelledby="leagueHeading" hidden>

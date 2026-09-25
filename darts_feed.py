@@ -95,6 +95,24 @@ def _relevant_rounds(rounds: list[dict], now: datetime) -> list[dict]:
     return chosen or [item for item, _ in dated[:1]]
 
 
+def _preferred_round(rounds: list[dict], now: datetime) -> dict | None:
+    """Prefer a round whose published window contains now, then the next one."""
+    dated = []
+    for item in rounds:
+        starts = _iso(item.get("dateFrom"))
+        ends = _iso(item.get("dateTo")) or starts
+        if starts:
+            dated.append((item, starts, ends))
+    active = [entry for entry in dated if entry[1] <= now <= entry[2]]
+    if active:
+        return max(active, key=lambda entry: entry[1])[0]
+    upcoming = [entry for entry in dated if entry[1] > now]
+    if upcoming:
+        return min(upcoming, key=lambda entry: entry[1])[0]
+    previous = [entry for entry in dated if entry[2] < now]
+    return max(previous, key=lambda entry: entry[2])[0] if previous else (rounds[0] if rounds else None)
+
+
 def _safe_round(item: dict) -> dict:
     return {
         "id": int(item.get("id") or 0),
@@ -260,6 +278,7 @@ def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now:
     league = next((item for item in LEAGUES if item["key"] == league_key), None)
     if not league:
         raise ValueError("Unbekannte Liga.")
+    requested_round_id = round_id
     now = now or datetime.now(timezone.utc)
     session = requests.Session()
     session.headers["User-Agent"] = "ClubIQ-Darts/1.0 (+https://barverdarts.clubiq.party/)"
@@ -273,8 +292,7 @@ def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now:
         if round_id is not None and round_id not in allowed:
             raise ValueError("Dieser Spieltag gehört nicht zur gewählten Liga.")
         if round_id is None:
-            relevant = _relevant_rounds(rounds, now)
-            chosen = relevant[-1] if relevant else (rounds[0] if rounds else None)
+            chosen = _preferred_round(rounds, now)
             if not chosen:
                 raise DartsFeedUnavailable("3K meldet für diese Liga keine Spieltage.")
             round_id = int(chosen["id"])
@@ -315,6 +333,7 @@ def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now:
                         events.extend(_leg_events(report_payload, raw_match, barver_team))
         result = {
             "available": True,
+            "stale": False,
             "updatedAt": now.isoformat(),
             "league": {"key": league["key"], "name": league["name"], "short": league["short"], "event": league["event"], "phase": league["phase"]},
             "rounds": [_safe_round(item) for item in rounds],
@@ -331,4 +350,12 @@ def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now:
     except ValueError:
         raise
     except (requests.RequestException, KeyError, TypeError) as exc:
+        with _lock:
+            cached = [
+                value for (key, cached_round_id), value in _center_cache.items()
+                if key == league_key and (requested_round_id is None or requested_round_id == cached_round_id)
+            ]
+        if cached:
+            _, result = max(cached, key=lambda value: value[0])
+            return {**result, "stale": True}
         raise DartsFeedUnavailable("3K-Spieltag ist gerade nicht erreichbar.") from exc

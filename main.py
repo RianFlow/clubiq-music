@@ -260,12 +260,23 @@ def close_expired_cycles() -> None:
         print(f"[BACKGROUND ERROR] {exc}")
 
 
-_darts_push_primed = False
+_darts_push_status = {
+    "configured": bool(DARTS_VAPID_PUBLIC_KEY and DARTS_VAPID_PRIVATE_KEY and webpush),
+    "upstreamAvailable": None,
+    "lastCheck": None,
+    "lastSuccess": None,
+    "lastError": None,
+    "detected": 0,
+    "sent": 0,
+    "failed": 0,
+}
 
 
 def poll_darts_push_events() -> None:
-    global _darts_push_primed
+    checked_at = datetime.now(timezone.utc).isoformat()
+    _darts_push_status["lastCheck"] = checked_at
     if not DARTS_VAPID_PUBLIC_KEY or not DARTS_VAPID_PRIVATE_KEY or webpush is None:
+        _darts_push_status.update({"configured": False, "upstreamAvailable": None, "lastError": "Push ist nicht konfiguriert."})
         return
     try:
         detected = []
@@ -274,6 +285,8 @@ def poll_darts_push_events() -> None:
             detected.extend(barver_push_candidates(league, center))
         new_events = []
         with db_connect() as conn, conn.cursor() as cur:
+            cur.execute("SELECT EXISTS (SELECT 1 FROM darts_push_events LIMIT 1);")
+            has_event_history = bool(cur.fetchone()[0])
             for event in detected:
                 cur.execute(
                     """
@@ -284,15 +297,16 @@ def poll_darts_push_events() -> None:
                     """,
                     (event["event_id"], event["event_type"], event["team"], event["player"], event["match_id"]),
                 )
-                if cur.fetchone() and _darts_push_primed and event["deliver"]:
+                if cur.fetchone() and has_event_history and event["deliver"]:
                     new_events.append(event)
             cur.execute(
                 "SELECT endpoint, p256dh, auth, teams FROM darts_push_subscriptions WHERE enabled = TRUE;"
             )
             subscriptions = cur.fetchall()
             conn.commit()
-        _darts_push_primed = True
         expired = []
+        sent = 0
+        failed = 0
         for event in new_events:
             for endpoint, p256dh, auth, teams in subscriptions:
                 if event["team"] not in (teams or []):
@@ -305,7 +319,9 @@ def poll_darts_push_events() -> None:
                         vapid_claims={"sub": DARTS_VAPID_SUBJECT},
                         ttl=300,
                     )
+                    sent += 1
                 except WebPushException as exc:
+                    failed += 1
                     if getattr(getattr(exc, "response", None), "status_code", None) in (404, 410):
                         expired.append(endpoint)
                     else:
@@ -314,8 +330,19 @@ def poll_darts_push_events() -> None:
             with db_connect() as conn, conn.cursor() as cur:
                 cur.execute("DELETE FROM darts_push_subscriptions WHERE endpoint = ANY(%s);", (list(set(expired)),))
                 conn.commit()
+        _darts_push_status.update({
+            "configured": True,
+            "upstreamAvailable": True,
+            "lastSuccess": checked_at,
+            "lastError": None,
+            "detected": len(detected),
+            "sent": sent,
+            "failed": failed,
+        })
     except (DartsFeedUnavailable, ValueError, psycopg.Error) as exc:
-        print(f"[DARTS PUSH] {type(exc).__name__}: Push-Prüfung wird später wiederholt.")
+        cause = type(exc.__cause__).__name__ if exc.__cause__ else type(exc).__name__
+        _darts_push_status.update({"upstreamAvailable": False, "lastError": cause, "detected": 0, "sent": 0})
+        print(f"[DARTS PUSH] {type(exc).__name__} ({cause}): Push-Prüfung wird später wiederholt.")
 
 
 @asynccontextmanager
@@ -530,6 +557,18 @@ def darts_push_config():
         "available": bool(DARTS_VAPID_PUBLIC_KEY and DARTS_VAPID_PRIVATE_KEY and webpush),
         "publicKey": DARTS_VAPID_PUBLIC_KEY,
     }
+
+
+@app.get("/api/v1/darts/push/status")
+def darts_push_status():
+    status = dict(_darts_push_status)
+    try:
+        with db_connect() as conn, conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM darts_push_subscriptions WHERE enabled = TRUE;")
+            status["subscriptions"] = int(cur.fetchone()[0])
+    except psycopg.Error:
+        status["subscriptions"] = None
+    return status
 
 
 def require_push_intent(x_clubiq_push: str | None) -> None:
