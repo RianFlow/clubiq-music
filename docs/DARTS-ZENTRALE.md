@@ -42,6 +42,14 @@ Beispielkonfiguration:
 
 `displaySeconds` liegt technisch zwischen 6 und 60 Sekunden. `placements` kann `top`, `inline` oder beide Werte enthalten. Fehlen Start oder Ende, ist die entsprechende Seite des Zeitraums offen. Ungültige, abgelaufene oder noch nicht begonnene Einträge werden nicht angezeigt. Mehrere gültige Firmen wechseln automatisch; die beiden Positionen starten versetzt.
 
+## Push-Benachrichtigungen für 180er
+
+„Push aktivieren“ fordert erst nach dem bewussten Klick die Browser-Berechtigung an. Anschließend meldet das Gerät neu erkannte 180er der Barver-Teams mit Spielername. Ein erneuter Klick schaltet Push auf diesem Gerät wieder aus. ClubIQ speichert nur die technische Push-Adresse, deren Verschlüsselungsschlüssel und die Auswahl A–D – keine Browserchronik und keine Kontaktdaten.
+
+Der Server prüft 3K alle 45 Sekunden. Eine Ereignis-ID verhindert doppelte Meldungen auch nach einem Neustart. Abgelaufene Browser-Abonnements werden bei einer Antwort 404/410 automatisch entfernt. Die Browser-Pushadresse ist ein Geheimnis und wird weder protokolliert noch an andere Nutzer ausgegeben.
+
+Für die Ersteinrichtung einmal `scripts/generate-vapid.py /pfad/zur/.env` innerhalb des gebauten Web-Images ausführen und danach den Webdienst neu erstellen. Der private VAPID-Schlüssel bleibt ausschließlich in der lokalen `.env` und gehört in das verschlüsselte Notfall-Backup. Auf iPhone und iPad muss die Darts-Zentrale als Web-App zum Home-Bildschirm hinzugefügt werden, bevor Web Push angeboten wird.
+
 ## Bedienung
 
 Das Laufband „3K Aktuell“ wird alle 30 Sekunden aus den öffentlichen 3K-Spielplänen aktualisiert. Es zeigt laufende Zwischenstände zuerst, danach die nächsten Begegnungen und zuletzt abgeschlossene Ergebnisse. Bei einer Störung bleibt der letzte erfolgreiche Stand gekennzeichnet erhalten; personenbezogene Kontaktdaten aus 3K werden nicht übernommen.
@@ -60,7 +68,7 @@ Keine automatische Ermittlung des nächsten Spiels: Es gibt keine öffentliche E
 
 Über „Training“ wird ein separater Bereich geöffnet. Das verifizierte Beispiel ist Event 31849 („Training Doppel 10.09.“), Gruppe 403948 in Phase 53660. Teilnehmer, Bestleistungen und Platzierungen sind direkt wählbar; Spiele & Tabelle benötigen den Gruppenlink. Andere Trainings im 3K-Mandanten 5 können über einen validierten Portal-Link ausgewählt werden. Die Auswahl wird ausschließlich auf diesem Gerät unter `clubiq_darts_training` gespeichert. Keine Fremdverbindung vor dem Anzeigen/Übernehmen oder dem Wechsel einer Ansicht.
 
-Die offizielle 3K-Dokumentation bestätigt am 20.09.2026 ausdrücklich, dass keine öffentliche API angeboten wird. Eine eigene Darstellung mit automatisch erkannten 180-/Leg-Sieg-Ereignissen und eine automatische Auswahl der nächsten Begegnung sind deshalb nicht implementiert. Dafür ist eine abgestimmte Datenschnittstelle mit 3K erforderlich. Keine internen Endpunkte, kein Scraping und keine Umgehung der fremden Oberfläche.
+Training bleibt bewusst als offizielle 3K-Ansicht eingebettet. Die native ClubIQ-Sportansicht und die 180er-Meldungen verwenden ausschließlich die öffentlich erreichbaren Sportdaten der fest hinterlegten Barver-Ligen. ClubIQ greift weder auf Konten noch auf interne 3K-Funktionen zu und umgeht keine Anmeldung. Fällt die öffentliche Quelle aus oder ändert 3K deren Aufbau, bleibt die offizielle Ansicht die Ausweichmöglichkeit.
 
 ## Aktuelles von SV Barver
 

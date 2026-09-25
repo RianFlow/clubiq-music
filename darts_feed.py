@@ -136,6 +136,9 @@ def _performance_events(payload: list[dict], match: dict) -> list[dict]:
             "title": "180!",
             "text": f"{participant.get('displayName') or 'Spieler'} · {team.get('name') or 'Mannschaft'}" + (f" · {count}×" if count > 1 else ""),
             "matchId": int(match.get("id") or 0),
+            "player": str(participant.get("displayName") or "Spieler")[:100],
+            "team": str(team.get("name") or "Mannschaft")[:120],
+            "count": count,
         })
     return events
 
@@ -248,17 +251,18 @@ def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now:
             if item["kind"] == "final":
                 events.append({"type": "match", "title": "Mannschaftsspiel beendet", "text": item["text"], "matchId": item["id"]})
             match_id = int(raw_match.get("id") or 0)
-            if not match_id or raw_match.get("statusCd") != "FINISH":
+            if not match_id:
                 continue
             if raw_match.get("hasPerformances"):
                 perf = session.get(f"{API}/{league['event']}/performance/match/{match_id}?matchReport=1", timeout=(3, 8))
                 perf_payload = _json(perf) if perf.ok else None
                 if isinstance(perf_payload, list):
                     events.extend(_performance_events(perf_payload, raw_match))
-            report = session.get(f"{API}/{league['event']}/match/{match_id}/report", timeout=(3, 8))
-            report_payload = _json(report) if report.ok else None
-            if isinstance(report_payload, list):
-                events.extend(_game_events(report_payload, raw_match))
+            if raw_match.get("statusCd") == "FINISH":
+                report = session.get(f"{API}/{league['event']}/match/{match_id}/report", timeout=(3, 8))
+                report_payload = _json(report) if report.ok else None
+                if isinstance(report_payload, list):
+                    events.extend(_game_events(report_payload, raw_match))
         result = {
             "available": True,
             "updatedAt": now.isoformat(),
