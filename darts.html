@@ -8,20 +8,21 @@
   <meta name="description" content="SV Barver Darts A, B, C und D: Spielpläne, Spielberichte und Live-Ansichten gemeinsam verfolgen.">
   <link rel="icon" href="/pics/logo.png">
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
-  <link rel="stylesheet" href="/static/darts.css?v=20260921-7">
-  <script defer src="/static/darts.js?v=20260921-7"></script>
+  <link rel="stylesheet" href="/static/darts.css?v=20260925-1">
+  <script defer src="/static/darts.js?v=20260925-1"></script>
 </head>
 <body>
   <header class="darts-header">
     <a class="brand" href="https://musik.clubiq.party/" aria-label="Zur Musik-App"><img src="/pics/logo.png" alt=""><span>ClubIQ <b>Darts-Zentrale</b></span></a>
     <span class="club-logo header-club-logo" role="img" aria-label="SV Barver Darts"></span>
-    <nav aria-label="Anzeige"><button id="todayView" type="button">Heute</button><button id="leagueView" type="button">Liga</button><button id="gridView" type="button">Teams</button><button id="trainingView" type="button">Training</button><button id="themeToggle" type="button" aria-pressed="false" title="Farbschema wechseln">◐ Dunkel</button><button id="fullscreen" type="button">TV-Modus</button><a href="https://musik.clubiq.party/" target="_blank" rel="noopener">Zum Voting ↗</a></nav>
+    <nav aria-label="Anzeige"><button id="todayView" type="button">Heute</button><button id="leagueView" type="button">Liga</button><button id="gridView" type="button">Teams</button><button id="trainingView" type="button">Training</button><button id="themeToggle" class="theme-switch" type="button" role="switch" aria-checked="false" aria-label="Dunkelmodus"><span class="theme-option theme-light">Hell</span><span class="theme-track" aria-hidden="true"><span></span></span><span class="theme-option theme-dark">Dunkel</span></button><button id="fullscreen" type="button">TV-Modus</button><a href="https://musik.clubiq.party/" target="_blank" rel="noopener">Zum Voting ↗</a></nav>
   </header>
   <section class="score-ticker" aria-label="Aktuelle Spiele und Ergebnisse">
     <strong>3K AKTUELL</strong>
     <div class="ticker-window"><div id="tickerTrack" class="ticker-track" aria-live="polite"><span class="ticker-loading">Spielstände werden geladen …</span></div></div>
     <span id="tickerUpdated" class="ticker-updated"></span>
   </section>
+  <aside id="sponsorTop" class="sponsor-slot sponsor-slot-top" data-placement="top" aria-label="Werbepartner" hidden></aside>
   <main>
     <section class="intro">
       <div><p class="eyebrow">SV Barver Darts · Saison 2026 / 2027</p><h1>Barver Darts im Blick</h1><p>Mannschaften, Training und Turniere.</p></div>
@@ -37,6 +38,7 @@
       <div class="match-center-head"><div><p class="eyebrow">Matchcenter</p><h2 id="matchCenterHeading">Barver A–D</h2></div><span>Live · nächste Spiele · letzte Ergebnisse</span></div>
       <div id="matchCenterGrid" class="match-center-grid"><p class="match-center-loading">3K-Spielplan wird geladen …</p></div>
     </section>
+    <aside id="sponsorInline" class="sponsor-slot sponsor-slot-inline" data-placement="inline" aria-label="Werbepartner" hidden></aside>
     <details class="source-note"><summary>Hinweis zu den 3K-Ansichten</summary><p>Beim Anzeigen verbindet sich dein Browser mit 3K Darts. Spielstände werden dort bereitgestellt – keine eigene Ergebniserfassung. Live funktioniert nur bei einer aktiven Übertragung.</p></details>
     <p id="pageStatus" class="message" role="status" hidden></p>
     <section id="todayPanel" class="sports-panel" aria-labelledby="todayHeading" hidden>
