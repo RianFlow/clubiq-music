@@ -46,7 +46,7 @@ Beispielkonfiguration:
 
 „Push aktivieren“ fordert erst nach dem bewussten Klick die Browser-Berechtigung an. Anschließend meldet das Gerät neu erkannte 180er der Barver-Teams mit Spielername. Ein erneuter Klick schaltet Push auf diesem Gerät wieder aus. ClubIQ speichert nur die technische Push-Adresse, deren Verschlüsselungsschlüssel und die Auswahl A–D – keine Browserchronik und keine Kontaktdaten.
 
-Der Server prüft 3K alle 45 Sekunden. Eine Ereignis-ID verhindert doppelte Meldungen auch nach einem Neustart. Abgelaufene Browser-Abonnements werden bei einer Antwort 404/410 automatisch entfernt. Die Browser-Pushadresse ist ein Geheimnis und wird weder protokolliert noch an andere Nutzer ausgegeben.
+Der Server prüft 3K alle 45 Sekunden. Nur ein neu erkannter 180er aus einer von 3K als laufend gemeldeten Begegnung löst Push aus; ältere Spielberichte werden zwar als bekannt markiert, aber nicht nachträglich versendet. Eine Ereignis-ID verhindert doppelte Meldungen auch nach einem Neustart. Abgelaufene Browser-Abonnements werden bei einer Antwort 404/410 automatisch entfernt. Die Browser-Pushadresse ist ein Geheimnis und wird weder protokolliert noch an andere Nutzer ausgegeben.
 
 Für die Ersteinrichtung einmal `scripts/generate-vapid.py /pfad/zur/.env` innerhalb des gebauten Web-Images ausführen und danach den Webdienst neu erstellen. Der private VAPID-Schlüssel bleibt ausschließlich in der lokalen `.env` und gehört in das verschlüsselte Notfall-Backup. Auf iPhone und iPad muss die Darts-Zentrale als Web-App zum Home-Bildschirm hinzugefügt werden, bevor Web Push angeboten wird.
 

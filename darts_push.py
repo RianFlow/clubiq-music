@@ -65,6 +65,20 @@ def barver_180_event(league: str, event: dict) -> dict | None:
     }
 
 
+def barver_180_candidates(league: str, center: dict) -> list[dict]:
+    live_match_ids = {
+        match.get("id")
+        for match in center.get("barverMatches") or []
+        if match.get("kind") == "live" and isinstance(match.get("id"), int)
+    }
+    candidates = []
+    for raw_event in center.get("events") or []:
+        event = barver_180_event(league, raw_event)
+        if event:
+            candidates.append({**event, "live": event["match_id"] in live_match_ids})
+    return candidates
+
+
 def push_payload(event: dict) -> str:
     return json.dumps(
         {key: event[key] for key in ("title", "body", "url", "tag")},

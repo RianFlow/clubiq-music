@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 
 from db_config import connection_kwargs
 from darts_feed import DartsFeedUnavailable, get_darts_center, get_darts_feed
-from darts_push import barver_180_event, push_payload, valid_push_endpoint, valid_push_key
+from darts_push import barver_180_candidates, push_payload, valid_push_endpoint, valid_push_key
 from radio_directory import DirectoryUnavailable, get_station, search_stations
 from radio_logos import CACHE_SECONDS, FAILURE_SECONDS, cached_logo
 from music_library import duration_ms, register_library
@@ -267,10 +267,7 @@ def poll_darts_push_events() -> None:
         detected = []
         for league in ("kl04", "kk11"):
             center = get_darts_center(league)
-            for raw_event in center.get("events") or []:
-                event = barver_180_event(league, raw_event)
-                if event:
-                    detected.append(event)
+            detected.extend(barver_180_candidates(league, center))
         new_events = []
         with db_connect() as conn, conn.cursor() as cur:
             for event in detected:
@@ -283,7 +280,7 @@ def poll_darts_push_events() -> None:
                     """,
                     (event["event_id"], event["team"], event["player"], event["match_id"]),
                 )
-                if cur.fetchone():
+                if cur.fetchone() and event["live"]:
                     new_events.append(event)
             cur.execute(
                 "SELECT endpoint, p256dh, auth, teams FROM darts_push_subscriptions WHERE enabled = TRUE;"
