@@ -133,7 +133,7 @@ function initDarts() {
         button.dataset.active=subscription?'true':'false';
         button.setAttribute('aria-pressed',String(Boolean(subscription)));
         button.textContent=subscription?'🔔 Push aktiv':'🔔 Push aktivieren';
-        button.title=subscription?'Klicken, um Push-Benachrichtigungen auf diesem Gerät auszuschalten':'180er als Push-Benachrichtigung erhalten';
+        button.title=subscription?'Klicken, um Push-Benachrichtigungen auf diesem Gerät auszuschalten':'180er, High Finishes, Legs und Ergebnisse erhalten';
       };
       await update();
       if (Notification.permission==='denied') { button.textContent='Push blockiert'; button.disabled=true; return; }
@@ -154,7 +154,7 @@ function initDarts() {
             const subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:pushApplicationKey(config.publicKey)});
             try { await pushRequest('/api/v1/darts/push/subscribe',{...subscription.toJSON(),teams:['A','B','C','D']}); }
             catch (error) { await subscription.unsubscribe(); throw error; }
-            message('Push ist aktiv. Dieses Gerät meldet neue 180er der Barver-Teams.');
+            message('Push ist aktiv: 180er, High Finishes, gewonnene Legs sowie Einzel- und Mannschaftsergebnisse.');
           }
           await update();
         } catch (error) { message(error.message || 'Push-Benachrichtigungen konnten nicht geändert werden.'); }
@@ -337,7 +337,8 @@ function initDarts() {
     const eventList=document.createDocumentFragment();
     for (const item of data.events || []) {
       const event=document.createElement('div'); event.className=`darts-event ${item.type}`;
-      const icon=document.createElement('b'); icon.textContent=item.type==='180'?'180':item.type==='match'?'✓':'→';
+      const icons={180:'180',high_finish:'HF',match:'🏁',game:'✓'};
+      const icon=document.createElement('b'); icon.textContent=icons[item.type] || '→';
       const copy=document.createElement('div'); const title=document.createElement('strong'); title.textContent=item.title; const text=document.createElement('span'); text.textContent=item.text;
       copy.append(title,text); event.append(icon,copy); eventList.append(event);
     }

@@ -126,24 +126,32 @@ def _standings(matches: list[dict], team_ids: set[int]) -> list[dict]:
 def _performance_events(payload: list[dict], match: dict) -> list[dict]:
     events = []
     for performance in payload:
-        if performance.get("performanceTypeCd") != "HS" or performance.get("value") != 180:
+        kind = performance.get("performanceTypeCd")
+        value = performance.get("value")
+        if kind == "HS" and value == 180:
+            event_type, title = "180", "180!"
+        elif kind == "HF" and isinstance(value, int) and 2 <= value <= 170:
+            event_type, title = "high_finish", f"High Finish {value}"
+        else:
             continue
         participant = performance.get("participant") or {}
         team = performance.get("team") or {}
         count = performance.get("count") if isinstance(performance.get("count"), int) else 1
         events.append({
-            "type": "180",
-            "title": "180!",
+            "type": event_type,
+            "title": title,
             "text": f"{participant.get('displayName') or 'Spieler'} · {team.get('name') or 'Mannschaft'}" + (f" · {count}×" if count > 1 else ""),
             "matchId": int(match.get("id") or 0),
+            "performanceId": int(performance.get("id") or 0),
             "player": str(participant.get("displayName") or "Spieler")[:100],
             "team": str(team.get("name") or "Mannschaft")[:120],
             "count": count,
+            "value": value,
         })
     return events
 
 
-def _game_events(payload: list[dict], match: dict) -> list[dict]:
+def _game_events(payload: list[dict], match: dict, team_name: str = "", barver_side: str = "") -> list[dict]:
     finished = []
     for game in payload:
         home = game.get("participantHome") or {}
@@ -159,9 +167,47 @@ def _game_events(payload: list[dict], match: dict) -> list[dict]:
             "title": f"Spiel {game.get('gameNr') or game.get('gameNrRound') or ''} beendet".strip(),
             "text": f"{winner.get('displayName') or 'Sieger'} gewinnt {winner_legs}:{loser_legs} gegen {loser.get('displayName') or 'Gegner'}",
             "matchId": int(match.get("id") or 0),
+            "gameId": int(game.get("id") or 0),
             "order": int(game.get("gameNr") or game.get("gameNrRound") or 0),
+            "team": team_name,
+            "player": str(winner.get("displayName") or "Sieger")[:100],
+            "homeLegs": home_legs,
+            "awayLegs": away_legs,
+            "barverWon": (home_legs > away_legs) == (barver_side == "home") if barver_side in {"home", "away"} else None,
         })
     return sorted(finished, key=lambda item: item["order"], reverse=True)[:2]
+
+
+def _leg_events(payload: list[dict], match: dict, team_name: str = "") -> list[dict]:
+    events = []
+    for game in payload:
+        if game.get("statusCd") == "FINISH":
+            continue
+        home = game.get("participantHome") or {}
+        away = game.get("participantGuest") or {}
+        home_name = str(home.get("displayName") or "").strip()
+        away_name = str(away.get("displayName") or "").strip()
+        home_legs = game.get("liveLegsHome")
+        away_legs = game.get("liveLegsAway")
+        game_id = int(game.get("id") or 0)
+        if not game_id or not home_name or not away_name or not isinstance(home_legs, int) or not isinstance(away_legs, int):
+            continue
+        for side, winner, count in (("home", home_name, home_legs), ("away", away_name, away_legs)):
+            if count <= 0:
+                continue
+            events.append({
+                "type": "leg",
+                "title": f"Leg für {winner}",
+                "text": f"{home_name} {home_legs}:{away_legs} {away_name}",
+                "matchId": int(match.get("id") or 0),
+                "gameId": game_id,
+                "order": int(game.get("gameNr") or game.get("gameNrRound") or 0),
+                "team": team_name,
+                "player": winner[:100],
+                "winnerSide": side,
+                "legCount": count,
+            })
+    return events
 
 
 def _load(now: datetime) -> dict:
@@ -248,8 +294,10 @@ def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now:
             if item["homeTeamId"] not in league["teams"] and item["awayTeamId"] not in league["teams"]:
                 continue
             barver_matches.append(item)
+            barver_side = "home" if item["homeTeamId"] in league["teams"] else "away"
+            barver_team = item["home"] if barver_side == "home" else item["away"]
             if item["kind"] == "final":
-                events.append({"type": "match", "title": "Mannschaftsspiel beendet", "text": item["text"], "matchId": item["id"]})
+                events.append({"type": "match", "title": "Mannschaftsspiel beendet", "text": item["text"], "matchId": item["id"], "team": barver_team, "player": barver_team, "score": item["score"], "updatedAt": item["updatedAt"]})
             match_id = int(raw_match.get("id") or 0)
             if not match_id:
                 continue
@@ -258,11 +306,13 @@ def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now:
                 perf_payload = _json(perf) if perf.ok else None
                 if isinstance(perf_payload, list):
                     events.extend(_performance_events(perf_payload, raw_match))
-            if raw_match.get("statusCd") == "FINISH":
+            if item["kind"] in {"live", "final"}:
                 report = session.get(f"{API}/{league['event']}/match/{match_id}/report", timeout=(3, 8))
                 report_payload = _json(report) if report.ok else None
                 if isinstance(report_payload, list):
-                    events.extend(_game_events(report_payload, raw_match))
+                    events.extend(_game_events(report_payload, raw_match, barver_team, barver_side))
+                    if item["kind"] == "live":
+                        events.extend(_leg_events(report_payload, raw_match, barver_team))
         result = {
             "available": True,
             "updatedAt": now.isoformat(),
@@ -272,7 +322,8 @@ def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now:
             "matches": matches,
             "barverMatches": barver_matches,
             "standings": _standings(all_matches, league["teams"]),
-            "events": events[:12],
+            "events": [event for event in events if event["type"] != "leg"][:12],
+            "pushEvents": events,
         }
         with _lock:
             _center_cache[cache_key] = (now.timestamp(), result)
