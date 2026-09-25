@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 
 from db_config import connection_kwargs
 from darts_feed import DartsFeedUnavailable, get_darts_center, get_darts_feed
-from darts_push import barver_180_candidates, push_payload, valid_push_endpoint, valid_push_key
+from darts_push import barver_push_candidates, push_payload, valid_push_endpoint, valid_push_key
 from radio_directory import DirectoryUnavailable, get_station, search_stations
 from radio_logos import CACHE_SECONDS, FAILURE_SECONDS, cached_logo
 from music_library import duration_ms, register_library
@@ -260,33 +260,38 @@ def close_expired_cycles() -> None:
         print(f"[BACKGROUND ERROR] {exc}")
 
 
+_darts_push_primed = False
+
+
 def poll_darts_push_events() -> None:
+    global _darts_push_primed
     if not DARTS_VAPID_PUBLIC_KEY or not DARTS_VAPID_PRIVATE_KEY or webpush is None:
         return
     try:
         detected = []
         for league in ("kl04", "kk11"):
             center = get_darts_center(league)
-            detected.extend(barver_180_candidates(league, center))
+            detected.extend(barver_push_candidates(league, center))
         new_events = []
         with db_connect() as conn, conn.cursor() as cur:
             for event in detected:
                 cur.execute(
                     """
-                    INSERT INTO darts_push_events (event_id, team, player, match_id)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO darts_push_events (event_id, event_type, team, player, match_id)
+                    VALUES (%s, %s, %s, %s, %s)
                     ON CONFLICT (event_id) DO NOTHING
                     RETURNING event_id;
                     """,
-                    (event["event_id"], event["team"], event["player"], event["match_id"]),
+                    (event["event_id"], event["event_type"], event["team"], event["player"], event["match_id"]),
                 )
-                if cur.fetchone() and event["live"]:
+                if cur.fetchone() and _darts_push_primed and event["deliver"]:
                     new_events.append(event)
             cur.execute(
                 "SELECT endpoint, p256dh, auth, teams FROM darts_push_subscriptions WHERE enabled = TRUE;"
             )
             subscriptions = cur.fetchall()
             conn.commit()
+        _darts_push_primed = True
         expired = []
         for event in new_events:
             for endpoint, p256dh, auth, teams in subscriptions:
@@ -303,6 +308,8 @@ def poll_darts_push_events() -> None:
                 except WebPushException as exc:
                     if getattr(getattr(exc, "response", None), "status_code", None) in (404, 410):
                         expired.append(endpoint)
+                    else:
+                        print("[DARTS PUSH] Eine Browser-Meldung konnte nicht zugestellt werden.")
         if expired:
             with db_connect() as conn, conn.cursor() as cur:
                 cur.execute("DELETE FROM darts_push_subscriptions WHERE endpoint = ANY(%s);", (list(set(expired)),))

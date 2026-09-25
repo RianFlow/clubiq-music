@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 
-from darts_feed import _game_events, _performance_events, _relevant_rounds, _standings, _ticker_item
+from darts_feed import _game_events, _leg_events, _performance_events, _relevant_rounds, _standings, _ticker_item
 
 
 class DartsFeedTests(unittest.TestCase):
@@ -62,6 +62,19 @@ class DartsFeedTests(unittest.TestCase):
         self.assertEqual(_performance_events(performances, match)[0]["title"], "180!")
         games = [{"gameNrRound": 2, "statusCd": "FINISH", "legsHome": 3, "legsAway": 1, "participantHome": {"displayName": "Jannik"}, "participantGuest": {"displayName": "Max"}}]
         self.assertEqual(_game_events(games, match)[0]["text"], "Jannik gewinnt 3:1 gegen Max")
+
+    def test_high_finish_and_live_leg_are_normalized(self):
+        match = {"id": 99}
+        performances = [{"id": 4, "performanceTypeCd": "HF", "value": 111, "count": 1, "participant": {"displayName": "Jannik"}, "team": {"name": "SV Barver Darts A"}}]
+        high_finish = _performance_events(performances, match)[0]
+        self.assertEqual((high_finish["type"], high_finish["value"]), ("high_finish", 111))
+        games = [{
+            "id": 7, "gameNr": 2, "statusCd": "ACTIVE", "liveLegsHome": 2, "liveLegsAway": 1,
+            "participantHome": {"displayName": "Jannik"}, "participantGuest": {"displayName": "Max"},
+        }]
+        legs = _leg_events(games, match, "SV Barver Darts A")
+        self.assertEqual([(event["winnerSide"], event["legCount"]) for event in legs], [("home", 2), ("away", 1)])
+        self.assertEqual(legs[0]["text"], "Jannik 2:1 Max")
 
 
 if __name__ == "__main__":

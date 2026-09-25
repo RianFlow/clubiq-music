@@ -191,11 +191,13 @@ CREATE TABLE IF NOT EXISTS darts_push_subscriptions (
 );
 CREATE TABLE IF NOT EXISTS darts_push_events (
     event_id CHAR(64) PRIMARY KEY,
+    event_type VARCHAR(20) NOT NULL DEFAULT '180',
     team CHAR(1) NOT NULL,
     player VARCHAR(100) NOT NULL,
     match_id BIGINT NOT NULL,
     first_seen_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE darts_push_events ADD COLUMN IF NOT EXISTS event_type VARCHAR(20) NOT NULL DEFAULT '180';
 CREATE INDEX IF NOT EXISTS idx_darts_push_subscriptions_enabled
 ON darts_push_subscriptions(enabled);
 """
