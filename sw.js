@@ -1,9 +1,9 @@
 "use strict";
 
-const CACHE = "clubiq-music-shell-20260925-1";
+const CACHE = "clubiq-music-shell-20260925-2";
 const SHELL = [
   "/", "/remote", "/party", "/darts", "/manifest.webmanifest",
-  "/static/darts.css?v=20260925-1", "/static/darts.js?v=20260925-1", "/static/darts-sponsors.json", "/pics/sv-barver-darts-tight.png",
+  "/static/darts.css?v=20260925-2", "/static/darts.js?v=20260925-2", "/static/darts-sponsors.json", "/pics/sv-barver-darts-tight.png",
   "/static/app.css?v=20260915-1", "/static/app.js?v=20260919-1",
   "/static/song-info.js?v=20260917-1", "/static/comfort.js?v=20260919-1", "/static/comfort.css?v=20260917-1",
   "/static/reliability.js?v=20260919-1",
@@ -36,4 +36,26 @@ self.addEventListener("fetch", event => {
     caches.open(CACHE).then(cache => cache.put(request, copy));
     return response;
   }).catch(() => caches.match(request).then(cached => cached || caches.match("/"))));
+});
+
+self.addEventListener("push", event => {
+  let payload = {};
+  try { payload = event.data ? event.data.json() : {}; } catch (_) { payload = {}; }
+  event.waitUntil(self.registration.showNotification(payload.title || "ClubIQ Darts", {
+    body: payload.body || "Neue Meldung aus dem Darts-Matchcenter.",
+    icon: "/pics/pwa-512.png",
+    badge: "/pics/logo.png",
+    tag: payload.tag || "clubiq-darts",
+    renotify: true,
+    data: {url: payload.url || "https://barverdarts.clubiq.party/"},
+  }));
+});
+
+self.addEventListener("notificationclick", event => {
+  event.notification.close();
+  const target = event.notification.data?.url || "https://barverdarts.clubiq.party/";
+  event.waitUntil(clients.matchAll({type:"window",includeUncontrolled:true}).then(windows => {
+    const existing = windows.find(client => client.url.startsWith("https://barverdarts.clubiq.party/"));
+    return existing ? existing.focus() : clients.openWindow(target);
+  }));
 });

@@ -9,6 +9,11 @@ const DARTS_STORAGE = 'clubiq_darts_matches_2026_27';
 function dartsTheme(value, prefersDark=false) {
   return value === 'dark' || value === 'light' ? value : prefersDark ? 'dark' : 'light';
 }
+function pushApplicationKey(value) {
+  const padded = `${value}${'='.repeat((4-value.length%4)%4)}`.replace(/-/g,'+').replace(/_/g,'/');
+  const raw = atob(padded);
+  return Uint8Array.from(raw, character=>character.charCodeAt(0));
+}
 function dartsSponsors(config, now=Date.now()) {
   const displaySeconds = Number.isFinite(config?.displaySeconds) ? Math.min(60,Math.max(6,Math.round(config.displaySeconds))) : 12;
   const sponsors = Array.isArray(config?.sponsors) ? config.sponsors.flatMap((item,index)=>{
@@ -109,6 +114,55 @@ function initDarts() {
     .then(response=>response.ok?response.json():Promise.reject(new Error('sponsors unavailable')))
     .then(config=>startSponsorRotation(dartsSponsors(config)))
     .catch(()=>document.querySelectorAll('.sponsor-slot').forEach(slot=>{ slot.hidden=true; slot.replaceChildren(); }));
+  async function pushRequest(path, payload) {
+    const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-ClubIQ-Push':'1'},body:JSON.stringify(payload)});
+    if (!response.ok) { let detail='Push-Aktion fehlgeschlagen.'; try { detail=(await response.json()).detail || detail; } catch (_) {} throw new Error(detail); }
+    return response.json();
+  }
+  async function initPushNotifications() {
+    const button=q('#pushToggle');
+    if (!window.isSecureContext || !('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+      button.textContent='Push nicht verfügbar'; button.disabled=true; return;
+    }
+    let registration;
+    try {
+      registration=await navigator.serviceWorker.register('/sw.js');
+      await navigator.serviceWorker.ready;
+      const update=async()=>{
+        const subscription=await registration.pushManager.getSubscription();
+        button.dataset.active=subscription?'true':'false';
+        button.setAttribute('aria-pressed',String(Boolean(subscription)));
+        button.textContent=subscription?'🔔 Push aktiv':'🔔 Push aktivieren';
+        button.title=subscription?'Klicken, um Push-Benachrichtigungen auf diesem Gerät auszuschalten':'180er als Push-Benachrichtigung erhalten';
+      };
+      await update();
+      if (Notification.permission==='denied') { button.textContent='Push blockiert'; button.disabled=true; return; }
+      button.addEventListener('click',async()=>{
+        button.disabled=true;
+        try {
+          const current=await registration.pushManager.getSubscription();
+          if (current) {
+            await pushRequest('/api/v1/darts/push/unsubscribe',{endpoint:current.endpoint});
+            await current.unsubscribe();
+            message('Push-Benachrichtigungen sind auf diesem Gerät ausgeschaltet.');
+          } else {
+            const permission=await Notification.requestPermission();
+            if (permission!=='granted') throw new Error('Benachrichtigungen wurden nicht erlaubt. Du kannst sie in den Browser-Einstellungen wieder freigeben.');
+            const configResponse=await fetch('/api/v1/darts/push/config',{headers:{Accept:'application/json'},cache:'no-store'});
+            const config=await configResponse.json();
+            if (!configResponse.ok || !config.available || !config.publicKey) throw new Error('Push-Benachrichtigungen sind auf dem Server noch nicht eingerichtet.');
+            const subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:pushApplicationKey(config.publicKey)});
+            try { await pushRequest('/api/v1/darts/push/subscribe',{...subscription.toJSON(),teams:['A','B','C','D']}); }
+            catch (error) { await subscription.unsubscribe(); throw error; }
+            message('Push ist aktiv. Dieses Gerät meldet neue 180er der Barver-Teams.');
+          }
+          await update();
+        } catch (error) { message(error.message || 'Push-Benachrichtigungen konnten nicht geändert werden.'); }
+        finally { button.disabled=Notification.permission==='denied'; }
+      });
+    } catch (_) { button.textContent='Push nicht verfügbar'; button.disabled=true; }
+  }
+  initPushNotifications();
   const favoriteKey = 'clubiq_darts_favorite';
   let tickerDelay = 30000, tickerData = {items:[]}, favorite = 'all';
   try { favorite = ['A','B','C','D'].includes(localStorage.getItem(favoriteKey)) ? localStorage.getItem(favoriteKey) : 'all'; } catch (_) { /* Optional preference. */ }

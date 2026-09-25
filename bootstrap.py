@@ -178,6 +178,26 @@ CREATE TABLE IF NOT EXISTS music_playback_history (
     track_json JSONB NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_music_history_time ON music_playback_history(started_at DESC);
+CREATE TABLE IF NOT EXISTS darts_push_subscriptions (
+    id BIGSERIAL PRIMARY KEY,
+    endpoint TEXT UNIQUE NOT NULL,
+    endpoint_hash CHAR(64) UNIQUE NOT NULL,
+    p256dh VARCHAR(256) NOT NULL,
+    auth VARCHAR(256) NOT NULL,
+    teams JSONB NOT NULL DEFAULT '["A", "B", "C", "D"]'::jsonb,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS darts_push_events (
+    event_id CHAR(64) PRIMARY KEY,
+    team CHAR(1) NOT NULL,
+    player VARCHAR(100) NOT NULL,
+    match_id BIGINT NOT NULL,
+    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_darts_push_subscriptions_enabled
+ON darts_push_subscriptions(enabled);
 """
 
 DEFAULTS_SQL = """

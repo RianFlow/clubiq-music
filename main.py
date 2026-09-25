@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 
 from db_config import connection_kwargs
 from darts_feed import DartsFeedUnavailable, get_darts_center, get_darts_feed
+from darts_push import barver_180_event, push_payload, valid_push_endpoint, valid_push_key
 from radio_directory import DirectoryUnavailable, get_station, search_stations
 from radio_logos import CACHE_SECONDS, FAILURE_SECONDS, cached_logo
 from music_library import duration_ms, register_library
@@ -45,6 +46,15 @@ PIN_ITERATIONS = 210_000
 YOUTUBE_VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{6,20}$")
 SOUNDBOARD_MEDIA_TYPES = {"audio/mpeg", "audio/ogg", "audio/wav", "audio/x-wav", "audio/webm", "audio/mp4"}
 MAX_SOUNDBOARD_BYTES = 3 * 1024 * 1024
+DARTS_VAPID_PUBLIC_KEY = os.getenv("DARTS_VAPID_PUBLIC_KEY", "").strip()
+DARTS_VAPID_PRIVATE_KEY = os.getenv("DARTS_VAPID_PRIVATE_KEY", "").strip()
+DARTS_VAPID_SUBJECT = os.getenv("DARTS_VAPID_SUBJECT", "https://barverdarts.clubiq.party").strip()
+
+try:
+    from pywebpush import WebPushException, webpush
+except ImportError:  # Local development without optional push dependency.
+    WebPushException = Exception
+    webpush = None
 
 
 class UnixHTTPConnection(http.client.HTTPConnection):
@@ -250,11 +260,66 @@ def close_expired_cycles() -> None:
         print(f"[BACKGROUND ERROR] {exc}")
 
 
+def poll_darts_push_events() -> None:
+    if not DARTS_VAPID_PUBLIC_KEY or not DARTS_VAPID_PRIVATE_KEY or webpush is None:
+        return
+    try:
+        detected = []
+        for league in ("kl04", "kk11"):
+            center = get_darts_center(league)
+            for raw_event in center.get("events") or []:
+                event = barver_180_event(league, raw_event)
+                if event:
+                    detected.append(event)
+        new_events = []
+        with db_connect() as conn, conn.cursor() as cur:
+            for event in detected:
+                cur.execute(
+                    """
+                    INSERT INTO darts_push_events (event_id, team, player, match_id)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (event_id) DO NOTHING
+                    RETURNING event_id;
+                    """,
+                    (event["event_id"], event["team"], event["player"], event["match_id"]),
+                )
+                if cur.fetchone():
+                    new_events.append(event)
+            cur.execute(
+                "SELECT endpoint, p256dh, auth, teams FROM darts_push_subscriptions WHERE enabled = TRUE;"
+            )
+            subscriptions = cur.fetchall()
+            conn.commit()
+        expired = []
+        for event in new_events:
+            for endpoint, p256dh, auth, teams in subscriptions:
+                if event["team"] not in (teams or []):
+                    continue
+                try:
+                    webpush(
+                        subscription_info={"endpoint": endpoint, "keys": {"p256dh": p256dh, "auth": auth}},
+                        data=push_payload(event),
+                        vapid_private_key=DARTS_VAPID_PRIVATE_KEY,
+                        vapid_claims={"sub": DARTS_VAPID_SUBJECT},
+                        ttl=300,
+                    )
+                except WebPushException as exc:
+                    if getattr(getattr(exc, "response", None), "status_code", None) in (404, 410):
+                        expired.append(endpoint)
+        if expired:
+            with db_connect() as conn, conn.cursor() as cur:
+                cur.execute("DELETE FROM darts_push_subscriptions WHERE endpoint = ANY(%s);", (list(set(expired)),))
+                conn.commit()
+    except (DartsFeedUnavailable, ValueError, psycopg.Error) as exc:
+        print(f"[DARTS PUSH] {type(exc).__name__}: Push-Prüfung wird später wiederholt.")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     scheduler = BackgroundScheduler()
     scheduler.add_job(close_expired_cycles, "interval", minutes=1)
     scheduler.add_job(collect_playback_history, "interval", seconds=30, max_instances=1, next_run_time=datetime.now(timezone.utc))
+    scheduler.add_job(poll_darts_push_events, "interval", seconds=45, max_instances=1, next_run_time=datetime.now(timezone.utc))
     scheduler.start()
     yield
     scheduler.shutdown()
@@ -307,6 +372,22 @@ class MemberAdminUpdate(BaseModel):
     pin: str | None = Field(default=None, pattern=r"^\d{4,8}$")
     active: bool | None = None
     can_control_player: bool | None = None
+
+
+class DartsPushKeys(BaseModel):
+    p256dh: str = Field(min_length=16, max_length=256)
+    auth: str = Field(min_length=16, max_length=256)
+
+
+class DartsPushSubscribe(BaseModel):
+    endpoint: str = Field(min_length=20, max_length=2048)
+    expirationTime: int | None = None
+    keys: DartsPushKeys
+    teams: list[str] = Field(default_factory=lambda: ["A", "B", "C", "D"], min_length=1, max_length=4)
+
+
+class DartsPushUnsubscribe(BaseModel):
+    endpoint: str = Field(min_length=20, max_length=2048)
 
 
 class SuggestionCreate(BaseModel):
@@ -437,6 +518,66 @@ def darts_center(league: str = "kl04", round_id: int | None = None):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except DartsFeedUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/v1/darts/push/config")
+def darts_push_config():
+    return {
+        "available": bool(DARTS_VAPID_PUBLIC_KEY and DARTS_VAPID_PRIVATE_KEY and webpush),
+        "publicKey": DARTS_VAPID_PUBLIC_KEY,
+    }
+
+
+def require_push_intent(x_clubiq_push: str | None) -> None:
+    if x_clubiq_push != "1":
+        raise HTTPException(status_code=403, detail="Push-Aktion nicht bestätigt.")
+
+
+@app.post("/api/v1/darts/push/subscribe", status_code=201)
+def darts_push_subscribe(payload: DartsPushSubscribe, x_clubiq_push: str | None = Header(default=None)):
+    require_push_intent(x_clubiq_push)
+    if not DARTS_VAPID_PUBLIC_KEY or not DARTS_VAPID_PRIVATE_KEY or webpush is None:
+        raise HTTPException(status_code=503, detail="Push-Benachrichtigungen sind noch nicht eingerichtet.")
+    try:
+        endpoint = valid_push_endpoint(payload.endpoint)
+        p256dh = valid_push_key(payload.keys.p256dh)
+        auth = valid_push_key(payload.keys.auth)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    teams = sorted(set(payload.teams))
+    if not teams or any(team not in {"A", "B", "C", "D"} for team in teams):
+        raise HTTPException(status_code=422, detail="Ungültige Mannschaftsauswahl.")
+    endpoint_hash = hashlib.sha256(endpoint.encode("utf-8")).hexdigest()
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO darts_push_subscriptions (endpoint, endpoint_hash, p256dh, auth, teams, enabled)
+            VALUES (%s, %s, %s, %s, %s::jsonb, TRUE)
+            ON CONFLICT (endpoint) DO UPDATE SET
+              endpoint_hash = EXCLUDED.endpoint_hash,
+              p256dh = EXCLUDED.p256dh,
+              auth = EXCLUDED.auth,
+              teams = EXCLUDED.teams,
+              enabled = TRUE,
+              updated_at = CURRENT_TIMESTAMP;
+            """,
+            (endpoint, endpoint_hash, p256dh, auth, json.dumps(teams)),
+        )
+        conn.commit()
+    return {"ok": True, "teams": teams}
+
+
+@app.post("/api/v1/darts/push/unsubscribe")
+def darts_push_unsubscribe(payload: DartsPushUnsubscribe, x_clubiq_push: str | None = Header(default=None)):
+    require_push_intent(x_clubiq_push)
+    try:
+        endpoint = valid_push_endpoint(payload.endpoint)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM darts_push_subscriptions WHERE endpoint = %s;", (endpoint,))
+        conn.commit()
+    return {"ok": True}
 
 
 @app.get("/manifest.webmanifest")

@@ -3,7 +3,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname,'..');
-const files = {'/darts':'darts.html','/static/darts.js':'static/darts.js','/static/darts.css':'static/darts.css','/static/darts-sponsors.json':'static/darts-sponsors.json','/pics/logo.png':'pics/logo.png','/pics/sv-barver-darts-tight.png':'pics/sv-barver-darts-tight.png'};
+const files = {'/darts':'darts.html','/sw.js':'sw.js','/static/darts.js':'static/darts.js','/static/darts.css':'static/darts.css','/static/darts-sponsors.json':'static/darts-sponsors.json','/pics/logo.png':'pics/logo.png','/pics/sv-barver-darts-tight.png':'pics/sv-barver-darts-tight.png'};
 const mime = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.png':'image/png'};
 const server = http.createServer((req,res)=>{
   const file = files[new URL(req.url,'http://localhost').pathname];
