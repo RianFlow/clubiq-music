@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 
-from darts_feed import _game_events, _leg_events, _performance_events, _relevant_rounds, _standings, _ticker_item
+from darts_feed import _game_events, _leg_events, _performance_events, _preferred_round, _relevant_rounds, _standings, _ticker_item
 
 
 class DartsFeedTests(unittest.TestCase):
@@ -13,6 +13,22 @@ class DartsFeedTests(unittest.TestCase):
         ]
         selected = _relevant_rounds(rounds, datetime(2026, 9, 21, tzinfo=timezone.utc))
         self.assertEqual([item["id"] for item in selected], [1, 2])
+
+    def test_prefers_active_round_over_next_round(self):
+        rounds = [
+            {"id": 3, "dateFrom": "2026-09-24T22:00:00+00:00", "dateTo": "2026-09-26T22:00:00+00:00"},
+            {"id": 4, "dateFrom": "2026-10-08T22:00:00+00:00", "dateTo": "2026-10-10T22:00:00+00:00"},
+        ]
+        selected = _preferred_round(rounds, datetime(2026, 9, 25, 18, 0, tzinfo=timezone.utc))
+        self.assertEqual(selected["id"], 3)
+
+    def test_prefers_next_round_outside_active_window(self):
+        rounds = [
+            {"id": 3, "dateFrom": "2026-09-24T22:00:00+00:00", "dateTo": "2026-09-26T22:00:00+00:00"},
+            {"id": 4, "dateFrom": "2026-10-08T22:00:00+00:00", "dateTo": "2026-10-10T22:00:00+00:00"},
+        ]
+        selected = _preferred_round(rounds, datetime(2026, 9, 30, 18, 0, tzinfo=timezone.utc))
+        self.assertEqual(selected["id"], 4)
 
     def test_finished_match_names_winner_and_whitelists_fields(self):
         match = {

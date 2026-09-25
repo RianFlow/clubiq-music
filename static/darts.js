@@ -147,6 +147,20 @@ function initDarts() {
   }
   async function initPushNotifications() {
     const button=q('#pushToggle');
+    const health=q('#pushHealth');
+    const updateHealth=async()=>{
+      if (button.dataset.active !== 'true') { health.hidden=true; return; }
+      try {
+        const response=await fetch('/api/v1/darts/push/status',{headers:{Accept:'application/json'},cache:'no-store'});
+        const status=await response.json();
+        if (!response.ok) throw new Error('status unavailable');
+        health.hidden=false;
+        if (status.upstreamAvailable === true) { health.dataset.state='ok'; health.textContent='Push bereit'; }
+        else if (status.upstreamAvailable === false) { health.dataset.state='warn'; health.textContent='3K-Verbindung gestört'; }
+        else { health.dataset.state='wait'; health.textContent='Push startet'; }
+        health.title=status.lastSuccess ? `Letzte erfolgreiche Prüfung: ${new Date(status.lastSuccess).toLocaleString('de-DE')}` : 'Der erste Datenabgleich läuft.';
+      } catch (_) { health.hidden=false; health.dataset.state='warn'; health.textContent='Push-Status offen'; }
+    };
     if (!window.isSecureContext || !('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
       button.textContent='Push nicht verfügbar'; button.disabled=true; return;
     }
@@ -162,6 +176,8 @@ function initDarts() {
         button.title=subscription?'Klicken, um Push-Benachrichtigungen auf diesem Gerät auszuschalten':'180er, High Finishes, Legs und Ergebnisse erhalten';
       };
       await update();
+      await updateHealth();
+      window.setInterval(()=>{ if (!document.hidden) updateHealth(); },60000);
       if (Notification.permission==='denied') { button.textContent='Push blockiert'; button.disabled=true; return; }
       button.addEventListener('click',async()=>{
         button.disabled=true;
@@ -183,6 +199,7 @@ function initDarts() {
             message('Push ist aktiv: 180er, High Finishes, gewonnene Legs sowie Einzel- und Mannschaftsergebnisse.');
           }
           await update();
+          await updateHealth();
         } catch (error) { message(error.message || 'Push-Benachrichtigungen konnten nicht geändert werden.'); }
         finally { button.disabled=Notification.permission==='denied'; }
       });
@@ -190,7 +207,7 @@ function initDarts() {
   }
   initPushNotifications();
   const favoriteKey = 'clubiq_darts_favorite';
-  let tickerDelay = 30000, tickerData = {items:[]}, favorite = 'all';
+  let tickerDelay = 30000, tickerData = {items:[]}, favorite = 'all', liveCenters = [];
   try { favorite = ['A','B','C','D'].includes(localStorage.getItem(favoriteKey)) ? localStorage.getItem(favoriteKey) : 'all'; } catch (_) { /* Optional preference. */ }
   function tickerTime(item) {
     if (!item.plannedAt) return '';
@@ -238,9 +255,30 @@ function initDarts() {
       const card=document.createElement('a'); card.className=`today-game ${item.kind}`; card.href=item.url; card.target='_blank'; card.rel='noopener noreferrer';
       const code=barverTeam(item); const badge=document.createElement('b'); badge.textContent=item.kind==='live'?'LIVE':item.kind==='final'?'ERGEBNIS':'NÄCHSTES SPIEL';
       const team=document.createElement('span'); team.className='today-team'; team.textContent=code?`BARVER ${code}`:'SV BARVER';
-      const text=document.createElement('strong'); text.textContent=item.text;
+      const matchup=document.createElement('div'); matchup.className='today-matchup';
+      const home=document.createElement('strong'); home.textContent=item.home || 'Heim';
+      const score=document.createElement('b'); score.textContent=item.score || 'VS';
+      const away=document.createElement('strong'); away.textContent=item.away || 'Gast';
+      matchup.append(home,score,away);
       const when=document.createElement('span'); when.className='today-time'; when.textContent=tickerTime(item);
-      card.append(badge,team,text,when); fragment.append(card);
+      card.append(badge,team,matchup);
+      const center=liveCenters.find(entry=>(entry.barverMatches || []).some(match=>match.id===item.id));
+      const events=(center?.pushEvents || []).filter(event=>event.matchId===item.id);
+      const current=events.filter(event=>event.type==='leg').sort((a,b)=>(b.order || 0)-(a.order || 0))[0]
+        || events.filter(event=>event.type==='game').sort((a,b)=>(b.order || 0)-(a.order || 0))[0];
+      if (current && item.kind!=='upcoming') {
+        const detail=document.createElement('p'); detail.className='today-detail';
+        const label=document.createElement('b'); label.textContent=item.kind==='live'?'Aktuelle Partie':'Letzte Partie';
+        const text=document.createElement('span'); text.textContent=current.text;
+        detail.append(label,text); card.append(detail);
+      }
+      const highlights=events.filter(event=>event.type==='180'||event.type==='high_finish').slice(-3);
+      if (highlights.length) {
+        const list=document.createElement('div'); list.className='today-highlights';
+        for (const event of highlights) { const chip=document.createElement('span'); chip.textContent=event.type==='180'?`🎯 180 · ${event.player}`:`🔥 HF ${event.value} · ${event.player}`; list.append(chip); }
+        card.append(list);
+      }
+      card.append(when); fragment.append(card);
     }
     target.replaceChildren(fragment);
   }
@@ -275,9 +313,32 @@ function initDarts() {
       const response = await fetch('/api/v1/darts/ticker',{headers:{Accept:'application/json'},signal:controller.signal});
       if (!response.ok) throw new Error('ticker unavailable');
       renderTicker(await response.json()); tickerDelay=30000;
+      loadLiveDetails();
     } catch (_) {
       q('#tickerUpdated').textContent='3K nicht erreichbar'; tickerDelay=Math.min(120000,tickerDelay*2);
     } finally { clearTimeout(timeout); setTimeout(loadTicker,tickerDelay); }
+  }
+  let liveDetailsLoading=false, liveDetailsLoadedAt=0;
+  async function loadLiveDetails(force=false) {
+    if (liveDetailsLoading || (!force && Date.now()-liveDetailsLoadedAt < 40000)) return;
+    liveDetailsLoading=true;
+    const controller=new AbortController(), timeout=window.setTimeout(()=>controller.abort(),12000);
+    try {
+      const results=await Promise.allSettled(['kl04','kk11'].map(async league=>{
+        const response=await fetch(`/api/v1/darts/center?league=${league}`,{headers:{Accept:'application/json'},cache:'no-store',signal:controller.signal});
+        if (!response.ok) throw new Error('center unavailable');
+        return response.json();
+      }));
+      const available=results.filter(result=>result.status==='fulfilled').map(result=>result.value);
+      if (available.length) {
+        liveCenters=available; liveDetailsLoadedAt=Date.now(); renderToday(tickerData);
+        const stale=available.some(center=>center.stale);
+        q('#liveDataStatus').dataset.state=stale?'warn':'ok';
+        q('#liveDataStatus').textContent=stale?'Letzter verfügbarer Stand':'Live-Daten verbunden';
+      } else throw new Error('no centers');
+    } catch (_) {
+      q('#liveDataStatus').dataset.state='warn'; q('#liveDataStatus').textContent='3K gerade nicht erreichbar';
+    } finally { window.clearTimeout(timeout); liveDetailsLoading=false; }
   }
   loadTicker();
   const activityUrl = 'https://portal.3k-darts.com/frontend/events/5/mandant/1931';
