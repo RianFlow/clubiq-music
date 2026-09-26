@@ -137,8 +137,23 @@ h1 { font:500 clamp(1.7rem,3vw,2.7rem)/1.15 Georgia,serif; margin:0; }
 .today-matchup b { min-width:62px; padding:8px 10px; color:#fff; background:#234f46; border-radius:9px; text-align:center; font-size:1.15rem; }
 .today-game.live .today-matchup b { background:#c9392d; }
 .today-game.final .today-matchup b { color:#403410; background:#ecd987; }
-.today-detail { grid-column:1/-1; display:grid; grid-template-columns:auto 1fr; gap:8px; align-items:center; margin:0; padding:8px 10px; color:#29473f; background:#edf3ef; border-radius:8px; font-size:.82rem; }
+.today-detail { grid-column:1/-1; display:grid; grid-template-columns:1fr; gap:6px; align-items:start; margin:0; padding:8px 10px; color:#29473f; background:#edf3ef; border-radius:8px; font-size:.82rem; }
 .today-detail b { color:#245c51; white-space:nowrap; }
+.today-current { display:grid; gap:4px; min-width:0; }
+.today-live-games { display:grid; gap:7px; min-width:0; }
+.today-live-game { display:grid; gap:4px; min-width:0; padding-bottom:7px; border-bottom:1px solid #cbd9d3; }
+.today-live-game:last-child { padding-bottom:0; border-bottom:0; }
+.today-live-score { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:8px; align-items:center; min-width:0; }
+.today-live-score > span { display:grid; gap:2px; min-width:0; }
+.today-live-score > span:first-child { text-align:left; }
+.today-live-score > span:last-child { text-align:right; }
+.today-live-score small { overflow:hidden; color:#536c65; font-size:.7rem; font-weight:750; text-overflow:ellipsis; white-space:nowrap; }
+.today-live-score strong { color:#173b35; font:750 1.25rem/1 Georgia,serif; }
+.today-live-middle { justify-items:center; color:#6d7d78; }
+.today-live-middle b { color:#9c3027; font-size:1.2rem; }
+.today-live-score .throwing strong { color:#b63528; }
+.today-live-score .throwing small::before { content:'● '; color:#d43c30; }
+.today-live-wait { color:#6d7d78; font-size:.68rem; }
 .today-highlights { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:5px; }
 .today-highlights span { padding:4px 7px; color:#513d08; background:#f4e5a9; border-radius:999px; font-size:.7rem; font-weight:750; }
 .panel-loading { margin:0; padding:18px; color:#60706b; }
@@ -211,6 +226,17 @@ h1 { font:500 clamp(1.7rem,3vw,2.7rem)/1.15 Georgia,serif; margin:0; }
 .native-match-summary > span { color:#60706b; font-size:.82rem; }
 .native-match-score.large { font-size:1.08rem; }
 .native-match-score.large b { min-width:68px; padding:9px 11px; font-size:1.2rem; }
+.native-live-scores { display:grid; gap:10px; margin:0 0 14px; }
+.native-live-score { display:grid; grid-template-columns:auto 1fr; gap:5px 12px; align-items:center; padding:13px 15px; color:#fff; background:linear-gradient(125deg,#173b35,#245c51); border:1px solid #3e7c6e; border-radius:13px; }
+.native-live-score > b { width:max-content; padding:4px 7px; color:#fff; background:#bd382c; border-radius:999px; font-size:.68rem; letter-spacing:.07em; }
+.native-live-score > span { justify-self:end; color:#cae3dc; font-size:.78rem; }
+.native-live-score > div { grid-column:1/-1; display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:12px; align-items:center; }
+.native-live-score > div > span { display:grid; gap:2px; text-align:center; }
+.native-live-score strong { font:700 clamp(2rem,7vw,3.5rem)/1 Georgia,serif; }
+.native-live-score small { color:#d5e7e2; font-weight:700; overflow-wrap:anywhere; }
+.native-live-score em { font:700 2rem/1 Georgia,serif; }
+.native-live-score .throwing strong { color:#f1d878; }
+.native-live-score .throwing small::before { content:'● '; color:#efc94d; }
 .native-match-stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:0 0 14px; }
 .native-match-stats > div { display:grid; gap:4px; min-height:74px; align-content:center; padding:10px 12px; border:1px solid var(--line); border-radius:11px; background:#f8f8f3; }
 .native-match-stats span { color:#60706b; font-size:.72rem; font-weight:750; text-transform:uppercase; letter-spacing:.04em; }
@@ -289,6 +315,30 @@ body:fullscreen #todayPanel { display:flex !important; flex:1; min-height:0; mar
 body:fullscreen #todayPanel .sports-panel-head { flex:0 0 auto; }
 body:fullscreen .today-grid { flex:1; min-height:0; grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-rows:minmax(0,1fr); }
 body:fullscreen .today-game { min-height:0; align-content:center; }
+body:fullscreen .darts-header { min-height:58px; padding:7px 18px; }
+body:fullscreen .darts-header nav > :not(#fullscreen) { display:none; }
+body:fullscreen .darts-header nav { margin-left:auto; }
+body:fullscreen .brand img { width:40px; height:40px; }
+body:fullscreen .header-club-logo { width:92px; height:48px; margin-left:14px; margin-right:auto; }
+body:fullscreen .score-ticker { min-height:58px; }
+body:fullscreen .ticker-item,body:fullscreen .ticker-loading { min-height:58px; font-size:1rem; }
+body:fullscreen .sponsor-slot,body:fullscreen #pageStatus { display:none !important; }
+body:fullscreen main { padding:10px 18px 14px; }
+body:fullscreen #todayPanel .sports-panel-head { min-height:86px; padding:12px 20px; }
+body:fullscreen #todayPanel .sports-panel-head h2 { font-size:clamp(1.8rem,3vw,2.7rem); }
+body:fullscreen .today-grid { gap:14px; padding:14px; }
+body:fullscreen .today-game { padding:clamp(16px,2vw,28px); border-left-width:9px; }
+body:fullscreen .today-matchup strong { font-size:clamp(1.15rem,2vw,1.8rem); }
+body:fullscreen .today-matchup b { min-width:84px; padding:10px 14px; font-size:1.5rem; }
+body:fullscreen .today-detail { align-items:start; padding:12px 14px; font-size:1rem; }
+body:fullscreen .today-live-games { gap:12px; }
+body:fullscreen .today-live-game { padding-bottom:12px; }
+body:fullscreen .today-live-score { gap:18px; }
+body:fullscreen .today-live-score small { font-size:clamp(.84rem,1.25vw,1.1rem); }
+body:fullscreen .today-live-score strong { font-size:clamp(2.2rem,4.8vw,4.6rem); }
+body:fullscreen .today-live-middle b { font-size:clamp(1.6rem,3vw,2.8rem); }
+body:fullscreen .today-highlights span { padding:7px 10px; font-size:.86rem; }
+body:fullscreen .today-time { font-size:.9rem; }
 [data-theme="dark"] { color-scheme:dark; color:#e8f0ec; background:#0b1412; --green:#82cbb8; --line:#30443e; }
 [data-theme="dark"] body,[data-theme="dark"] body:fullscreen { color:#e8f0ec; background:#0b1412; }
 [data-theme="dark"] button,[data-theme="dark"] .darts-header a:not(.brand),[data-theme="dark"] .external { color:#dff3ed; background:#15231f; border-color:#3a514a; }
@@ -318,6 +368,10 @@ body:fullscreen .today-game { min-height:0; align-content:center; }
 [data-theme="dark"] .today-game { color:#e8f0ec; border-color:#30443e; }
 [data-theme="dark"] .today-detail { color:#d4e6e0; background:#1b302a; }
 [data-theme="dark"] .today-detail b { color:#91d4c2; }
+[data-theme="dark"] .today-live-game { border-color:#355047; }
+[data-theme="dark"] .today-live-score small { color:#9fb8b0; }
+[data-theme="dark"] .today-live-score strong { color:#f3f6f4; }
+[data-theme="dark"] .today-live-middle b,[data-theme="dark"] .today-live-score .throwing strong { color:#ff7468; }
 [data-theme="dark"] .today-highlights span { color:#fff0b5; background:#4d411b; }
 [data-theme="dark"] .league-controls select,[data-theme="dark"] .sports-panel-head select,[data-theme="dark"] .team-tools select,[data-theme="dark"] .layout-controls select,[data-theme="dark"] input { color:#e8f0ec; background:#172722; border-color:#425c54; }
 [data-theme="dark"] .round-match { color:#e3ece8; border-color:#293b35; }
@@ -338,6 +392,7 @@ body:fullscreen .today-game { min-height:0; align-content:center; }
 [data-theme="dark"] .native-match-stats>div { background:#111f1b; border-color:#30443e; }
 [data-theme="dark"] .native-match-stats span { color:#aebdb8; }
 [data-theme="dark"] .native-match-stats strong { color:#e8f0ec; }
+[data-theme="dark"] .native-live-score { background:linear-gradient(125deg,#142b26,#1f5147); border-color:#3b7165; }
 [data-theme="dark"] .match-highlight-ticker { background:#1f5e51; }
 [data-theme="dark"] .native-match-row:hover { background:#172924; box-shadow:0 8px 22px #0008; }
 [data-theme="dark"] .native-match-row.upcoming .native-match-score b { color:#b8d8cf; background:#29423b; }
@@ -391,6 +446,7 @@ body:fullscreen .today-game { min-height:0; align-content:center; }
   .today-matchup strong { font-size:.92rem; }
   .today-matchup b { min-width:52px; padding:7px 6px; font-size:1rem; }
   .today-detail { grid-template-columns:1fr; gap:2px; }
+  .today-live-score strong { font-size:1.12rem; }
   .league-controls { display:grid; grid-template-columns:1fr 1fr; padding:10px; }
   .league-controls label { min-width:0; }
   .league-controls button { grid-column:1/-1; }
@@ -414,6 +470,8 @@ body:fullscreen .today-game { min-height:0; align-content:center; }
   .native-match-dialog { padding:16px; }
   .native-match-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .native-match-stats > div { min-height:66px; padding:8px 9px; }
+  .native-live-score { padding:11px; }
+  .native-live-score strong { font-size:2.15rem; }
   .match-highlight-ticker { grid-template-columns:1fr; }
   .match-highlight-ticker > strong { min-height:28px; }
   .match-highlight-ticker > div { min-height:40px; }
@@ -441,5 +499,7 @@ body:fullscreen .today-game { min-height:0; align-content:center; }
   .dialog-actions button { width:100%; }
   body:fullscreen .today-grid { grid-template-columns:1fr; overflow:auto; grid-auto-rows:auto; }
   body:fullscreen .today-game { min-height:150px; }
+  body:fullscreen .darts-header .header-club-logo { display:none; }
+  body:fullscreen .today-live-score strong { font-size:clamp(2rem,10vw,3.5rem); }
 }
 @media (prefers-reduced-motion:reduce) { .match-highlight-track { animation:none; padding:8px 12px; white-space:normal; flex-wrap:wrap; } }

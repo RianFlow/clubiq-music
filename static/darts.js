@@ -249,7 +249,7 @@ function initDarts() {
     const today = new Date().toLocaleDateString('de-DE');
     const playingToday = shown.some(item=>item.plannedAt && new Date(item.plannedAt).toLocaleDateString('de-DE')===today);
     q('#todayHeading').textContent = live.length || playingToday ? 'Heute spielen' : upcoming.length ? 'Nächste Spiele' : 'Letzte Ergebnisse';
-    q('#todaySubtitle').textContent = live.length ? `${live.length} Begegnung${live.length===1?'':'en'} läuft gerade.` : upcoming.length ? 'Die nächsten Begegnungen sind vorbereitet.' : 'Letzte Ergebnisse der Barver-Teams.';
+    q('#todaySubtitle').textContent = live.length ? `${live.length} Begegnung${live.length===1?'':'en'} ${live.length===1?'läuft':'laufen'} gerade.` : upcoming.length ? 'Die nächsten Begegnungen sind vorbereitet.' : 'Letzte Ergebnisse der Barver-Teams.';
     if (!shown.length) { const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent='Für die Auswahl ist aktuell keine Begegnung vorhanden.'; target.replaceChildren(empty); return; }
     const fragment=document.createDocumentFragment();
     for (const item of shown) {
@@ -265,13 +265,42 @@ function initDarts() {
       card.append(badge,team,matchup);
       const center=liveCenters.find(entry=>(entry.barverMatches || []).some(match=>match.id===item.id));
       const events=(center?.pushEvents || []).filter(event=>event.matchId===item.id);
-      const current=events.filter(event=>event.type==='leg').sort((a,b)=>(b.order || 0)-(a.order || 0))[0]
+      const liveGames=events.filter(event=>event.type==='live_game').sort((a,b)=>String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+      const current=liveGames[0]
+        || events.filter(event=>event.type==='leg').sort((a,b)=>(b.order || 0)-(a.order || 0))[0]
         || events.filter(event=>event.type==='game').sort((a,b)=>(b.order || 0)-(a.order || 0))[0];
       if (current && item.kind!=='upcoming') {
-        const detail=document.createElement('p'); detail.className='today-detail';
-        const label=document.createElement('b'); label.textContent=item.kind==='live'?'Aktuelle Partie':'Letzte Partie';
-        const text=document.createElement('span'); text.textContent=current.text;
-        detail.append(label,text); card.append(detail);
+        const detail=document.createElement('div'); detail.className='today-detail';
+        const label=document.createElement('b'); label.textContent=liveGames.length>1?`Aktuelle Partien (${liveGames.length})`:item.kind==='live'?'Aktuelle Partie':'Letzte Partie';
+        if (liveGames.length && item.kind==='live') {
+          const list=document.createElement('span'); list.className='today-live-games';
+          for (const game of liveGames) {
+            const liveGame=document.createElement('span'); liveGame.className='today-live-game';
+            const scoreline=document.createElement('span'); scoreline.className='today-live-score';
+            const homeSide=document.createElement('span'); homeSide.className=game.currentSide==='home'?'throwing':'';
+            const homeName=document.createElement('small'); homeName.textContent=game.homeName;
+            const homePoints=document.createElement('strong'); homePoints.textContent=Number.isInteger(game.homeRemaining)?game.homeRemaining:'–';
+            const middle=document.createElement('span'); middle.className='today-live-middle';
+            const legs=document.createElement('small'); legs.textContent=Number.isInteger(game.homeLegs)&&Number.isInteger(game.awayLegs)?`Legs ${game.homeLegs}:${game.awayLegs}`:'Leg läuft';
+            const colon=document.createElement('b'); colon.textContent=':';
+            const awaySide=document.createElement('span'); awaySide.className=game.currentSide==='away'?'throwing':'';
+            const awayPoints=document.createElement('strong'); awayPoints.textContent=Number.isInteger(game.awayRemaining)?game.awayRemaining:'–';
+            const awayName=document.createElement('small'); awayName.textContent=game.awayName;
+            homeSide.append(homeName,homePoints); middle.append(legs,colon); awaySide.append(awayName,awayPoints); scoreline.append(homeSide,middle,awaySide);
+            scoreline.setAttribute('aria-label',`${game.homeName} ${homePoints.textContent} zu ${awayPoints.textContent} ${game.awayName}. ${legs.textContent}.`);
+            liveGame.append(scoreline);
+            if (!Number.isInteger(game.homeRemaining) || !Number.isInteger(game.awayRemaining)) {
+              const wait=document.createElement('small'); wait.className='today-live-wait'; wait.textContent='Punktestand wird noch geladen'; liveGame.append(wait);
+            }
+            list.append(liveGame);
+          }
+          detail.append(label,list);
+        } else {
+          const copy=document.createElement('span'); copy.className='today-current';
+          const text=document.createElement('span'); text.textContent=current.text;
+          copy.append(text); detail.append(label,copy);
+        }
+        card.append(detail);
       }
       const highlights=events.filter(event=>event.type==='180'||event.type==='high_finish').slice(-3);
       if (highlights.length) {
@@ -345,7 +374,8 @@ function initDarts() {
         if (demoLive) {
           const liveItems=(tickerData.items || []).filter(item=>item.kind==='live');
           liveCenters.unshift({barverMatches:liveItems,pushEvents:liveItems.flatMap((item,index)=>[
-            {type:'leg',matchId:item.id,order:10,text:index?'Dennis Beispiel 2:1 Gegner':'Gegner 1:2 Jannik Beispiel'},
+            {type:'live_game',liveGameId:item.id*10+1,matchId:item.id,updatedAt:new Date().toISOString(),text:index?'Dennis Beispiel 2:1 Gegner Zwei':'Jannik Beispiel 2:1 Gegner Eins',homeName:index?'Dennis Beispiel':'Jannik Beispiel',awayName:index?'Gegner Zwei':'Gegner Eins',homeLegs:2,awayLegs:1,homeRemaining:index?167:320,awayRemaining:index?221:410,currentSide:index?'away':'home'},
+            {type:'live_game',liveGameId:item.id*10+2,matchId:item.id,updatedAt:new Date(Date.now()-1000).toISOString(),text:index?'Robin Beispiel 1:1 Gegner Vier':'Tim Beispiel 1:0 Gegner Drei',homeName:index?'Robin Beispiel':'Tim Beispiel',awayName:index?'Gegner Vier':'Gegner Drei',homeLegs:1,awayLegs:index?1:0,homeRemaining:index?284:201,awayRemaining:index?356:298,currentSide:index?'home':'away'},
             {type:'180',matchId:item.id,player:index?'Tim Beispiel':'Jannik Beispiel',value:180},
             ...(index?[{type:'high_finish',matchId:item.id,player:'Dennis Beispiel',value:121}]:[]),
           ])});
@@ -444,6 +474,22 @@ function initDarts() {
     const matchup=document.createElement('div'); matchup.className='native-match-score large';
     const home=document.createElement('strong'); home.textContent=match.home || 'Heim'; const score=document.createElement('b'); score.textContent=match.score || 'vs'; const away=document.createElement('strong'); away.textContent=match.away || 'Gast'; matchup.append(home,score,away);
     header.append(meta,matchup);
+    const liveScores=document.createElement('div'); liveScores.className='native-live-scores';
+    for (const live of data.liveGames || []) {
+      const panel=document.createElement('section'); panel.className='native-live-score';
+      const label=document.createElement('b'); label.textContent='AKTUELLES LEG';
+      const leg=document.createElement('span'); leg.textContent=Number.isInteger(live.home?.legs)&&Number.isInteger(live.away?.legs)?`Legstand ${live.home.legs}:${live.away.legs}`:'Leg läuft';
+      const scoreline=document.createElement('div');
+      const homeLive=document.createElement('span'); homeLive.className=live.currentSide==='home'?'throwing':'';
+      const awayLive=document.createElement('span'); awayLive.className=live.currentSide==='away'?'throwing':'';
+      const homePoints=document.createElement('strong'); homePoints.textContent=Number.isInteger(live.home?.remaining)?live.home.remaining:'–';
+      const awayPoints=document.createElement('strong'); awayPoints.textContent=Number.isInteger(live.away?.remaining)?live.away.remaining:'–';
+      const homeName=document.createElement('small'); homeName.textContent=live.home?.name || 'Heim';
+      const awayName=document.createElement('small'); awayName.textContent=live.away?.name || 'Gast';
+      const divider=document.createElement('em'); divider.textContent=':';
+      homeLive.append(homePoints,homeName); awayLive.append(awayPoints,awayName); scoreline.append(homeLive,divider,awayLive);
+      panel.append(label,leg,scoreline); liveScores.append(panel);
+    }
     const finished=(data.games || []).filter(game=>game.status==='FINISH'&&Number.isInteger(game.homeLegs)&&Number.isInteger(game.awayLegs));
     const homeWins=finished.filter(game=>game.homeLegs>game.awayLegs).length, awayWins=finished.filter(game=>game.awayLegs>game.homeLegs).length;
     const homeLegs=finished.reduce((sum,game)=>sum+game.homeLegs,0), awayLegs=finished.reduce((sum,game)=>sum+game.awayLegs,0);
@@ -462,7 +508,7 @@ function initDarts() {
     const ticker=document.createElement('div'); ticker.className='match-highlight-ticker'; ticker.setAttribute('aria-label','Highlights dieser Begegnung');
     const tickerLabel=document.createElement('strong'); tickerLabel.textContent='HIGHLIGHTS'; const tickerWindow=document.createElement('div'); const tickerTrack=document.createElement('div'); tickerTrack.className='match-highlight-track';
     const tickerItems=[];
-    if (match.score) tickerItems.push(`🏁 Endstand: ${match.home} ${match.score} ${match.away}`);
+    if (match.score) tickerItems.push(`${match.kind==='live'?'🔴 Zwischenstand':'🏁 Endstand'}: ${match.home} ${match.score} ${match.away}`);
     for (const event of data.performances || []) tickerItems.push(event.type==='180'?`🎯 180 von ${event.player}`:`🔥 High Finish ${event.value} von ${event.player}`);
     for (const game of finished) { const homeWon=game.homeLegs>game.awayLegs; tickerItems.push(`✓ Spiel ${game.number}: ${homeWon?game.home.name:game.away.name} gewinnt ${homeWon?game.homeLegs:game.awayLegs}:${homeWon?game.awayLegs:game.homeLegs}`); }
     for (const text of tickerItems.length?tickerItems:['Noch keine Highlights erfasst']) { const span=document.createElement('span'); span.textContent=text; tickerTrack.append(span); }
@@ -480,7 +526,7 @@ function initDarts() {
     }
     if (!(data.games || []).length) { const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent='Der detaillierte Spielbericht ist noch nicht gefüllt.'; games.append(empty); }
     const source=document.createElement('a'); source.className='external match-source'; source.href=data.sourceUrl; source.target='_blank'; source.rel='noopener noreferrer'; source.textContent='Offizielle Quelle bei 3K ↗';
-    target.replaceChildren(header,stats,ticker,highlights,games,source);
+    target.replaceChildren(header,...(liveScores.childNodes.length?[liveScores]:[]),stats,ticker,highlights,games,source);
   }
   function demoMatchData(base) {
     const code=barverTeam(base) || 'A';
@@ -493,7 +539,7 @@ function initDarts() {
       return {id:9000+number,number,block:number<=4?'1. Block · Einzel':number<=6?'2. Block · Doppel':number<=10?'3. Block · Einzel':'4. Block · Doppel',status:finished?'FINISH':active?'ACTIVE':'OPEN',home:{name:homePlayers[index],average:finished?45.2+index:null},away:{name:awayPlayers[index],average:finished?41.4+index/2:null},homeLegs:pair[0],awayLegs:pair[1]};
     });
     const match={...base,kind:'live',barverTeam:code,barverTeams:[code],barverSides:{[code]:side},leagueShort:'DEMO',round:{name:'Live-Simulation'},score:'5:4'};
-    return {available:true,stale:false,demo:true,match,games,performances:[{type:'180',player:'Jannik Beispiel',count:2,value:180},{type:'high_finish',player:'Dennis Beispiel',count:1,value:121}],sourceUrl:base.url || '#'};
+    return {available:true,stale:false,demo:true,match,games,liveGames:[{id:9010,matchKey:'demo-10',home:{name:'Jannik Beispiel',remaining:320,legs:2},away:{name:'Gegner Eins',remaining:410,legs:1},currentSide:'home',lastUpdated:new Date().toISOString()},{id:9011,matchKey:'demo-11',home:{name:'Tim Beispiel',remaining:201,legs:1},away:{name:'Gegner Drei',remaining:298,legs:0},currentSide:'away',lastUpdated:new Date(Date.now()-1000).toISOString()}],performances:[{type:'180',player:'Jannik Beispiel',count:2,value:180},{type:'high_finish',player:'Dennis Beispiel',count:1,value:121}],sourceUrl:base.url || '#'};
   }
   async function openMatch(matchId) {
     if (!Number.isInteger(Number(matchId)) || Number(matchId)<=0) return;
@@ -761,5 +807,9 @@ function initDarts() {
     try { if (document.fullscreenElement) await document.exitFullscreen(); else { setSection('today'); if (document.body.requestFullscreen) await document.body.requestFullscreen(); else message('TV-Modus wird hier nicht unterstützt. Du kannst die Heute-Ansicht normal verwenden.'); } }
     catch (_) { message('Vollbild nicht verfügbar. Bitte die Browser-Vollbildfunktion oder „Groß“ verwenden.'); }
   });
-  document.addEventListener('fullscreenchange',()=>{ q('#fullscreen').textContent=document.fullscreenElement ? 'TV-Modus beenden' : 'TV-Modus'; });
+  document.addEventListener('fullscreenchange',()=>{
+    const active=Boolean(document.fullscreenElement);
+    document.body.classList.toggle('tv-live',active);
+    q('#fullscreen').textContent=active ? 'TV-Modus beenden' : 'TV-Modus';
+  });
 }

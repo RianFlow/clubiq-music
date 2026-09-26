@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 
-from darts_feed import _game_events, _leg_events, _performance_events, _preferred_round, _public_game, _relevant_rounds, _season_match, _standings, _ticker_item
+from darts_feed import _game_events, _leg_events, _live_game_events, _performance_events, _preferred_round, _public_game, _public_live_games, _relevant_rounds, _season_match, _standings, _ticker_item
 
 
 class DartsFeedTests(unittest.TestCase):
@@ -91,6 +91,32 @@ class DartsFeedTests(unittest.TestCase):
         legs = _leg_events(games, match, "SV Barver Darts A")
         self.assertEqual([(event["winnerSide"], event["legCount"]) for event in legs], [("home", 2), ("away", 1)])
         self.assertEqual(legs[0]["text"], "Jannik 2:1 Max")
+
+    def test_live_ticker_points_are_whitelisted_as_remaining_scores(self):
+        payload = {"data": [{
+            "id": 777, "matchKey": "game-10", "status": 1, "statusActive": True,
+            "currentplayerIndex": 0, "lastUpdate": "2026-09-26T12:00:00",
+            "matchPlayers": [
+                {"playerName": "Jannik", "points": 320, "legs": 2, "scoreTotal": 181, "email": "hidden@example.test"},
+                {"playerName": "Gegner 1", "points": 410, "legs": 1, "scoreTotal": 91},
+            ],
+        }]}
+        live = _public_live_games(payload)
+        self.assertEqual((live[0]["home"]["remaining"], live[0]["away"]["remaining"]), (320, 410))
+        self.assertNotIn("scoreTotal", str(live))
+        self.assertNotIn("email", str(live))
+        event = _live_game_events(payload, {"id": 99}, "SV Barver Darts A")[0]
+        self.assertEqual((event["homeName"], event["awayName"], event["homeRemaining"], event["awayRemaining"]), ("Jannik", "Gegner 1", 320, 410))
+
+    def test_report_score_is_never_misread_as_remaining_points(self):
+        game = {
+            "id": 8, "gameNr": 1, "statusCd": "ACTIVE", "liveLegsHome": 0, "liveLegsAway": 0,
+            "participantHome": {"displayName": "Jannik", "score": 1500, "darts": 75},
+            "participantGuest": {"displayName": "Gegner", "score": 900, "darts": 60},
+        }
+        public = _public_game(game)
+        self.assertNotIn("remaining", public["home"])
+        self.assertNotIn("remaining", public["away"])
 
     def test_season_match_adds_only_clubiq_team_and_round_metadata(self):
         match = {

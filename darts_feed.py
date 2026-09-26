@@ -8,6 +8,7 @@ import requests
 
 
 API = "https://backend-ddv.3k-darts.com/2k-backend-ddv/api/v1/frontend/event"
+LIVE_API = "https://live.3k-darts.com/dartsscorer-liveticker/api/v1"
 LEAGUES = (
     {"key": "kl04", "name": "Kreisligen 04", "short": "KL 04", "event": 1445, "phase": 2139, "teams": {174110: "A", 174111: "B", 174112: "C"}},
     {"key": "kk11", "name": "Kreisklasse 11", "short": "KK 11", "event": 1460, "phase": 2154, "teams": {174266: "D"}},
@@ -116,6 +117,76 @@ def _average(participant: dict) -> float | None:
     if isinstance(darts, (int, float)) and darts > 0 and isinstance(score, (int, float)):
         return round(score * 3 / darts, 1)
     return None
+
+
+def _remaining_points(value) -> int | None:
+    """Accept only an explicit 3K live `points` value, never report `score`."""
+    return value if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 501 else None
+
+
+def _public_live_games(payload) -> list[dict]:
+    """Whitelist the small live-score subset published by 3K's public ticker."""
+    raw_games = payload.get("data") if isinstance(payload, dict) else payload
+    if not isinstance(raw_games, list):
+        return []
+    games = []
+    for raw in raw_games:
+        if not isinstance(raw, dict) or not (raw.get("statusActive") is True or raw.get("status") == 1):
+            continue
+        players = raw.get("matchPlayers") or []
+        if not isinstance(players, list) or len(players) < 2:
+            continue
+        players = [item for item in players if isinstance(item, dict)]
+        home_players, away_players = players[::2], players[1::2]
+        if not home_players or not away_players:
+            continue
+
+        def side(items: list[dict]) -> dict:
+            names = [str(item.get("playerName") or "").strip() for item in items]
+            names = [name for name in names if name]
+            player = items[0]
+            legs = player.get("legs")
+            return {
+                "name": " & ".join(names)[:160] or "Noch offen",
+                "remaining": _remaining_points(player.get("points")),
+                "legs": legs if isinstance(legs, int) and not isinstance(legs, bool) and 0 <= legs <= 25 else None,
+            }
+
+        current_index = raw.get("currentplayerIndex")
+        games.append({
+            "id": int(raw.get("id") or 0),
+            "matchKey": str(raw.get("matchKey") or "")[:60],
+            "home": side(home_players),
+            "away": side(away_players),
+            "currentSide": "home" if isinstance(current_index, int) and current_index % 2 == 0 else "away" if isinstance(current_index, int) else None,
+            "lastUpdated": raw.get("lastUpdate"),
+        })
+    return games
+
+
+def _live_game_events(payload, match: dict, team_name: str = "") -> list[dict]:
+    events = []
+    for game in _public_live_games(payload):
+        home, away = game["home"], game["away"]
+        home_legs, away_legs = home["legs"], away["legs"]
+        leg_score = f"{home_legs}:{away_legs}" if isinstance(home_legs, int) and isinstance(away_legs, int) else "–"
+        events.append({
+            "type": "live_game",
+            "title": "Aktuelle Partie",
+            "text": f"{home['name']} {leg_score} {away['name']}",
+            "matchId": int(match.get("id") or 0),
+            "liveGameId": game["id"],
+            "team": team_name,
+            "homeName": home["name"],
+            "awayName": away["name"],
+            "homeLegs": home_legs,
+            "awayLegs": away_legs,
+            "homeRemaining": home["remaining"],
+            "awayRemaining": away["remaining"],
+            "currentSide": game["currentSide"],
+            "updatedAt": game["lastUpdated"],
+        })
+    return events
 
 
 def _public_game(game: dict) -> dict:
@@ -388,6 +459,15 @@ def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now:
                 if isinstance(perf_payload, list):
                     events.extend(_performance_events(perf_payload, raw_match))
             if item["kind"] in {"live", "final"}:
+                if item["kind"] == "live":
+                    try:
+                        live = session.get(f"{LIVE_API}/match/10/0/{match_id}", timeout=(3, 8))
+                        if live.ok:
+                            events.extend(_live_game_events(_json(live), raw_match, barver_team))
+                    except (requests.RequestException, ValueError, KeyError, TypeError):
+                        # The match report below remains a safe fallback while
+                        # 3K's dedicated live ticker is briefly unavailable.
+                        pass
                 report = session.get(f"{API}/{league['event']}/match/{match_id}/report", timeout=(3, 8))
                 report_payload = _json(report) if report.ok else None
                 if isinstance(report_payload, list):
@@ -554,12 +634,19 @@ def get_darts_match(match_id: int, now: datetime | None = None) -> dict:
         except requests.RequestException:
             performance_payload = []
         performances = _performance_events(performance_payload, {"id": match_id}) if isinstance(performance_payload, list) else []
+        live_games = []
+        if match["kind"] == "live":
+            try:
+                live_games = _public_live_games(_public_get(f"{LIVE_API}/match/10/0/{match_id}"))
+            except (requests.RequestException, ValueError, KeyError, TypeError):
+                pass
         result = {
             "available": True,
             "stale": False,
             "updatedAt": now.isoformat(),
             "match": match,
             "games": sorted((_public_game(item) for item in report), key=lambda item: item["number"]),
+            "liveGames": live_games,
             "performances": performances,
             "sourceUrl": match["url"],
         }
