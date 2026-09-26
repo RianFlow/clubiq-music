@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 
-from darts_feed import _game_events, _leg_events, _live_game_events, _performance_events, _preferred_round, _public_game, _public_live_games, _relevant_rounds, _season_match, _standings, _ticker_item
+from darts_feed import _barver_code_from_name, _game_events, _is_special_event, _leg_events, _live_game_events, _performance_events, _preferred_round, _public_game, _public_live_games, _relevant_rounds, _season_match, _special_match, _standings, _team_record, _ticker_item
 
 
 class DartsFeedTests(unittest.TestCase):
@@ -139,6 +139,34 @@ class DartsFeedTests(unittest.TestCase):
         item = _season_match(match, league, {"id": 78, "name": "Spieltag 5"})
         self.assertEqual(item["barverTeams"], ["A", "C"])
         self.assertEqual(item["barverSides"], {"C": "home", "A": "away"})
+
+    def test_cup_team_numbers_map_to_stable_clubiq_codes(self):
+        self.assertEqual(_barver_code_from_name("SV Barver Darts 1"), "A")
+        self.assertEqual(_barver_code_from_name("SV Barver Darts 4"), "D")
+        self.assertEqual(_barver_code_from_name("SV Barver Darts B"), "B")
+        self.assertIsNone(_barver_code_from_name("SV Muster Darts 2"))
+
+    def test_special_event_and_match_are_normalized(self):
+        event = {"id": 1472, "name": "Bezirkspokal 2026/27", "nameShort": "BZP 26/27", "classification": {"name": "DVWE Bezirkspokale"}}
+        self.assertTrue(_is_special_event(event))
+        match = {
+            "id": 1657285, "eventId": 1472, "statusCd": "OPEN", "datePlanned": "2026-09-27T11:00:00+00:00",
+            "participantHome": {"id": 171591, "displayName": "VFL Emslage 1"},
+            "participantGuest": {"id": 171513, "displayName": "SV Barver Darts 2"},
+        }
+        item = _special_match(match, event, {"id": 2180}, {"id": 32637, "name": "Runde der Letzten 64"})
+        self.assertEqual((item["barverTeam"], item["barverSides"], item["competitionBadge"], item["leagueShort"]), ("B", {"B": "away"}, "POKAL", "POKAL"))
+        self.assertTrue(item["isSpecial"])
+
+    def test_team_record_includes_results_and_form(self):
+        matches = [
+            {"kind": "final", "score": "8:4", "barverTeams": ["A"], "barverSides": {"A": "home"}, "updatedAt": "2026-09-01"},
+            {"kind": "final", "score": "5:7", "barverTeams": ["A"], "barverSides": {"A": "home"}, "updatedAt": "2026-09-02"},
+            {"kind": "final", "score": "6:6", "barverTeams": ["A"], "barverSides": {"A": "away"}, "updatedAt": "2026-09-03"},
+        ]
+        record = _team_record(matches, "A")
+        self.assertEqual((record["played"], record["wins"], record["draws"], record["losses"]), (3, 1, 1, 1))
+        self.assertEqual(record["form"], ["S", "N", "U"])
 
     def test_public_game_calculates_average_and_drops_private_fields(self):
         game = {
