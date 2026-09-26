@@ -345,6 +345,12 @@ function initDarts() {
   function matchDate(item) {
     return formatDate(item.plannedAt || item.updatedAt,{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
   }
+  function matchLocation(item, team='') {
+    const codes=Array.isArray(item.barverTeams) ? item.barverTeams : item.barverTeam ? [item.barverTeam] : [];
+    if (codes.length>1 && !team) return 'Vereinsduell';
+    const code=team || codes[0] || item.barverTeam;
+    return item.barverSides?.[code]==='home' ? 'Heimspiel' : item.barverSides?.[code]==='away' ? 'Auswärtsspiel' : '';
+  }
   function renderSeasonTeams() {
     const target=q('#seasonTeams');
     const fragment=document.createDocumentFragment();
@@ -355,7 +361,7 @@ function initDarts() {
       const copy=document.createElement('span');
       const title=document.createElement('strong'); title.textContent=team.name;
       const meta=document.createElement('span'); meta.textContent=`${team.league.short} · ${team.rank ? `Platz ${team.rank}` : 'Rang offen'}`;
-      const next=document.createElement('small'); next.textContent=team.nextMatch ? `Nächstes: ${matchDate(team.nextMatch)}` : 'Kein weiterer Termin';
+      const next=document.createElement('small'); next.textContent=team.nextMatch ? `${matchLocation(team.nextMatch,team.code)} · ${matchDate(team.nextMatch)}` : 'Kein weiterer Termin';
       copy.append(title,meta,next); card.append(badge,copy);
       card.addEventListener('click',()=>{ q('#seasonTeam').value=team.code; renderSeason(); });
       fragment.append(card);
@@ -364,7 +370,7 @@ function initDarts() {
   }
   function renderSeasonMatches() {
     const team=q('#seasonTeam').value;
-    let matches=(seasonData?.matches || []).filter(item=>team==='all'||item.barverTeam===team);
+    let matches=(seasonData?.matches || []).filter(item=>team==='all'||(item.barverTeams || [item.barverTeam]).includes(team));
     if (seasonStatus==='upcoming') matches=matches.filter(item=>item.kind!=='final');
     if (seasonStatus==='final') matches=matches.filter(item=>item.kind==='final').reverse();
     const headings={upcoming:'Kommende Begegnungen',final:'Ergebnisse',all:'Alle Saisonspiele'};
@@ -373,7 +379,8 @@ function initDarts() {
     const fragment=document.createDocumentFragment();
     for (const item of matches) {
       const row=document.createElement('button'); row.type='button'; row.className=`native-match-row ${item.kind}`;
-      const info=document.createElement('span'); info.className='native-match-meta'; info.textContent=`Barver ${item.barverTeam} · ${item.leagueShort} · ${item.round?.name || 'Spieltag'} · ${matchDate(item)}`;
+      const codes=(item.barverTeams || [item.barverTeam]).filter(Boolean); const shownTeam=team==='all'?codes.join(' / '):team;
+      const info=document.createElement('span'); info.className='native-match-meta'; info.textContent=`Barver ${shownTeam} · ${matchLocation(item,team==='all'?'':team)} · ${item.leagueShort} · ${item.round?.name || 'Spieltag'} · ${matchDate(item)}`;
       const teams=document.createElement('span'); teams.className='native-match-score';
       const home=document.createElement('strong'); home.textContent=item.home;
       const score=document.createElement('b'); score.textContent=item.score || 'vs';
@@ -405,12 +412,33 @@ function initDarts() {
     const target=q('#matchDetail'), match=data.match || {};
     q('#matchHeading').textContent=`${match.home || 'Heim'} ${match.score || '–'} ${match.away || 'Gast'}`;
     const header=document.createElement('div'); header.className=`native-match-summary ${match.kind || ''}`;
-    const meta=document.createElement('span'); meta.textContent=`Barver ${match.barverTeam || ''} · ${match.leagueShort || ''} · ${match.round?.name || ''} · ${matchDate(match)}`;
+    const meta=document.createElement('span'); meta.textContent=`Barver ${(match.barverTeams || [match.barverTeam]).filter(Boolean).join(' / ')} · ${matchLocation(match)} · ${match.leagueShort || ''} · ${match.round?.name || ''} · ${matchDate(match)}`;
     const matchup=document.createElement('div'); matchup.className='native-match-score large';
     const home=document.createElement('strong'); home.textContent=match.home || 'Heim'; const score=document.createElement('b'); score.textContent=match.score || 'vs'; const away=document.createElement('strong'); away.textContent=match.away || 'Gast'; matchup.append(home,score,away);
     header.append(meta,matchup);
+    const finished=(data.games || []).filter(game=>Number.isInteger(game.homeLegs)&&Number.isInteger(game.awayLegs));
+    const homeWins=finished.filter(game=>game.homeLegs>game.awayLegs).length, awayWins=finished.filter(game=>game.awayLegs>game.homeLegs).length;
+    const homeLegs=finished.reduce((sum,game)=>sum+game.homeLegs,0), awayLegs=finished.reduce((sum,game)=>sum+game.awayLegs,0);
+    const homeAverages=finished.map(game=>game.home.average).filter(Number.isFinite), awayAverages=finished.map(game=>game.away.average).filter(Number.isFinite);
+    const mean=values=>values.length ? (values.reduce((sum,value)=>sum+value,0)/values.length).toFixed(1) : '–';
+    const allPlayers=finished.flatMap(game=>[{name:game.home.name,average:game.home.average},{name:game.away.name,average:game.away.average}]).filter(item=>Number.isFinite(item.average));
+    const best=allPlayers.sort((a,b)=>b.average-a.average)[0];
+    const throws180=(data.performances || []).filter(event=>event.type==='180').reduce((sum,event)=>sum+(event.count || 1),0);
+    const highFinishes=(data.performances || []).filter(event=>event.type==='high_finish'); const bestFinish=highFinishes.length?Math.max(...highFinishes.map(event=>event.value || 0)):'–';
+    const stats=document.createElement('div'); stats.className='native-match-stats';
+    for (const [label,value] of [['Partien',`${homeWins}:${awayWins}`],['Legs',`${homeLegs}:${awayLegs}`],['Ø Partien',`${mean(homeAverages)} : ${mean(awayAverages)}`],['Bestes Average',best?`${best.average} · ${best.name}`:'–'],['180er',String(throws180)],['High Finish',String(bestFinish)]]) {
+      const stat=document.createElement('div'); const small=document.createElement('span'); small.textContent=label; const strong=document.createElement('strong'); strong.textContent=value; stat.append(small,strong); stats.append(stat);
+    }
     const highlights=document.createElement('div'); highlights.className='native-highlights';
     for (const event of data.performances || []) { const chip=document.createElement('span'); chip.textContent=event.type==='180'?`🎯 180 · ${event.player}`:`🔥 High Finish ${event.value} · ${event.player}`; highlights.append(chip); }
+    const ticker=document.createElement('div'); ticker.className='match-highlight-ticker'; ticker.setAttribute('aria-label','Highlights dieser Begegnung');
+    const tickerLabel=document.createElement('strong'); tickerLabel.textContent='HIGHLIGHTS'; const tickerWindow=document.createElement('div'); const tickerTrack=document.createElement('div'); tickerTrack.className='match-highlight-track';
+    const tickerItems=[];
+    if (match.score) tickerItems.push(`🏁 Endstand: ${match.home} ${match.score} ${match.away}`);
+    for (const event of data.performances || []) tickerItems.push(event.type==='180'?`🎯 180 von ${event.player}`:`🔥 High Finish ${event.value} von ${event.player}`);
+    for (const game of finished) { const homeWon=game.homeLegs>game.awayLegs; tickerItems.push(`✓ Spiel ${game.number}: ${homeWon?game.home.name:game.away.name} gewinnt ${homeWon?game.homeLegs:game.awayLegs}:${homeWon?game.awayLegs:game.homeLegs}`); }
+    for (const text of tickerItems.length?tickerItems:['Noch keine Highlights erfasst']) { const span=document.createElement('span'); span.textContent=text; tickerTrack.append(span); }
+    tickerWindow.append(tickerTrack); ticker.append(tickerLabel,tickerWindow);
     const games=document.createElement('div'); games.className='native-games';
     let lastBlock='';
     for (const game of data.games || []) {
@@ -424,7 +452,7 @@ function initDarts() {
     }
     if (!(data.games || []).length) { const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent='Der detaillierte Spielbericht ist noch nicht gefüllt.'; games.append(empty); }
     const source=document.createElement('a'); source.className='external match-source'; source.href=data.sourceUrl; source.target='_blank'; source.rel='noopener noreferrer'; source.textContent='Offizielle Quelle bei 3K ↗';
-    target.replaceChildren(header,highlights,games,source);
+    target.replaceChildren(header,stats,ticker,highlights,games,source);
   }
   async function openMatch(matchId) {
     if (!Number.isInteger(Number(matchId)) || Number(matchId)<=0) return;

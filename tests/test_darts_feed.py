@@ -100,8 +100,19 @@ class DartsFeedTests(unittest.TestCase):
         }
         league = {"key": "kl04", "name": "Kreisligen 04", "short": "KL 04", "event": 1445, "phase": 2139, "teams": {174110: "A"}}
         item = _season_match(match, league, {"id": 77, "name": "Spieltag 4", "dateFrom": "2026-10-02T00:00:00+02:00"})
-        self.assertEqual((item["barverTeam"], item["leagueShort"], item["round"]["id"]), ("A", "KL 04", 77))
+        self.assertEqual((item["barverTeam"], item["barverTeams"], item["barverSides"], item["leagueShort"], item["round"]["id"]), ("A", ["A"], {"A": "home"}, "KL 04", 77))
         self.assertNotIn("email", str(item))
+
+    def test_club_duel_is_assigned_to_both_barver_teams(self):
+        match = {
+            "id": 124, "eventId": 1445, "statusCd": "OPEN",
+            "participantHome": {"id": 174112, "displayName": "SV Barver Darts C"},
+            "participantGuest": {"id": 174110, "displayName": "SV Barver Darts A"},
+        }
+        league = {"key": "kl04", "name": "Kreisligen 04", "short": "KL 04", "event": 1445, "phase": 2139, "teams": {174110: "A", 174112: "C"}}
+        item = _season_match(match, league, {"id": 78, "name": "Spieltag 5"})
+        self.assertEqual(item["barverTeams"], ["A", "C"])
+        self.assertEqual(item["barverSides"], {"C": "home", "A": "away"})
 
     def test_public_game_calculates_average_and_drops_private_fields(self):
         game = {

@@ -94,12 +94,19 @@ def _barver_code(item: dict, league: dict) -> str | None:
 
 def _season_match(match: dict, league: dict, round_info: dict) -> dict:
     item = _ticker_item(match, league["phase"], int(round_info.get("id") or 0))
+    barver_sides = {}
+    if item.get("homeTeamId") in league["teams"]:
+        barver_sides[league["teams"][item["homeTeamId"]]] = "home"
+    if item.get("awayTeamId") in league["teams"]:
+        barver_sides[league["teams"][item["awayTeamId"]]] = "away"
     item.update({
         "league": league["key"],
         "leagueName": league["name"],
         "leagueShort": league["short"],
         "round": _safe_round(round_info),
         "barverTeam": _barver_code(item, league),
+        "barverTeams": sorted(barver_sides),
+        "barverSides": barver_sides,
     })
     return item
 
@@ -481,7 +488,7 @@ def _load_season(now: datetime) -> dict:
     teams = []
     for league in LEAGUES:
         for team_id, code in league["teams"].items():
-            matches = [item for item in all_matches if item.get("barverTeam") == code]
+            matches = [item for item in all_matches if code in (item.get("barverTeams") or [])]
             results = [item for item in matches if item["kind"] == "final"]
             upcoming = [item for item in matches if item["kind"] != "final"]
             standing = standings_by_id.get(team_id) or {}
