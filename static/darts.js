@@ -469,27 +469,6 @@ function initDarts() {
   function renderMatchDetail(data) {
     const target=q('#matchDetail'), match=data.match || {};
     q('#matchHeading').textContent=`${match.home || 'Heim'} ${match.score || '–'} ${match.away || 'Gast'}`;
-    const header=document.createElement('div'); header.className=`native-match-summary ${match.kind || ''}`;
-    const meta=document.createElement('span'); meta.textContent=`Barver ${(match.barverTeams || [match.barverTeam]).filter(Boolean).join(' / ')} · ${matchLocation(match)} · ${match.leagueShort || ''} · ${match.round?.name || ''} · ${matchDate(match)}`;
-    const matchup=document.createElement('div'); matchup.className='native-match-score large';
-    const home=document.createElement('strong'); home.textContent=match.home || 'Heim'; const score=document.createElement('b'); score.textContent=match.score || 'vs'; const away=document.createElement('strong'); away.textContent=match.away || 'Gast'; matchup.append(home,score,away);
-    header.append(meta,matchup);
-    const liveScores=document.createElement('div'); liveScores.className='native-live-scores';
-    for (const live of data.liveGames || []) {
-      const panel=document.createElement('section'); panel.className='native-live-score';
-      const label=document.createElement('b'); label.textContent='AKTUELLES LEG';
-      const leg=document.createElement('span'); leg.textContent=Number.isInteger(live.home?.legs)&&Number.isInteger(live.away?.legs)?`Legstand ${live.home.legs}:${live.away.legs}`:'Leg läuft';
-      const scoreline=document.createElement('div');
-      const homeLive=document.createElement('span'); homeLive.className=live.currentSide==='home'?'throwing':'';
-      const awayLive=document.createElement('span'); awayLive.className=live.currentSide==='away'?'throwing':'';
-      const homePoints=document.createElement('strong'); homePoints.textContent=Number.isInteger(live.home?.remaining)?live.home.remaining:'–';
-      const awayPoints=document.createElement('strong'); awayPoints.textContent=Number.isInteger(live.away?.remaining)?live.away.remaining:'–';
-      const homeName=document.createElement('small'); homeName.textContent=live.home?.name || 'Heim';
-      const awayName=document.createElement('small'); awayName.textContent=live.away?.name || 'Gast';
-      const divider=document.createElement('em'); divider.textContent=':';
-      homeLive.append(homePoints,homeName); awayLive.append(awayPoints,awayName); scoreline.append(homeLive,divider,awayLive);
-      panel.append(label,leg,scoreline); liveScores.append(panel);
-    }
     const finished=(data.games || []).filter(game=>game.status==='FINISH'&&Number.isInteger(game.homeLegs)&&Number.isInteger(game.awayLegs));
     const homeWins=finished.filter(game=>game.homeLegs>game.awayLegs).length, awayWins=finished.filter(game=>game.awayLegs>game.homeLegs).length;
     const homeLegs=finished.reduce((sum,game)=>sum+game.homeLegs,0), awayLegs=finished.reduce((sum,game)=>sum+game.awayLegs,0);
@@ -499,47 +478,172 @@ function initDarts() {
     const best=allPlayers.sort((a,b)=>b.average-a.average)[0];
     const throws180=(data.performances || []).filter(event=>event.type==='180').reduce((sum,event)=>sum+(event.count || 1),0);
     const highFinishes=(data.performances || []).filter(event=>event.type==='high_finish'); const bestFinish=highFinishes.length?Math.max(...highFinishes.map(event=>event.value || 0)):'–';
-    const stats=document.createElement('div'); stats.className='native-match-stats';
-    for (const [label,value] of [['Partien',`${homeWins}:${awayWins}`],['Legs',`${homeLegs}:${awayLegs}`],['Ø Partien',`${mean(homeAverages)} : ${mean(awayAverages)}`],['Bestes Average',best?`${best.average} · ${best.name}`:'–'],['180er',String(throws180)],['High Finish',String(bestFinish)]]) {
-      const stat=document.createElement('div'); const small=document.createElement('span'); small.textContent=label; const strong=document.createElement('strong'); strong.textContent=value; stat.append(small,strong); stats.append(stat);
-    }
-    const highlights=document.createElement('div'); highlights.className='native-highlights';
-    for (const event of data.performances || []) { const chip=document.createElement('span'); chip.textContent=event.type==='180'?`🎯 180 · ${event.player}`:`🔥 High Finish ${event.value} · ${event.player}`; highlights.append(chip); }
-    const ticker=document.createElement('div'); ticker.className='match-highlight-ticker'; ticker.setAttribute('aria-label','Highlights dieser Begegnung');
-    const tickerLabel=document.createElement('strong'); tickerLabel.textContent='HIGHLIGHTS'; const tickerWindow=document.createElement('div'); const tickerTrack=document.createElement('div'); tickerTrack.className='match-highlight-track';
+    const uniqueNames=side=>[...new Set((data.games || []).map(game=>game[side]?.name).filter(name=>name&&name!=='–'))];
+    const homeNames=uniqueNames('home'), awayNames=uniqueNames('away');
+    const playerSide=player=>{
+      const needle=String(player || '').toLocaleLowerCase('de-DE');
+      if (homeNames.some(name=>String(name).toLocaleLowerCase('de-DE').includes(needle)||needle.includes(String(name).toLocaleLowerCase('de-DE')))) return 'home';
+      if (awayNames.some(name=>String(name).toLocaleLowerCase('de-DE').includes(needle)||needle.includes(String(name).toLocaleLowerCase('de-DE')))) return 'away';
+      return '';
+    };
+    const performancesBySide=side=>(data.performances || []).filter(event=>playerSide(event.player)===side);
+    const home180=performancesBySide('home').filter(event=>event.type==='180').reduce((sum,event)=>sum+(event.count||1),0);
+    const away180=performancesBySide('away').filter(event=>event.type==='180').reduce((sum,event)=>sum+(event.count||1),0);
+    const sideFinish=side=>{ const values=performancesBySide(side).filter(event=>event.type==='high_finish').map(event=>event.value||0); return values.length?Math.max(...values):0; };
+    const makeLiveScores=()=>{
+      const liveScores=document.createElement('div'); liveScores.className='native-live-scores';
+      for (const live of data.liveGames || []) {
+        const panel=document.createElement('section'); panel.className='native-live-score';
+        const label=document.createElement('b'); label.textContent='AKTUELLES LEG';
+        const leg=document.createElement('span'); leg.textContent=Number.isInteger(live.home?.legs)&&Number.isInteger(live.away?.legs)?`Legstand ${live.home.legs}:${live.away.legs}`:'Leg läuft';
+        const scoreline=document.createElement('div');
+        const homeLive=document.createElement('span'); homeLive.className=live.currentSide==='home'?'throwing':'';
+        const awayLive=document.createElement('span'); awayLive.className=live.currentSide==='away'?'throwing':'';
+        const homePoints=document.createElement('strong'); homePoints.textContent=Number.isInteger(live.home?.remaining)?live.home.remaining:'–';
+        const awayPoints=document.createElement('strong'); awayPoints.textContent=Number.isInteger(live.away?.remaining)?live.away.remaining:'–';
+        const homeName=document.createElement('small'); homeName.textContent=live.home?.name || 'Heim';
+        const awayName=document.createElement('small'); awayName.textContent=live.away?.name || 'Gast';
+        const divider=document.createElement('em'); divider.textContent=':';
+        homeLive.append(homePoints,homeName); awayLive.append(awayPoints,awayName); scoreline.append(homeLive,divider,awayLive);
+        panel.append(label,leg,scoreline); liveScores.append(panel);
+      }
+      if (!liveScores.childNodes.length) { const empty=document.createElement('p'); empty.className='match-detail-empty'; empty.textContent=match.kind==='live'?'3K überträgt aktuell noch keine Boarddaten.':'Diese Begegnung ist derzeit nicht live.'; liveScores.append(empty); }
+      return liveScores;
+    };
+    const makeStats=()=>{
+      const stats=document.createElement('div'); stats.className='native-match-stats';
+      for (const [label,value] of [['Partien',`${homeWins}:${awayWins}`],['Legs',`${homeLegs}:${awayLegs}`],['Ø Partien',`${mean(homeAverages)} : ${mean(awayAverages)}`],['Bestes Average',best?`${best.average} · ${best.name}`:'–'],['180er',String(throws180)],['High Finish',String(bestFinish)]]) {
+        const stat=document.createElement('div'); const small=document.createElement('span'); small.textContent=label; const strong=document.createElement('strong'); strong.textContent=value; stat.append(small,strong); stats.append(stat);
+      }
+      return stats;
+    };
+    const makeHighlights=()=>{
+      const highlights=document.createElement('div'); highlights.className='native-highlights';
+      for (const event of data.performances || []) { const chip=document.createElement('span'); chip.textContent=event.type==='180'?`🎯 180 · ${event.player}`:`🔥 High Finish ${event.value} · ${event.player}`; highlights.append(chip); }
+      if (!highlights.childNodes.length) { const empty=document.createElement('p'); empty.className='match-detail-empty'; empty.textContent='Noch keine besonderen Leistungen in 3K erfasst.'; highlights.append(empty); }
+      return highlights;
+    };
     const tickerItems=[];
     if (match.score) tickerItems.push(`${match.kind==='live'?'🔴 Zwischenstand':'🏁 Endstand'}: ${match.home} ${match.score} ${match.away}`);
     for (const event of data.performances || []) tickerItems.push(event.type==='180'?`🎯 180 von ${event.player}`:`🔥 High Finish ${event.value} von ${event.player}`);
     for (const game of finished) { const homeWon=game.homeLegs>game.awayLegs; tickerItems.push(`✓ Spiel ${game.number}: ${homeWon?game.home.name:game.away.name} gewinnt ${homeWon?game.homeLegs:game.awayLegs}:${homeWon?game.awayLegs:game.homeLegs}`); }
+    const ticker=document.createElement('div'); ticker.className='match-highlight-ticker'; ticker.setAttribute('aria-label','Highlights dieser Begegnung');
+    const tickerLabel=document.createElement('strong'); tickerLabel.textContent='HIGHLIGHTS'; const tickerWindow=document.createElement('div'); const tickerTrack=document.createElement('div'); tickerTrack.className='match-highlight-track';
     for (const text of tickerItems.length?tickerItems:['Noch keine Highlights erfasst']) { const span=document.createElement('span'); span.textContent=text; tickerTrack.append(span); }
     tickerWindow.append(tickerTrack); ticker.append(tickerLabel,tickerWindow);
-    const games=document.createElement('div'); games.className='native-games';
-    let lastBlock='';
-    for (const game of data.games || []) {
-      if (game.block!==lastBlock) { const block=document.createElement('h3'); block.textContent=game.block; games.append(block); lastBlock=game.block; }
-      const row=document.createElement('div'); row.className=`native-game ${game.status.toLowerCase()}`;
-      const number=document.createElement('b'); number.textContent=game.number || '–';
-      const homePlayer=document.createElement('span'); homePlayer.textContent=`${game.home.name}${game.home.average!==null?` (${game.home.average})`:''}`;
-      const gameScore=document.createElement('strong'); gameScore.textContent=Number.isInteger(game.homeLegs)&&Number.isInteger(game.awayLegs)?`${game.homeLegs}:${game.awayLegs}`:'–';
-      const awayPlayer=document.createElement('span'); awayPlayer.textContent=`${game.away.name}${game.away.average!==null?` (${game.away.average})`:''}`;
-      row.append(number,homePlayer,gameScore,awayPlayer); games.append(row);
+    const makeGames=()=>{
+      const games=document.createElement('div'); games.className='native-games';
+      let lastBlock='';
+      for (const game of data.games || []) {
+        if (game.block!==lastBlock) { const block=document.createElement('h3'); block.textContent=game.block; games.append(block); lastBlock=game.block; }
+        const row=document.createElement('div'); row.className=`native-game ${game.status.toLowerCase()}`;
+        const number=document.createElement('b'); number.textContent=game.number || '–';
+        const homePlayer=document.createElement('span'); homePlayer.textContent=`${game.home.name}${game.home.average!==null?` (${game.home.average})`:''}`;
+        const gameScore=document.createElement('strong'); gameScore.textContent=Number.isInteger(game.homeLegs)&&Number.isInteger(game.awayLegs)?`${game.homeLegs}:${game.awayLegs}`:'–';
+        const awayPlayer=document.createElement('span'); awayPlayer.textContent=`${game.away.name}${game.away.average!==null?` (${game.away.average})`:''}`;
+        row.append(number,homePlayer,gameScore,awayPlayer); games.append(row);
+      }
+      if (!(data.games || []).length) { const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent='Der detaillierte Spielbericht ist noch nicht gefüllt.'; games.append(empty); }
+      return games;
+    };
+    const makeTimeline=()=>{
+      const timeline=document.createElement('div'); timeline.className='match-timeline';
+      for (const live of data.liveGames || []) {
+        const item=document.createElement('div'); item.className='match-timeline-item live';
+        const mark=document.createElement('b'); mark.textContent='LIVE';
+        const copy=document.createElement('span'); const title=document.createElement('strong'); title.textContent=`${live.home?.name || 'Heim'} gegen ${live.away?.name || 'Gast'}`;
+        const detail=document.createElement('small'); detail.textContent=`${Number.isInteger(live.home?.remaining)?live.home.remaining:'–'} : ${Number.isInteger(live.away?.remaining)?live.away.remaining:'–'} · Legs ${Number.isInteger(live.home?.legs)?live.home.legs:'–'}:${Number.isInteger(live.away?.legs)?live.away.legs:'–'}`;
+        copy.append(title,detail); item.append(mark,copy); timeline.append(item);
+      }
+      for (const event of data.performances || []) {
+        const item=document.createElement('div'); item.className='match-timeline-item highlight';
+        const mark=document.createElement('b'); mark.textContent=event.type==='180'?'180':'HF';
+        const copy=document.createElement('span'); const title=document.createElement('strong'); title.textContent=event.type==='180'?`${event.player} wirft eine 180`:`High Finish ${event.value} von ${event.player}`;
+        const detail=document.createElement('small'); detail.textContent='Besondere Leistung laut 3K-Spielbericht'; copy.append(title,detail); item.append(mark,copy); timeline.append(item);
+      }
+      for (const game of [...finished].reverse().slice(0,8)) {
+        const homeWon=game.homeLegs>game.awayLegs; const winner=homeWon?game.home.name:game.away.name;
+        const item=document.createElement('div'); item.className='match-timeline-item';
+        const mark=document.createElement('b'); mark.textContent=String(game.number);
+        const copy=document.createElement('span'); const title=document.createElement('strong'); title.textContent=`${winner} gewinnt Partie ${game.number}`;
+        const detail=document.createElement('small'); detail.textContent=`${game.home.name} ${game.homeLegs}:${game.awayLegs} ${game.away.name}`; copy.append(title,detail); item.append(mark,copy); timeline.append(item);
+      }
+      if (!timeline.childNodes.length) { const empty=document.createElement('p'); empty.className='match-detail-empty'; empty.textContent='Der Spielverlauf füllt sich automatisch, sobald 3K Ergebnisse liefert.'; timeline.append(empty); }
+      return timeline;
+    };
+    const makeComparison=()=>{
+      const comparison=document.createElement('div'); comparison.className='match-comparison';
+      const values=[
+        ['Ø Partien',mean(homeAverages),mean(awayAverages)],
+        ['Gewonnene Legs',homeLegs,awayLegs],
+        ['180er',home180,away180],
+        ['Bestes Finish',sideFinish('home')||'–',sideFinish('away')||'–'],
+      ];
+      for (const [label,left,right] of values) {
+        const row=document.createElement('div'); const homeValue=document.createElement('strong'); homeValue.textContent=left; const center=document.createElement('span'); center.textContent=label; const awayValue=document.createElement('strong'); awayValue.textContent=right; row.append(homeValue,center,awayValue); comparison.append(row);
+      }
+      return comparison;
+    };
+    const makeLineups=()=>{
+      const lineups=document.createElement('div'); lineups.className='match-lineups';
+      for (const [label,names] of [[match.home || 'Heim',homeNames],[match.away || 'Gast',awayNames]]) {
+        const column=document.createElement('section'); const title=document.createElement('h4'); title.textContent=label; column.append(title);
+        for (const name of names) { const player=document.createElement('span'); player.textContent=name; column.append(player); }
+        if (!names.length) { const empty=document.createElement('small'); empty.textContent='Noch keine Aufstellung verfügbar'; column.append(empty); }
+        lineups.append(column);
+      }
+      return lineups;
+    };
+    const header=document.createElement('section'); header.className=`native-match-summary match-page-hero ${match.kind || ''}`;
+    const metaRow=document.createElement('div'); metaRow.className='match-page-meta';
+    const meta=document.createElement('span'); meta.textContent=`Barver ${(match.barverTeams || [match.barverTeam]).filter(Boolean).join(' / ')} · ${matchLocation(match)} · ${match.leagueShort || ''} · ${match.round?.name || ''} · ${matchDate(match)}`;
+    const freshness=document.createElement('b'); freshness.textContent=`${match.kind==='live'?'● LIVE':match.kind==='final'?'ENDSTAND':'GEPLANT'} · ${data.stale?'letzter verfügbarer Stand':'mit 3K abgeglichen'}`; metaRow.append(meta,freshness);
+    const matchup=document.createElement('div'); matchup.className='native-match-score large';
+    const home=document.createElement('strong'); home.textContent=match.home || 'Heim'; const score=document.createElement('b'); score.textContent=match.score || 'vs'; const away=document.createElement('strong'); away.textContent=match.away || 'Gast'; matchup.append(home,score,away);
+    const progress=document.createElement('small'); progress.textContent=`${finished.length} von ${(data.games || []).length || 12} Partien beendet`;
+    header.append(metaRow,matchup,progress);
+    const tabs=document.createElement('div'); tabs.className='match-detail-tabs'; tabs.setAttribute('role','tablist'); tabs.setAttribute('aria-label','Begegnungsansicht');
+    const panels=document.createElement('div'); panels.className='match-detail-panels';
+    const tabDefinitions=[['overview','Übersicht'],['live','Live'],['games','Einzelpartien'],['stats','Statistiken']];
+    const panelMap=new Map();
+    for (const [id,label] of tabDefinitions) {
+      const button=document.createElement('button'); button.type='button'; button.id=`match-tab-${id}`; button.textContent=label; button.setAttribute('role','tab'); button.setAttribute('aria-controls',`match-panel-${id}`); button.setAttribute('aria-selected',String(id==='overview'));
+      const panel=document.createElement('section'); panel.id=`match-panel-${id}`; panel.className='match-detail-panel'; panel.setAttribute('role','tabpanel'); panel.setAttribute('aria-labelledby',button.id); panel.hidden=id!=='overview';
+      button.addEventListener('click',()=>{ for (const tab of tabs.querySelectorAll('[role="tab"]')) tab.setAttribute('aria-selected',String(tab===button)); for (const item of panels.querySelectorAll('[role="tabpanel"]')) item.hidden=item!==panel; });
+      tabs.append(button); panels.append(panel); panelMap.set(id,panel);
     }
-    if (!(data.games || []).length) { const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent='Der detaillierte Spielbericht ist noch nicht gefüllt.'; games.append(empty); }
+    const overview=panelMap.get('overview');
+    if ((data.liveGames || []).length) overview.append(makeLiveScores());
+    const overviewGrid=document.createElement('div'); overviewGrid.className='match-overview-grid';
+    const flowSection=document.createElement('section'); flowSection.className='match-detail-section'; flowSection.innerHTML='<div class="match-detail-section-head"><h3>Spielverlauf</h3><span>automatisch aus 3K</span></div>'; flowSection.append(makeTimeline());
+    const sideColumn=document.createElement('div'); sideColumn.className='match-overview-side';
+    const comparisonSection=document.createElement('section'); comparisonSection.className='match-detail-section'; comparisonSection.innerHTML='<div class="match-detail-section-head"><h3>Teamvergleich</h3></div>'; comparisonSection.append(makeComparison());
+    const lineupSection=document.createElement('section'); lineupSection.className='match-detail-section'; lineupSection.innerHTML='<div class="match-detail-section-head"><h3>Aufstellung</h3><span>soweit in 3K erfasst</span></div>'; lineupSection.append(makeLineups());
+    sideColumn.append(comparisonSection,lineupSection); overviewGrid.append(flowSection,sideColumn); overview.append(overviewGrid);
+    const livePanel=panelMap.get('live'); livePanel.append(makeLiveScores()); const liveFlow=document.createElement('section'); liveFlow.className='match-detail-section'; liveFlow.innerHTML='<div class="match-detail-section-head"><h3>Live-Ereignisse</h3></div>'; liveFlow.append(makeTimeline()); livePanel.append(liveFlow);
+    panelMap.get('games').append(makeGames());
+    const statsPanel=panelMap.get('stats'); statsPanel.append(makeStats()); const statsGrid=document.createElement('div'); statsGrid.className='match-stats-grid';
+    const compareStats=document.createElement('section'); compareStats.className='match-detail-section'; compareStats.innerHTML='<div class="match-detail-section-head"><h3>Teamvergleich</h3></div>'; compareStats.append(makeComparison());
+    const performanceStats=document.createElement('section'); performanceStats.className='match-detail-section'; performanceStats.innerHTML='<div class="match-detail-section-head"><h3>Bestleistungen</h3></div>'; performanceStats.append(makeHighlights()); statsGrid.append(compareStats,performanceStats); statsPanel.append(statsGrid);
     const source=document.createElement('a'); source.className='external match-source'; source.href=data.sourceUrl; source.target='_blank'; source.rel='noopener noreferrer'; source.textContent='Offizielle Quelle bei 3K ↗';
-    target.replaceChildren(header,...(liveScores.childNodes.length?[liveScores]:[]),stats,ticker,highlights,games,source);
+    target.replaceChildren(header,ticker,tabs,panels,source);
   }
   function demoMatchData(base) {
     const code=barverTeam(base) || 'A';
     const side=(base.home || '').includes(`Barver Darts ${code}`)?'home':'away';
-    const scores=[[3,1],[2,3],[3,0],[3,2],[1,3],[3,2],[3,1],[2,3],[3,0]];
-    const homePlayers=['Jannik Beispiel','Tim Beispiel','Dennis Beispiel','Robin Beispiel','Jannik & Tim','Dennis & Robin','Max Beispiel','Jannik Beispiel','Tim Beispiel','Dennis Beispiel','Doppel Heim','Doppel Heim 2'];
-    const awayPlayers=['Gegner Eins','Gegner Zwei','Gegner Drei','Gegner Vier','Doppel Gast','Doppel Gast 2','Gegner Fünf','Gegner Sechs','Gegner Sieben','Gegner Acht','Doppel Gast 3','Doppel Gast 4'];
+    const scores=[[3,1],[2,3],[3,0],[3,2],[1,3],[3,2],[2,3],[3,2],[1,3]];
+    const barverPlayers=['Jannik Beispiel','Tim Beispiel','Dennis Beispiel','Robin Beispiel','Jannik & Tim','Dennis & Robin','Max Beispiel','Jannik Beispiel','Tim Beispiel','Dennis Beispiel','Doppel Barver','Doppel Barver 2'];
+    const opponents=['Gegner Eins','Gegner Zwei','Gegner Drei','Gegner Vier','Doppel Gegner','Doppel Gegner 2','Gegner Fünf','Gegner Sechs','Gegner Sieben','Gegner Acht','Doppel Gegner 3','Doppel Gegner 4'];
+    const homePlayers=side==='home'?barverPlayers:opponents, awayPlayers=side==='away'?barverPlayers:opponents;
     const games=Array.from({length:12},(_,index)=>{
       const number=index+1, finished=number<=9, active=number===10, pair=finished?scores[index]:active?[2,1]:[null,null];
       return {id:9000+number,number,block:number<=4?'1. Block · Einzel':number<=6?'2. Block · Doppel':number<=10?'3. Block · Einzel':'4. Block · Doppel',status:finished?'FINISH':active?'ACTIVE':'OPEN',home:{name:homePlayers[index],average:finished?45.2+index:null},away:{name:awayPlayers[index],average:finished?41.4+index/2:null},homeLegs:pair[0],awayLegs:pair[1]};
     });
     const match={...base,kind:'live',barverTeam:code,barverTeams:[code],barverSides:{[code]:side},leagueShort:'DEMO',round:{name:'Live-Simulation'},score:'5:4'};
-    return {available:true,stale:false,demo:true,match,games,liveGames:[{id:9010,matchKey:'demo-10',home:{name:'Jannik Beispiel',remaining:320,legs:2},away:{name:'Gegner Eins',remaining:410,legs:1},currentSide:'home',lastUpdated:new Date().toISOString()},{id:9011,matchKey:'demo-11',home:{name:'Tim Beispiel',remaining:201,legs:1},away:{name:'Gegner Drei',remaining:298,legs:0},currentSide:'away',lastUpdated:new Date(Date.now()-1000).toISOString()}],performances:[{type:'180',player:'Jannik Beispiel',count:2,value:180},{type:'high_finish',player:'Dennis Beispiel',count:1,value:121}],sourceUrl:base.url || '#'};
+    const liveGames=side==='home'
+      ? [{id:9010,matchKey:'demo-10',home:{name:'Jannik Beispiel',remaining:320,legs:2},away:{name:'Gegner Eins',remaining:410,legs:1},currentSide:'home',lastUpdated:new Date().toISOString()},{id:9011,matchKey:'demo-11',home:{name:'Tim Beispiel',remaining:201,legs:1},away:{name:'Gegner Drei',remaining:298,legs:0},currentSide:'away',lastUpdated:new Date(Date.now()-1000).toISOString()}]
+      : [{id:9010,matchKey:'demo-10',home:{name:'Gegner Eins',remaining:410,legs:1},away:{name:'Jannik Beispiel',remaining:320,legs:2},currentSide:'away',lastUpdated:new Date().toISOString()},{id:9011,matchKey:'demo-11',home:{name:'Gegner Drei',remaining:298,legs:0},away:{name:'Tim Beispiel',remaining:201,legs:1},currentSide:'home',lastUpdated:new Date(Date.now()-1000).toISOString()}];
+    return {available:true,stale:false,demo:true,match,games,liveGames,performances:[{type:'180',player:'Jannik Beispiel',count:2,value:180},{type:'high_finish',player:'Dennis Beispiel',count:1,value:121}],sourceUrl:base.url || '#'};
   }
   async function openMatch(matchId) {
     if (!Number.isInteger(Number(matchId)) || Number(matchId)<=0) return;
