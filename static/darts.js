@@ -9,6 +9,17 @@ const DARTS_STORAGE = 'clubiq_darts_matches_2026_27';
 function dartsTheme(value, prefersDark=false) {
   return value === 'dark' || value === 'light' ? value : prefersDark ? 'dark' : 'light';
 }
+function dartsRoster(members) {
+  const roleRank = role => {
+    const value=String(role || '').toLocaleLowerCase('de-DE');
+    if (value.includes('kapit')) return 0;
+    if (value.includes('stell')) return 1;
+    return 2;
+  };
+  return [...(Array.isArray(members) ? members : [])].sort((left,right)=>
+    roleRank(left?.role)-roleRank(right?.role) || String(left?.name || '').localeCompare(String(right?.name || ''),'de',{sensitivity:'base'})
+  );
+}
 function pushApplicationKey(value) {
   const padded = `${value}${'='.repeat((4-value.length%4)%4)}`.replace(/-/g,'+').replace(/_/g,'/');
   const raw = atob(padded);
@@ -470,11 +481,15 @@ function initDarts() {
     q('#playerProfileHeading').textContent=member.name;
     const target=q('#playerProfile'), record=team.record || {};
     const hero=document.createElement('section'); hero.className='player-profile-hero';
-    const identity=document.createElement('div'); identity.append(playerAvatar(member,true));
-    const copy=document.createElement('div'); const name=document.createElement('h3'); name.textContent=member.name;
-    const meta=document.createElement('p'); meta.textContent=`${member.role} · ${team.name}`;
+    const copy=document.createElement('div'); copy.className='player-profile-identity';
+    const roleFlag=document.createElement('strong'); roleFlag.className='player-profile-kicker'; roleFlag.textContent=member.role || 'Spieler';
+    const name=document.createElement('h3'); name.textContent=member.name;
+    const meta=document.createElement('p'); meta.textContent=`${team.name} · ${team.league?.short || 'Verein'}`;
     const photoNote=document.createElement('small'); photoNote.textContent=playerPhotos[String(member.id || '')]?'Vereinsfoto':'Vereinsfoto kann später ergänzt werden';
-    copy.append(name,meta,photoNote); identity.append(copy); hero.append(identity);
+    copy.append(roleFlag,name,meta,photoNote);
+    const visual=document.createElement('div'); visual.className='player-profile-visual';
+    const teamMark=document.createElement('b'); teamMark.className='player-profile-team-mark'; teamMark.textContent=team.code;
+    visual.append(teamMark,playerAvatar(member,true)); hero.append(copy,visual);
     const facts=document.createElement('section'); facts.className='player-profile-facts';
     for (const [label,value] of [['Mannschaft',`Barver ${team.code}`],['Liga',team.league?.short || '–'],['Teamspiele',record.played ?? 0],['Teamsiege',record.wins ?? 0]]) {
       const item=document.createElement('div'); const text=document.createElement('span'); text.textContent=label; const strong=document.createElement('strong'); strong.textContent=value; item.append(text,strong); facts.append(item);
@@ -522,7 +537,7 @@ function initDarts() {
     if (!team.nextMatch && !recent.length) { const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent='Noch keine Begegnungen vorhanden.'; schedule.append(empty); }
     const squad=document.createElement('section'); squad.className='team-profile-section team-squad'; const squadTitle=document.createElement('h3'); squadTitle.textContent='Kader'; squad.append(squadTitle);
     const roster=document.createElement('div'); roster.className='team-roster';
-    for (const member of team.roster || []) {
+    for (const member of dartsRoster(team.roster)) {
       const player=document.createElement('button'); player.type='button'; player.className='player-roster-card'; player.setAttribute('aria-label',`${member.name}, Spielerprofil öffnen`);
       player.append(playerAvatar(member));
       const playerCopy=document.createElement('span'); const playerName=document.createElement('strong'); playerName.textContent=member.name; const role=document.createElement('small'); role.textContent=member.role; playerCopy.append(playerName,role);

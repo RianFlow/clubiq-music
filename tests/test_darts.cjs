@@ -9,6 +9,14 @@ assert.equal(dartsTheme('dark'), 'dark');
 assert.equal(dartsTheme('light', true), 'light');
 assert.equal(dartsTheme(null, true), 'dark');
 assert.equal(dartsTheme('invalid', false), 'light');
+const dartsRoster = vm.runInContext('dartsRoster',context);
+const orderedRoster = dartsRoster([
+  {name:'Zeno Spieler',role:'Spieler'},
+  {name:'Alex Stellvertreter',role:'Stellvertretung'},
+  {name:'Berta Spielerin',role:'Spieler'},
+  {name:'Klara Kapitän',role:'Kapitän'},
+]);
+assert.deepEqual(Array.from(orderedRoster,member=>member.name),['Klara Kapitän','Alex Stellvertreter','Berta Spielerin','Zeno Spieler']);
 const dartsSponsors = vm.runInContext('dartsSponsors',context);
 const sponsorConfig = {displaySeconds:2,sponsors:[
   {id:'active',name:'Lokaler Betrieb',image:'/pics/sponsors/betrieb.png',href:'https://example.com',placements:['top','inline'],startsAt:'2026-01-01',endsAt:'2026-12-31'},
