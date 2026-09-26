@@ -20,6 +20,12 @@ function dartsRoster(members) {
     roleRank(left?.role)-roleRank(right?.role) || String(left?.name || '').localeCompare(String(right?.name || ''),'de',{sensitivity:'base'})
   );
 }
+function dartsTeamCode(value) {
+  const match=String(value || '').match(/(?:SV\s+)?Barver(?:\s+Darts)?\s+([A-D1-4])\b/i);
+  if (!match) return '';
+  const code=match[1].toLocaleUpperCase('de-DE');
+  return ({1:'A',2:'B',3:'C',4:'D'})[code] || code;
+}
 function dartsPlayerProfiles(config) {
   const result={};
   for (const [id,raw] of Object.entries(config?.players || {})) {
@@ -30,7 +36,20 @@ function dartsPlayerProfiles(config) {
     const alias=typeof item.alias==='string' ? item.alias.trim().slice(0,50) : '';
     const numericAverage=typeof item.average==='number' ? item.average : Number.NaN;
     const average=Number.isFinite(numericAverage) && numericAverage>=0 && numericAverage<=180 ? Math.round(numericAverage*10)/10 : null;
-    result[id]={image,alias,average};
+    const rawPersonal=item.personal && typeof item.personal==='object' ? item.personal : {};
+    const cleanPersonalText=(value,max=100)=>typeof value==='string' ? value.trim().slice(0,max) : '';
+    const numericWeight=typeof rawPersonal.weightGrams==='number' ? rawPersonal.weightGrams : Number.NaN;
+    const numericFinish=typeof rawPersonal.favoriteFinish==='number' ? rawPersonal.favoriteFinish : Number.NaN;
+    const personal={
+      darts:cleanPersonalText(rawPersonal.darts,80),
+      weightGrams:Number.isFinite(numericWeight) && numericWeight>=10 && numericWeight<=60 ? Math.round(numericWeight*10)/10 : null,
+      favoritePdcPlayer:cleanPersonalText(rawPersonal.favoritePdcPlayer,80),
+      favoriteFinish:Number.isFinite(numericFinish) && numericFinish>=2 && numericFinish<=170 ? Math.round(numericFinish) : null,
+      finishRoute:cleanPersonalText(rawPersonal.finishRoute,80),
+      walkOnSong:cleanPersonalText(rawPersonal.walkOnSong,100),
+    };
+    const hasPersonal=personal.darts || personal.weightGrams!==null || personal.favoritePdcPlayer || personal.favoriteFinish!==null || personal.finishRoute || personal.walkOnSong;
+    result[id]={image,alias,average,...(hasPersonal?{personal}:{})};
   }
   return result;
 }
@@ -261,9 +280,9 @@ function initDarts() {
       const card = document.createElement(item?.id ? 'a' : 'article');
       card.className=`match-center-card ${item?.kind || 'empty'}`;
       if (item?.id) { card.href=`#match-${item.id}`; card.addEventListener('click',event=>{ event.preventDefault(); openMatch(item.id); }); }
-      const top=document.createElement('span'); top.className='match-center-team'; top.textContent=`BARVER ${code}`;
+      const top=document.createElement('span'); top.className='match-center-team'; top.append(makeTeamJump(code,`BARVER ${code}`));
       const status=document.createElement('b'); status.className='match-center-status'; status.textContent=item ? (item.isSpecial&&item.kind==='upcoming'?competitionLabel(item):labels[item.kind]) : 'KEIN TERMIN';
-      const text=document.createElement('strong'); text.textContent=item?.text || 'Keine Begegnung im aktuellen Zeitraum';
+      const text=document.createElement('strong'); appendTeamAwareText(text,item?.text || 'Keine Begegnung im aktuellen Zeitraum');
       const when=document.createElement('span'); when.className='match-center-time'; when.textContent=item ? tickerTime(item) : '3K-Spielplan prüfen';
       card.append(top,status,text,when); fragment.append(card);
     }
@@ -287,11 +306,12 @@ function initDarts() {
     for (const item of shown) {
       const card=document.createElement('a'); card.className=`today-game ${item.kind}`; card.href=`#match-${item.id}`; card.addEventListener('click',event=>{ event.preventDefault(); openMatch(item.id); });
       const code=barverTeam(item); const badge=document.createElement('b'); badge.textContent=item.kind==='live'?'LIVE':item.kind==='final'?'ERGEBNIS':item.isSpecial?competitionLabel(item):'NÄCHSTES SPIEL';
-      const team=document.createElement('span'); team.className='today-team'; team.textContent=code?`BARVER ${code}`:'SV BARVER';
+      const team=document.createElement('span'); team.className='today-team';
+      if (code) team.append(makeTeamJump(code,`BARVER ${code}`)); else team.textContent='SV BARVER';
       const matchup=document.createElement('div'); matchup.className='today-matchup';
-      const home=document.createElement('strong'); home.textContent=item.home || 'Heim';
+      const home=clubNameNode(item.home || 'Heim');
       const score=document.createElement('b'); score.textContent=item.score || 'VS';
-      const away=document.createElement('strong'); away.textContent=item.away || 'Gast';
+      const away=clubNameNode(item.away || 'Gast');
       matchup.append(home,score,away);
       const when=document.createElement('span'); when.className='today-time'; when.textContent=tickerTime(item);
       card.append(badge,team,matchup);
@@ -358,9 +378,9 @@ function initDarts() {
       const link = document.createElement('a'); link.className=`ticker-item ${item.kind}`; link.href=`#match-${item.id}`;
       link.addEventListener('click',event=>{ event.preventDefault(); openMatch(item.id); });
       const teamCode = barverTeam(item);
-      if (teamCode) { const team=document.createElement('b'); team.className='ticker-team'; team.textContent=`BARVER ${teamCode}`; link.append(team); }
+      if (teamCode) { const team=document.createElement('b'); team.className='ticker-team'; team.append(makeTeamJump(teamCode,`BARVER ${teamCode}`)); link.append(team); }
       if (item.isSpecial) { const competition=document.createElement('b'); competition.className='ticker-competition'; competition.textContent=competitionLabel(item); link.append(competition); }
-      const text = document.createElement('span'); text.textContent=item.text; link.append(text);
+      const text = document.createElement('span'); appendTeamAwareText(text,item.text); link.append(text);
       const when = tickerTime(item); if (when) { const time=document.createElement('span'); time.className='ticker-time'; time.textContent=when; link.append(time); }
       group.append(link);
     }
@@ -424,6 +444,46 @@ function initDarts() {
   }
   loadTicker();
   let seasonData=null, seasonStatus='upcoming', seasonLoading=false;
+  function teamByCode(code) {
+    const normalized=dartsTeamCode(`Barver ${code}`);
+    return (seasonData?.teams || []).find(team=>team.code===normalized) || null;
+  }
+  async function openTeamByCode(code) {
+    const normalized=dartsTeamCode(`Barver ${code}`);
+    if (!normalized) return;
+    if (!seasonData) await loadSeason();
+    const team=teamByCode(normalized);
+    if (!team) return;
+    for (const selector of ['#matchDialog','#playerDialog','#teamDialog']) {
+      const dialog=q(selector); if (dialog?.open) dialog.close();
+    }
+    openTeamProfile(team);
+  }
+  function makeTeamJump(code, label=`Barver ${code}`) {
+    const jump=document.createElement('span'); jump.className='barver-team-link'; jump.textContent=label;
+    jump.setAttribute('role','link'); jump.tabIndex=0; jump.setAttribute('aria-label',`${label}, Mannschaftsseite öffnen`);
+    const open=event=>{ event.preventDefault(); event.stopPropagation(); openTeamByCode(code); };
+    jump.addEventListener('click',open);
+    jump.addEventListener('keydown',event=>{ if (event.key==='Enter' || event.key===' ') open(event); });
+    return jump;
+  }
+  function appendTeamCodes(target, codes, prefix='Barver ') {
+    const values=[...new Set((codes || []).map(code=>dartsTeamCode(`Barver ${code}`)).filter(Boolean))];
+    values.forEach((code,index)=>{ if (index) target.append(' / '); target.append(makeTeamJump(code,`${prefix}${code}`)); });
+  }
+  function clubNameNode(name, tag='strong') {
+    const element=document.createElement(tag); const code=dartsTeamCode(name);
+    if (code) element.append(makeTeamJump(code,name)); else element.textContent=name;
+    return element;
+  }
+  function appendTeamAwareText(target, value) {
+    const text=String(value || ''); const expression=/(SV\s+Barver\s+Darts\s+[A-D1-4]|Barver\s+[A-D])\b/gi;
+    let start=0;
+    for (const match of text.matchAll(expression)) {
+      target.append(text.slice(start,match.index),makeTeamJump(dartsTeamCode(match[0]),match[0])); start=match.index+match[0].length;
+    }
+    target.append(text.slice(start));
+  }
   function matchDate(item) {
     return formatDate(item.plannedAt || item.updatedAt,{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
   }
@@ -454,7 +514,9 @@ function initDarts() {
       const copy=document.createElement('div');
       const title=document.createElement('strong'); title.textContent=event.name;
       const meta=document.createElement('span'); meta.textContent=featured ? `${featured.round?.name || 'Wettbewerb'} · ${matchDate(featured)}` : `${event.matchCount || 0} Spiele gefunden`;
-      const matchup=document.createElement('small'); matchup.textContent=featured ? `${featured.home} ${featured.score || 'gegen'} ${featured.away}` : 'Automatisch mit 3K abgeglichen';
+      const matchup=document.createElement('small');
+      if (featured) matchup.append(clubNameNode(featured.home,'span'),` ${featured.score || 'gegen'} `,clubNameNode(featured.away,'span'));
+      else matchup.textContent='Automatisch mit 3K abgeglichen';
       copy.append(title,meta,matchup); card.append(badge,copy);
       if (featured?.id) {
         const open=document.createElement('button'); open.type='button'; open.textContent=featured.kind==='final'?'Ergebnis':'Spiel öffnen'; open.addEventListener('click',()=>openMatch(featured.id)); card.append(open);
@@ -466,7 +528,7 @@ function initDarts() {
   function makeProfileMatch(item, code) {
     const row=document.createElement('button'); row.type='button'; row.className=`team-profile-match ${item.kind}`;
     const meta=document.createElement('span'); meta.textContent=`${competitionLabel(item)} · ${item.round?.name || 'Spiel'} · ${matchLocation(item,code)} · ${matchDate(item)}`;
-    const score=document.createElement('strong'); score.textContent=`${item.home}  ${item.score || 'vs'}  ${item.away}`;
+    const score=document.createElement('strong'); score.append(clubNameNode(item.home,'span'),`  ${item.score || 'vs'}  `,clubNameNode(item.away,'span'));
     row.append(meta,score); row.addEventListener('click',()=>{ q('#teamDialog').close(); openMatch(item.id); });
     return row;
   }
@@ -493,7 +555,7 @@ function initDarts() {
     const copy=document.createElement('div'); copy.className='player-profile-identity';
     const roleFlag=document.createElement('strong'); roleFlag.className='player-profile-kicker'; roleFlag.textContent=profile.alias ? `„${profile.alias}“` : member.role || 'Spieler';
     const name=document.createElement('h3'); name.textContent=member.name;
-    const meta=document.createElement('p'); meta.textContent=`${member.role} · ${team.name} · ${team.league?.short || 'Verein'}`;
+    const meta=document.createElement('p'); meta.append(`${member.role} · `,makeTeamJump(team.code,team.name),` · ${team.league?.short || 'Verein'}`);
     const photoNote=document.createElement('small'); photoNote.textContent=profile.image?'Vereinsfoto':'Vereinsfoto kann später ergänzt werden';
     copy.append(roleFlag,name,meta,photoNote);
     const visual=document.createElement('div'); visual.className='player-profile-visual';
@@ -501,11 +563,33 @@ function initDarts() {
     visual.append(teamMark,playerAvatar(member,true)); hero.append(copy,visual);
     const facts=document.createElement('section'); facts.className='player-profile-facts';
     for (const [label,value] of [['Mannschaft',`Barver ${team.code}`],['Liga',team.league?.short || '–'],['Funktion',member.role || 'Spieler'],['Aktueller Ø',profile.average===null || profile.average===undefined?'Noch offen':profile.average.toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1})],['Teamspiele',record.played ?? 0],['Teamsiege',record.wins ?? 0]]) {
-      const item=document.createElement('div'); const text=document.createElement('span'); text.textContent=label; const strong=document.createElement('strong'); strong.textContent=value; item.append(text,strong); facts.append(item);
+      const item=document.createElement('div'); const text=document.createElement('span'); text.textContent=label; const strong=document.createElement('strong');
+      if (label==='Mannschaft') strong.append(makeTeamJump(team.code,value)); else strong.textContent=value;
+      item.append(text,strong); facts.append(item);
     }
+    const personal=profile.personal || {};
+    const personalSection=document.createElement('section'); personalSection.className='team-profile-section player-personal-section';
+    const personalTitle=document.createElement('h3'); personalTitle.textContent='Persönlich';
+    const personalIntro=document.createElement('p'); personalIntro.className='player-profile-copy'; personalIntro.textContent='Setup, Vorbilder und die persönlichen Favoriten am Oche.';
+    const personalGrid=document.createElement('div'); personalGrid.className='player-personal-grid';
+    const personalFacts=[
+      ['Darts',personal.darts || 'Noch offen'],
+      ['Gewicht',personal.weightGrams===null || personal.weightGrams===undefined ? 'Noch offen' : `${personal.weightGrams.toLocaleString('de-DE',{maximumFractionDigits:1})} g`],
+      ['PDC-Lieblingsspieler',personal.favoritePdcPlayer || 'Noch offen'],
+      ['Lieblingsfinish',personal.favoriteFinish===null || personal.favoriteFinish===undefined ? 'Noch offen' : String(personal.favoriteFinish)],
+      ['Checkout-Weg',personal.finishRoute || 'Noch offen'],
+      ['Einlaufsong',personal.walkOnSong || 'Noch offen'],
+    ];
+    for (const [label,value] of personalFacts) {
+      const item=document.createElement('div'); item.className=`player-personal-item${value==='Noch offen'?' is-empty':''}`;
+      const text=document.createElement('span'); text.textContent=label;
+      const strong=document.createElement('strong'); strong.textContent=value;
+      item.append(text,strong); personalGrid.append(item);
+    }
+    personalSection.append(personalTitle,personalIntro,personalGrid);
     const grid=document.createElement('div'); grid.className='player-profile-grid';
     const sport=document.createElement('section'); sport.className='team-profile-section'; const sportTitle=document.createElement('h3'); sportTitle.textContent='Sportlicher Überblick'; sport.append(sportTitle);
-    const role=document.createElement('p'); role.className='player-profile-copy'; role.textContent=`${member.name} hat im Kader von ${team.name} die Rolle „${member.role}“.`;
+    const role=document.createElement('p'); role.className='player-profile-copy'; role.append(`${member.name} hat im Kader von `,makeTeamJump(team.code,team.name),` die Rolle „${member.role}“.`);
     sport.append(role);
     if (team.nextMatch) { const label=document.createElement('p'); label.className='eyebrow'; label.textContent='Nächster Mannschaftstermin'; sport.append(label,makeProfileMatch(team.nextMatch,team.code)); }
     const results=document.createElement('section'); results.className='team-profile-section'; const resultsTitle=document.createElement('h3'); resultsTitle.textContent='Letzte Mannschaftsergebnisse'; results.append(resultsTitle);
@@ -517,7 +601,7 @@ function initDarts() {
     const loading=document.createElement('small'); loading.textContent='Das Laden ausführlicher 3K-Statistiken kann später einige Sekunden dauern.';
     stats.append(statsTitle,statsCopy,loading);
     const back=document.createElement('button'); back.type='button'; back.className='primary'; back.textContent=`Zurück zu Barver ${team.code}`; back.addEventListener('click',()=>{ q('#playerDialog').close(); openTeamProfile(team); }); stats.append(back);
-    grid.append(sport,results,stats); target.replaceChildren(hero,facts,grid);
+    grid.append(sport,results,stats); target.replaceChildren(hero,facts,personalSection,grid);
     if (!q('#playerDialog').open) q('#playerDialog').showModal();
   }
   function openTeamProfile(team) {
@@ -590,12 +674,13 @@ function initDarts() {
     const fragment=document.createDocumentFragment();
     for (const item of matches) {
       const row=document.createElement('button'); row.type='button'; row.className=`native-match-row ${item.kind}`;
-      const codes=(item.barverTeams || [item.barverTeam]).filter(Boolean); const shownTeam=team==='all'?codes.join(' / '):team;
-      const info=document.createElement('span'); info.className='native-match-meta'; info.textContent=`Barver ${shownTeam} · ${matchLocation(item,team==='all'?'':team)} · ${competitionLabel(item)} · ${item.round?.name || 'Spieltag'} · ${matchDate(item)}`;
+      const codes=(item.barverTeams || [item.barverTeam]).filter(Boolean);
+      const info=document.createElement('span'); info.className='native-match-meta';
+      appendTeamCodes(info,codes); info.append(` · ${matchLocation(item,team==='all'?'':team)} · ${competitionLabel(item)} · ${item.round?.name || 'Spieltag'} · ${matchDate(item)}`);
       const teams=document.createElement('span'); teams.className='native-match-score';
-      const home=document.createElement('strong'); home.textContent=item.home;
+      const home=clubNameNode(item.home);
       const score=document.createElement('b'); score.textContent=item.score || 'vs';
-      const away=document.createElement('strong'); away.textContent=item.away;
+      const away=clubNameNode(item.away);
       const state=document.createElement('span'); state.className='native-match-state'; state.textContent=item.kind==='live'?'LIVE':item.kind==='final'?'Endstand':'Geplant';
       teams.append(home,score,away); row.append(info,teams,state);
       row.addEventListener('click',()=>openMatch(item.id)); fragment.append(row);
@@ -749,7 +834,7 @@ function initDarts() {
     const makeLineups=()=>{
       const lineups=document.createElement('div'); lineups.className='match-lineups';
       for (const [label,names] of [[match.home || 'Heim',homeNames],[match.away || 'Gast',awayNames]]) {
-        const column=document.createElement('section'); const title=document.createElement('h4'); title.textContent=label; column.append(title);
+        const column=document.createElement('section'); const title=document.createElement('h4'); title.append(clubNameNode(label,'span')); column.append(title);
         for (const name of names) { const player=document.createElement('span'); player.textContent=name; column.append(player); }
         if (!names.length) { const empty=document.createElement('small'); empty.textContent='Noch keine Aufstellung verfügbar'; column.append(empty); }
         lineups.append(column);
@@ -758,10 +843,10 @@ function initDarts() {
     };
     const header=document.createElement('section'); header.className=`native-match-summary match-page-hero ${match.kind || ''}`;
     const metaRow=document.createElement('div'); metaRow.className='match-page-meta';
-    const meta=document.createElement('span'); meta.textContent=`Barver ${(match.barverTeams || [match.barverTeam]).filter(Boolean).join(' / ')} · ${matchLocation(match)} · ${competitionLabel(match)} · ${match.round?.name || ''} · ${matchDate(match)}`;
+    const meta=document.createElement('span'); appendTeamCodes(meta,(match.barverTeams || [match.barverTeam]).filter(Boolean)); meta.append(` · ${matchLocation(match)} · ${competitionLabel(match)} · ${match.round?.name || ''} · ${matchDate(match)}`);
     const freshness=document.createElement('b'); freshness.textContent=`${match.kind==='live'?'● LIVE':match.kind==='final'?'ENDSTAND':'GEPLANT'} · ${data.stale?'letzter verfügbarer Stand':'mit 3K abgeglichen'}`; metaRow.append(meta,freshness);
     const matchup=document.createElement('div'); matchup.className='native-match-score large';
-    const home=document.createElement('strong'); home.textContent=match.home || 'Heim'; const score=document.createElement('b'); score.textContent=match.score || 'vs'; const away=document.createElement('strong'); away.textContent=match.away || 'Gast'; matchup.append(home,score,away);
+    const home=clubNameNode(match.home || 'Heim'); const score=document.createElement('b'); score.textContent=match.score || 'vs'; const away=clubNameNode(match.away || 'Gast'); matchup.append(home,score,away);
     const progress=document.createElement('small'); progress.textContent=`${finished.length} von ${(data.games || []).length || 12} Partien beendet`;
     header.append(metaRow,matchup,progress);
     const tabs=document.createElement('div'); tabs.className='match-detail-tabs'; tabs.setAttribute('role','tablist'); tabs.setAttribute('aria-label','Begegnungsansicht');
@@ -1029,6 +1114,7 @@ function initDarts() {
     card.innerHTML = `<div class="team-head"><span class="team-letter">${team.id.toUpperCase()}</span><span class="club-logo team-club-logo" aria-hidden="true"></span><div><h2>${team.name}</h2><p class="match-note"></p></div><button class="focus-team" type="button" aria-label="${team.name} vergrößern" aria-pressed="false">Groß</button></div>
       <div class="team-tools"><select aria-label="Ansicht für ${team.name}"><option value="team">Spielplan & Ergebnisse</option><option value="report" disabled>Gewählter Spielbericht</option><option value="live" disabled>Gewähltes Spiel live</option></select><button class="configure" type="button">Spiel wählen</button><button class="reload" type="button" aria-label="${team.name} neu laden">Neu laden</button><a class="external" target="_blank" rel="noopener noreferrer">Bei 3K öffnen ↗</a></div>
       <div class="frame-wrap"><div class="placeholder"><strong>${team.league}</strong><p>Spielplan und Ergebnisse dieser Mannschaft von 3K Darts laden.</p><button class="load-team primary" type="button">${team.id.toUpperCase()} anzeigen</button></div></div><p class="frame-note">Noch keine Verbindung zu 3K. Die Musik wird durch diese Ansicht nicht gesteuert.</p>`;
+    card.querySelector('h2').replaceChildren(makeTeamJump(team.id.toUpperCase(),team.name));
     grid.append(card);
     const c = {card,wrap:card.querySelector('.frame-wrap'),select:card.querySelector('select'),open:card.querySelector('.external'),note:card.querySelector('.frame-note'),matchNote:card.querySelector('.match-note'),focus:card.querySelector('.focus-team'),loaded:false};
     cards.set(team.id,c); c.select.value = layout.modes[team.id]; sync(team);

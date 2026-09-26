@@ -260,6 +260,10 @@ h1 { font:500 clamp(1.7rem,3vw,2.7rem)/1.15 Georgia,serif; margin:0; }
 .team-profile-match { display:grid; gap:4px; width:100%; padding:10px 11px; text-align:left; background:#f4f6f1; border-color:#d6ddd7; border-radius:9px; }
 .team-profile-match span { color:#60706b; font-size:.72rem; }
 .team-profile-match strong { color:#173b35; font-size:.86rem; }
+.barver-team-link { color:inherit; cursor:pointer; text-decoration:underline; text-decoration-color:rgba(44,119,104,.48); text-decoration-thickness:2px; text-underline-offset:3px; }
+.barver-team-link:hover { color:#176b5b; text-decoration-color:currentColor; }
+.barver-team-link:focus-visible { outline:3px solid #efc94d; outline-offset:3px; border-radius:3px; }
+.match-page-hero .barver-team-link,.player-profile-hero .barver-team-link,.ticker-team .barver-team-link,.match-center-team .barver-team-link,.today-team .barver-team-link { text-decoration-color:#efc94d; }
 .team-profile-match.upcoming { box-shadow:inset 4px 0 #2c7768; }
 .team-profile-match.live { box-shadow:inset 4px 0 #c9392d; }
 .team-roster { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; align-content:start; background:transparent; }
@@ -285,11 +289,18 @@ h1 { font:500 clamp(1.7rem,3vw,2.7rem)/1.15 Georgia,serif; margin:0; }
 .player-profile-team-mark { position:absolute; right:14px; top:4px; color:rgba(240,217,145,.12); font:900 15rem/.9 Arial,sans-serif; }
 .player-profile-hero .player-avatar.large { position:relative; z-index:1; flex-basis:220px; width:220px; min-width:220px; max-width:220px; height:220px; min-height:220px; max-height:220px; border:5px solid rgba(255,255,255,.38); box-shadow:0 18px 50px #0008; font-size:4rem; }
 .player-profile-hero .player-avatar.large:not(.avatar-fallback) { width:240px; min-width:240px; max-width:240px; height:278px; min-height:278px; max-height:278px; border:0; border-radius:24px 24px 0 0; background:transparent; box-shadow:none; }
-.player-profile-hero .player-avatar.large img { object-position:center top; }
+.player-profile-hero .player-avatar.large img { object-fit:cover; object-position:center top; }
 .player-profile-facts { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:8px; margin-bottom:12px; }
 .player-profile-facts > div { display:grid; gap:4px; min-height:72px; align-content:center; padding:10px 12px; text-align:center; background:#f5f7f2; border:1px solid var(--line); border-radius:11px; }
 .player-profile-facts span { color:#60706b; font-size:.72rem; text-transform:uppercase; }
 .player-profile-facts strong { color:#173b35; font:700 1.08rem Georgia,serif; }
+.player-personal-section { gap:12px; margin-bottom:12px; padding:16px 18px; }
+.player-personal-section > h3 { margin:0; }
+.player-personal-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.player-personal-item { display:grid; gap:4px; min-height:62px; align-content:center; padding:10px 12px; background:#f5f7f2; border:1px solid var(--line); border-radius:11px; }
+.player-personal-item span { color:#60706b; font-size:.7rem; letter-spacing:.05em; text-transform:uppercase; }
+.player-personal-item strong { color:#173b35; font:700 1rem/1.25 Georgia,serif; overflow-wrap:anywhere; }
+.player-personal-item.is-empty strong { color:#82908b; font-style:italic; font-weight:600; }
 .player-profile-grid { display:grid; grid-template-columns:1.05fr 1fr .9fr; gap:12px; align-items:start; }
 .player-profile-copy,.player-stats-note p { margin:0; color:#52645e; line-height:1.55; }
 .player-stats-note small { color:#60706b; line-height:1.45; }
@@ -543,8 +554,10 @@ body:fullscreen .today-time { font-size:.9rem; }
 [data-theme="dark"] .player-avatar { color:#173b35; }
 [data-theme="dark"] .player-profile-hero { background-color:#07110f; background-image:linear-gradient(125deg,rgba(12,58,48,.96),rgba(3,10,9,.99) 60%),repeating-linear-gradient(60deg,transparent 0 24px,rgba(75,177,150,.15) 25px 27px); }
 [data-theme="dark"] .player-profile-facts>div { background:#111f1b; border-color:#30443e; }
-[data-theme="dark"] .player-profile-facts span,[data-theme="dark"] .player-profile-copy,[data-theme="dark"] .player-stats-note p,[data-theme="dark"] .player-stats-note small { color:#aebdb8; }
-[data-theme="dark"] .player-profile-facts strong { color:#e8f0ec; }
+[data-theme="dark"] .player-profile-facts span,[data-theme="dark"] .player-profile-copy,[data-theme="dark"] .player-stats-note p,[data-theme="dark"] .player-stats-note small,[data-theme="dark"] .player-personal-item span { color:#aebdb8; }
+[data-theme="dark"] .player-profile-facts strong,[data-theme="dark"] .player-personal-item strong { color:#e8f0ec; }
+[data-theme="dark"] .player-personal-item { background:#111f1b; border-color:#30443e; }
+[data-theme="dark"] .player-personal-item.is-empty strong { color:#879791; }
 [data-theme="dark"] .data-load-note { color:#b8ccc5; background:#152721; border-color:#30443e; }
 [data-theme="dark"] .native-games { border-color:#30443e; }
 [data-theme="dark"] .native-game { border-color:#293b35; }
@@ -628,6 +641,7 @@ body:fullscreen .today-time { font-size:.9rem; }
   .player-profile-hero .player-avatar.large { flex-basis:158px; width:158px; min-width:158px; max-width:158px; height:158px; min-height:158px; max-height:158px; font-size:3rem; }
   .player-profile-hero .player-avatar.large:not(.avatar-fallback) { width:180px; min-width:180px; max-width:180px; height:205px; min-height:205px; max-height:205px; }
   .player-profile-facts { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .player-personal-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .player-profile-grid { grid-template-columns:1fr; }
   .native-match-row { grid-template-columns:1fr auto; gap:8px; }
   .native-match-meta { grid-column:1/-1; }

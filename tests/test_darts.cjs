@@ -4,6 +4,11 @@ const vm = require('node:vm');
 const context = vm.createContext({URL});
 vm.runInContext(fs.readFileSync('static/darts.js','utf8'),context);
 const {dartsMatch,DARTS_TEAMS} = vm.runInContext('({dartsMatch,DARTS_TEAMS})',context);
+const dartsTeamCode = vm.runInContext('dartsTeamCode',context);
+assert.equal(dartsTeamCode('SV Barver Darts A'),'A');
+assert.equal(dartsTeamCode('SV Barver Darts 2'),'B');
+assert.equal(dartsTeamCode('Barver D'),'D');
+assert.equal(dartsTeamCode('Anderer Verein'),'');
 const dartsTheme = vm.runInContext('dartsTheme',context);
 assert.equal(dartsTheme('dark'), 'dark');
 assert.equal(dartsTheme('light', true), 'light');
@@ -21,10 +26,12 @@ const dartsPlayerProfiles = vm.runInContext('dartsPlayerProfiles',context);
 assert.deepEqual(JSON.parse(JSON.stringify(dartsPlayerProfiles({players:{
   '123':{image:'/pics/players/max.webp',alias:'The Test',average:61.26},
   '124':'/pics/players/legacy.jpg',
+  '125':{personal:{darts:'Target Example',weightGrams:23.04,favoritePdcPlayer:'Luke Example',favoriteFinish:121,finishRoute:'T20 · 11 · Bull',walkOnSong:'Example Song'}},
   'bad':{image:'/private/photo.jpg',alias:'Unsicher',average:999},
 }}))),{
   '123':{image:'/pics/players/max.webp',alias:'The Test',average:61.3},
   '124':{image:'/pics/players/legacy.jpg',alias:'',average:null},
+  '125':{image:'',alias:'',average:null,personal:{darts:'Target Example',weightGrams:23,favoritePdcPlayer:'Luke Example',favoriteFinish:121,finishRoute:'T20 · 11 · Bull',walkOnSong:'Example Song'}},
 });
 const dartsSponsors = vm.runInContext('dartsSponsors',context);
 const sponsorConfig = {displaySeconds:2,sponsors:[
@@ -107,6 +114,8 @@ const script = fs.readFileSync('static/darts.js','utf8');
 assert.match(fs.readFileSync('static/darts.css','utf8'),/sv-barver-darts-tight\.png/);
 assert.match(fs.readFileSync('static/darts.css','utf8'),/data-theme="dark"/);
 assert.match(script,/function renderMatchCenter\(data\)/);
+assert.match(script,/function makeTeamJump\(code/);
+assert.match(script,/Mannschaftsseite öffnen/);
 assert.match(script,/fetch\('\/static\/darts-sponsors\.json'/);
 assert.match(script,/Notification\.requestPermission\(\)/);
 assert.match(script,/\/api\/v1\/darts\/push\/subscribe/);
