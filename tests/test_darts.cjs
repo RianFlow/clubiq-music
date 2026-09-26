@@ -17,6 +17,15 @@ const orderedRoster = dartsRoster([
   {name:'Klara Kapitän',role:'Kapitän'},
 ]);
 assert.deepEqual(Array.from(orderedRoster,member=>member.name),['Klara Kapitän','Alex Stellvertreter','Berta Spielerin','Zeno Spieler']);
+const dartsPlayerProfiles = vm.runInContext('dartsPlayerProfiles',context);
+assert.deepEqual(JSON.parse(JSON.stringify(dartsPlayerProfiles({players:{
+  '123':{image:'/pics/players/max.webp',alias:'The Test',average:61.26},
+  '124':'/pics/players/legacy.jpg',
+  'bad':{image:'/private/photo.jpg',alias:'Unsicher',average:999},
+}}))),{
+  '123':{image:'/pics/players/max.webp',alias:'The Test',average:61.3},
+  '124':{image:'/pics/players/legacy.jpg',alias:'',average:null},
+});
 const dartsSponsors = vm.runInContext('dartsSponsors',context);
 const sponsorConfig = {displaySeconds:2,sponsors:[
   {id:'active',name:'Lokaler Betrieb',image:'/pics/sponsors/betrieb.png',href:'https://example.com',placements:['top','inline'],startsAt:'2026-01-01',endsAt:'2026-12-31'},

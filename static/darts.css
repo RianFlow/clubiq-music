@@ -286,7 +286,7 @@ h1 { font:500 clamp(1.7rem,3vw,2.7rem)/1.15 Georgia,serif; margin:0; }
 .player-profile-hero .player-avatar.large { position:relative; z-index:1; flex-basis:220px; width:220px; min-width:220px; max-width:220px; height:220px; min-height:220px; max-height:220px; border:5px solid rgba(255,255,255,.38); box-shadow:0 18px 50px #0008; font-size:4rem; }
 .player-profile-hero .player-avatar.large:not(.avatar-fallback) { width:240px; min-width:240px; max-width:240px; height:278px; min-height:278px; max-height:278px; border:0; border-radius:24px 24px 0 0; background:transparent; box-shadow:none; }
 .player-profile-hero .player-avatar.large img { object-position:center top; }
-.player-profile-facts { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-bottom:12px; }
+.player-profile-facts { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:8px; margin-bottom:12px; }
 .player-profile-facts > div { display:grid; gap:4px; min-height:72px; align-content:center; padding:10px 12px; text-align:center; background:#f5f7f2; border:1px solid var(--line); border-radius:11px; }
 .player-profile-facts span { color:#60706b; font-size:.72rem; text-transform:uppercase; }
 .player-profile-facts strong { color:#173b35; font:700 1.08rem Georgia,serif; }

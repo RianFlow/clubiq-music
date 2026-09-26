@@ -20,6 +20,20 @@ function dartsRoster(members) {
     roleRank(left?.role)-roleRank(right?.role) || String(left?.name || '').localeCompare(String(right?.name || ''),'de',{sensitivity:'base'})
   );
 }
+function dartsPlayerProfiles(config) {
+  const result={};
+  for (const [id,raw] of Object.entries(config?.players || {})) {
+    if (!/^\d{1,12}$/.test(id)) continue;
+    const item=typeof raw==='string'?{image:raw}:raw;
+    if (!item || typeof item!=='object') continue;
+    const image=typeof item.image==='string' && /^\/pics\/players\/[a-z0-9][a-z0-9._-]*\.(?:avif|jpe?g|png|webp)$/i.test(item.image) ? item.image : '';
+    const alias=typeof item.alias==='string' ? item.alias.trim().slice(0,50) : '';
+    const numericAverage=typeof item.average==='number' ? item.average : Number.NaN;
+    const average=Number.isFinite(numericAverage) && numericAverage>=0 && numericAverage<=180 ? Math.round(numericAverage*10)/10 : null;
+    result[id]={image,alias,average};
+  }
+  return result;
+}
 function pushApplicationKey(value) {
   const padded = `${value}${'='.repeat((4-value.length%4)%4)}`.replace(/-/g,'+').replace(/_/g,'/');
   const raw = atob(padded);
@@ -126,17 +140,11 @@ function initDarts() {
     .then(response=>response.ok?response.json():Promise.reject(new Error('sponsors unavailable')))
     .then(config=>startSponsorRotation(dartsSponsors(config)))
     .catch(()=>document.querySelectorAll('.sponsor-slot').forEach(slot=>{ slot.hidden=true; slot.replaceChildren(); }));
-  let playerPhotos={};
+  let playerProfiles={};
   fetch('/static/darts-players.json',{headers:{Accept:'application/json'},cache:'no-store'})
     .then(response=>response.ok?response.json():Promise.reject(new Error('player photos unavailable')))
-    .then(config=>{
-      const safe={};
-      for (const [id,path] of Object.entries(config?.players || {})) {
-        if (/^\d{1,12}$/.test(id) && typeof path==='string' && /^\/pics\/players\/[a-z0-9][a-z0-9._-]*\.(?:avif|jpe?g|png|webp)$/i.test(path)) safe[id]=path;
-      }
-      playerPhotos=safe;
-    })
-    .catch(()=>{ playerPhotos={}; });
+    .then(config=>{ playerProfiles=dartsPlayerProfiles(config); })
+    .catch(()=>{ playerProfiles={}; });
   let livePushAlertTimer=0;
   function closeLivePushAlert() {
     window.clearTimeout(livePushAlertTimer);
@@ -468,7 +476,7 @@ function initDarts() {
   }
   function playerAvatar(member, large=false) {
     const avatar=document.createElement('span'); avatar.className=`player-avatar${large?' large':''}`;
-    const photo=member?.id ? playerPhotos[String(member.id)] : '';
+    const photo=member?.id ? playerProfiles[String(member.id)]?.image : '';
     if (photo) {
       const image=document.createElement('img'); image.src=photo; image.alt=`Porträt von ${member.name}`; image.loading='lazy'; image.decoding='async';
       image.addEventListener('error',()=>{ avatar.replaceChildren(document.createTextNode(playerInitials(member.name))); avatar.classList.add('avatar-fallback'); },{once:true});
@@ -480,18 +488,19 @@ function initDarts() {
     if (!member || !team) return;
     q('#playerProfileHeading').textContent=member.name;
     const target=q('#playerProfile'), record=team.record || {};
+    const profile=playerProfiles[String(member.id || '')] || {};
     const hero=document.createElement('section'); hero.className='player-profile-hero';
     const copy=document.createElement('div'); copy.className='player-profile-identity';
-    const roleFlag=document.createElement('strong'); roleFlag.className='player-profile-kicker'; roleFlag.textContent=member.role || 'Spieler';
+    const roleFlag=document.createElement('strong'); roleFlag.className='player-profile-kicker'; roleFlag.textContent=profile.alias ? `„${profile.alias}“` : member.role || 'Spieler';
     const name=document.createElement('h3'); name.textContent=member.name;
-    const meta=document.createElement('p'); meta.textContent=`${team.name} · ${team.league?.short || 'Verein'}`;
-    const photoNote=document.createElement('small'); photoNote.textContent=playerPhotos[String(member.id || '')]?'Vereinsfoto':'Vereinsfoto kann später ergänzt werden';
+    const meta=document.createElement('p'); meta.textContent=`${member.role} · ${team.name} · ${team.league?.short || 'Verein'}`;
+    const photoNote=document.createElement('small'); photoNote.textContent=profile.image?'Vereinsfoto':'Vereinsfoto kann später ergänzt werden';
     copy.append(roleFlag,name,meta,photoNote);
     const visual=document.createElement('div'); visual.className='player-profile-visual';
     const teamMark=document.createElement('b'); teamMark.className='player-profile-team-mark'; teamMark.textContent=team.code;
     visual.append(teamMark,playerAvatar(member,true)); hero.append(copy,visual);
     const facts=document.createElement('section'); facts.className='player-profile-facts';
-    for (const [label,value] of [['Mannschaft',`Barver ${team.code}`],['Liga',team.league?.short || '–'],['Teamspiele',record.played ?? 0],['Teamsiege',record.wins ?? 0]]) {
+    for (const [label,value] of [['Mannschaft',`Barver ${team.code}`],['Liga',team.league?.short || '–'],['Funktion',member.role || 'Spieler'],['Aktueller Ø',profile.average===null || profile.average===undefined?'Noch offen':profile.average.toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1})],['Teamspiele',record.played ?? 0],['Teamsiege',record.wins ?? 0]]) {
       const item=document.createElement('div'); const text=document.createElement('span'); text.textContent=label; const strong=document.createElement('strong'); strong.textContent=value; item.append(text,strong); facts.append(item);
     }
     const grid=document.createElement('div'); grid.className='player-profile-grid';

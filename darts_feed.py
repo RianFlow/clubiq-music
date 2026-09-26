@@ -718,7 +718,8 @@ def _load_team_profile(team_id: int) -> dict:
             "name": name[:100],
             "role": role,
         })
-    roster.sort(key=lambda item: (item["role"] == "Spieler", item["name"]))
+    role_order = {"Kapitän": 0, "Stellvertretung": 1, "Spieler": 2}
+    roster.sort(key=lambda item: (role_order.get(item["role"], 3), item["name"]))
     venue = team.get("playingVenue") or {}
     safe_venue = {
         "name": str(venue.get("name") or ""),
