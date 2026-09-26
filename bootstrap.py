@@ -198,6 +198,11 @@ CREATE TABLE IF NOT EXISTS darts_push_events (
     first_seen_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 ALTER TABLE darts_push_events ADD COLUMN IF NOT EXISTS event_type VARCHAR(20) NOT NULL DEFAULT '180';
+ALTER TABLE darts_push_subscriptions ADD COLUMN IF NOT EXISTS players JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE darts_push_subscriptions ADD COLUMN IF NOT EXISTS event_types JSONB NOT NULL DEFAULT '["180","high_finish","leg","game","match"]'::jsonb;
+ALTER TABLE darts_push_events ADD COLUMN IF NOT EXISTS payload JSONB;
+ALTER TABLE darts_push_events ADD COLUMN IF NOT EXISTS occurred_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_darts_events_time ON darts_push_events(occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_darts_push_subscriptions_enabled
 ON darts_push_subscriptions(enabled);
 """

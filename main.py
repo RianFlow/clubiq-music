@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 
 from db_config import connection_kwargs
 from darts_feed import DartsFeedUnavailable, get_darts_center, get_darts_feed, get_darts_match, get_darts_season
-from darts_push import barver_push_candidates, push_payload, valid_push_endpoint, valid_push_key
+from darts_push import barver_push_candidates, push_payload, valid_push_endpoint, valid_push_key, subscription_matches, PUSH_EVENT_TYPES
 from radio_directory import DirectoryUnavailable, get_station, search_stations
 from radio_logos import CACHE_SECONDS, FAILURE_SECONDS, cached_logo
 from music_library import duration_ms, register_library
@@ -275,14 +275,21 @@ _darts_push_status = {
 def poll_darts_push_events() -> None:
     checked_at = datetime.now(timezone.utc).isoformat()
     _darts_push_status["lastCheck"] = checked_at
-    if not DARTS_VAPID_PUBLIC_KEY or not DARTS_VAPID_PRIVATE_KEY or webpush is None:
-        _darts_push_status.update({"configured": False, "upstreamAvailable": None, "lastError": "Push ist nicht konfiguriert."})
-        return
+    configured = bool(DARTS_VAPID_PUBLIC_KEY and DARTS_VAPID_PRIVATE_KEY and webpush)
     try:
         detected = []
+        stale = False
         for league in ("kl04", "kk11"):
-            center = get_darts_center(league)
-            detected.extend(barver_push_candidates(league, center))
+            try:
+                center = get_darts_center(league)
+            except DartsFeedUnavailable:
+                stale = True
+                continue
+            stale = stale or bool(center.get("stale"))
+            if center.get("stale"):
+                continue  # Never consume new event IDs from a fallback response.
+            match_times = {m["id"]: m.get("updatedAt") or m.get("plannedAt") for m in center.get("barverMatches", [])}
+            detected.extend({**e, "occurred_at": match_times.get(e["match_id"]), "deliver": e["deliver"] and not center.get("stale")} for e in barver_push_candidates(league, center))
         new_events = []
         with db_connect() as conn, conn.cursor() as cur:
             cur.execute("SELECT EXISTS (SELECT 1 FROM darts_push_events LIMIT 1);")
@@ -290,17 +297,19 @@ def poll_darts_push_events() -> None:
             for event in detected:
                 cur.execute(
                     """
-                    INSERT INTO darts_push_events (event_id, event_type, team, player, match_id)
-                    VALUES (%s, %s, %s, %s, %s)
-                    ON CONFLICT (event_id) DO NOTHING
-                    RETURNING event_id;
+                    INSERT INTO darts_push_events (event_id, event_type, team, player, match_id, payload, occurred_at)
+                    VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s)
+                    ON CONFLICT (event_id) DO UPDATE SET
+                      payload = EXCLUDED.payload,
+                      occurred_at = COALESCE(darts_push_events.occurred_at, EXCLUDED.occurred_at)
+                    RETURNING (xmax = 0);
                     """,
-                    (event["event_id"], event["event_type"], event["team"], event["player"], event["match_id"]),
+                    (event["event_id"], event["event_type"], event["team"], event["player"], event["match_id"], push_payload(event), event["occurred_at"]),
                 )
-                if cur.fetchone() and has_event_history and event["deliver"]:
+                if cur.fetchone()[0] and has_event_history and event["deliver"]:
                     new_events.append(event)
             cur.execute(
-                "SELECT endpoint, p256dh, auth, teams FROM darts_push_subscriptions WHERE enabled = TRUE;"
+                "SELECT endpoint, p256dh, auth, teams, players, event_types FROM darts_push_subscriptions WHERE enabled = TRUE;"
             )
             subscriptions = cur.fetchall()
             conn.commit()
@@ -308,8 +317,8 @@ def poll_darts_push_events() -> None:
         sent = 0
         failed = 0
         for event in new_events:
-            for endpoint, p256dh, auth, teams in subscriptions:
-                if event["team"] not in (teams or []):
+            for endpoint, p256dh, auth, teams, players, event_types in subscriptions:
+                if not configured or not subscription_matches(event, teams or [], players or [], event_types or []):
                     continue
                 try:
                     webpush(
@@ -331,10 +340,10 @@ def poll_darts_push_events() -> None:
                 cur.execute("DELETE FROM darts_push_subscriptions WHERE endpoint = ANY(%s);", (list(set(expired)),))
                 conn.commit()
         _darts_push_status.update({
-            "configured": True,
-            "upstreamAvailable": True,
-            "lastSuccess": checked_at,
-            "lastError": None,
+            "configured": configured,
+            "upstreamAvailable": not stale,
+            "lastSuccess": _darts_push_status["lastSuccess"] if stale else checked_at,
+            "lastError": "3K liefert zwischengespeicherte Daten." if stale else None,
             "detected": len(detected),
             "sent": sent,
             "failed": failed,
@@ -423,7 +432,9 @@ class DartsPushSubscribe(BaseModel):
     endpoint: str = Field(min_length=20, max_length=2048)
     expirationTime: int | None = None
     keys: DartsPushKeys
-    teams: list[str] = Field(default_factory=lambda: ["A", "B", "C", "D"], min_length=1, max_length=4)
+    teams: list[str] = Field(default_factory=lambda: ["A", "B", "C", "D"], max_length=4)
+    players: list[str] = Field(default_factory=list, max_length=100)
+    eventTypes: list[str] = Field(default_factory=lambda: sorted(PUSH_EVENT_TYPES), max_length=5)
 
 
 class DartsPushUnsubscribe(BaseModel):
@@ -615,26 +626,44 @@ def darts_push_subscribe(payload: DartsPushSubscribe, x_clubiq_push: str | None 
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     teams = sorted(set(payload.teams))
-    if not teams or any(team not in {"A", "B", "C", "D"} for team in teams):
+    if any(team not in {"A", "B", "C", "D"} for team in teams):
         raise HTTPException(status_code=422, detail="Ungültige Mannschaftsauswahl.")
+    players = sorted(set(name.strip() for name in payload.players))
+    event_types = sorted(set(payload.eventTypes))
+    if any(not name or len(name) > 100 for name in players) or any(kind not in PUSH_EVENT_TYPES for kind in event_types):
+        raise HTTPException(status_code=422, detail="Ungültige Meldungsauswahl.")
     endpoint_hash = hashlib.sha256(endpoint.encode("utf-8")).hexdigest()
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO darts_push_subscriptions (endpoint, endpoint_hash, p256dh, auth, teams, enabled)
-            VALUES (%s, %s, %s, %s, %s::jsonb, TRUE)
+            INSERT INTO darts_push_subscriptions (endpoint, endpoint_hash, p256dh, auth, teams, players, event_types, enabled)
+            VALUES (%s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, TRUE)
             ON CONFLICT (endpoint) DO UPDATE SET
               endpoint_hash = EXCLUDED.endpoint_hash,
               p256dh = EXCLUDED.p256dh,
               auth = EXCLUDED.auth,
               teams = EXCLUDED.teams,
+              players = EXCLUDED.players,
+              event_types = EXCLUDED.event_types,
               enabled = TRUE,
               updated_at = CURRENT_TIMESTAMP;
             """,
-            (endpoint, endpoint_hash, p256dh, auth, json.dumps(teams)),
+            (endpoint, endpoint_hash, p256dh, auth, json.dumps(teams), json.dumps(players), json.dumps(event_types)),
         )
         conn.commit()
     return {"ok": True, "teams": teams}
+
+
+@app.get("/api/v1/darts/highlights")
+def darts_highlights():
+    """Public sporting moments, never browser endpoints or subscription data."""
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("""SELECT event_id, event_type, team, player, match_id, payload, occurred_at
+                       FROM darts_push_events WHERE payload IS NOT NULL
+                       AND occurred_at > CURRENT_TIMESTAMP - INTERVAL '30 days'
+                       ORDER BY occurred_at DESC, first_seen_at DESC LIMIT 60;""")
+        return {"items": [{"id": row[0], "type": row[1], "team": row[2], "player": row[3],
+                           "matchId": row[4], **row[5], "occurredAt": row[6].isoformat()} for row in cur.fetchall()]}
 
 
 @app.post("/api/v1/darts/push/unsubscribe")

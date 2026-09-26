@@ -36,11 +36,14 @@ jobs:
           node tests/test_reliability.cjs
           node tests/test_song_info.cjs
           node tests/test_darts.cjs
+          node tests/test_darts_home.cjs
+          node tests/test_darts_history.cjs
       - name: Getrennte Musikbereiche im Browser prüfen
         run: |
           npm install --prefix "$RUNNER_TEMP/music-browser-tests" --no-audit --no-fund --package-lock=false playwright@1.62.1
           node "$RUNNER_TEMP/music-browser-tests/node_modules/playwright/cli.js" install --with-deps chromium
           NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_navigation_browser.cjs
+          NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_darts_home_browser.cjs
       - name: Player mit echtem mpv und stummer Ausgabe prüfen
         run: |
           docker run --rm -v "$PWD:/work:ro" -w /work debian:trixie-slim sh -c \

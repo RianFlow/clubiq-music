@@ -6,7 +6,13 @@
     },
     "89029": {
       "image": "/pics/players/patrick-lammers-cutout.webp",
-      "alias": "Peddy"
+      "alias": "Peddy",
+      "personal": {
+        "darts": "95K von Aspinall",
+        "favoritePdcPlayer": "Nathan Aspinall",
+        "favoriteFinish": "D16",
+        "walkOnSong": "Don't Stop Believin' – Journey"
+      }
     },
     "89017": {
       "image": "/pics/players/justin-albrecht-cutout.webp"

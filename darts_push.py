@@ -159,3 +159,14 @@ def push_payload(event: dict) -> str:
         ensure_ascii=False,
         separators=(",", ":"),
     )
+
+
+PUSH_EVENT_TYPES = {"180", "high_finish", "leg", "game", "match"}
+
+
+def subscription_matches(event: dict, teams: list, players: list, event_types: list) -> bool:
+    """Teams OR followed players, always limited by the selected event types."""
+    if event.get("event_type") not in event_types:
+        return False
+    names = {name.strip().casefold() for name in str(event.get("player") or "").split(" & ")}
+    return event.get("team") in teams or bool(names & {name.strip().casefold() for name in players})

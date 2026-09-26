@@ -8,8 +8,8 @@
   <meta name="description" content="SV Barver Darts A, B, C und D: Spielpläne, Spielberichte und Live-Ansichten gemeinsam verfolgen.">
   <link rel="icon" href="/pics/logo.png">
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
-  <link rel="stylesheet" href="/static/darts.css?v=20260927-1">
-  <script defer src="/static/darts.js?v=20260927-1"></script>
+  <link rel="stylesheet" href="/static/darts.css?v=20260927-2">
+  <script defer src="/static/darts.js?v=20260927-2"></script>
 </head>
 <body>
   <header class="darts-header">
@@ -17,6 +17,21 @@
     <span class="club-logo header-club-logo" role="img" aria-label="SV Barver Darts"></span>
     <nav aria-label="Anzeige"><button id="todayView" type="button">Live</button><button id="leagueView" type="button">Tabellen</button><button id="gridView" type="button">Spiele & Teams</button><button id="trainingView" type="button">Training</button><button id="pushToggle" class="push-toggle" type="button" aria-pressed="false">🔔 Push aktivieren</button><span id="pushHealth" class="push-health" role="status" hidden></span><button id="themeToggle" class="theme-switch" type="button" role="switch" aria-checked="false" aria-label="Dunkelmodus"><span class="theme-option theme-light">Hell</span><span class="theme-track" aria-hidden="true"><span></span></span><span class="theme-option theme-dark">Dunkel</span></button><button id="fullscreen" type="button">TV-Modus</button><a href="https://musik.clubiq.party/" target="_blank" rel="noopener">Zum Voting ↗</a></nav>
   </header>
+  <details id="personalSettings" class="personal-settings">
+    <summary>Mein Darts · Einstellungen & Meldungen</summary>
+    <form id="preferencesForm">
+      <p>Gilt für diesen Browser. Deine Lieblingsmannschaft sortiert die Startseite. Push erhältst du für ausgewählte Teams <strong>oder</strong> abonnierte Spieler – nur für die ausgewählten Meldungsarten.</p>
+      <div class="preferences-grid">
+        <fieldset><legend>Push-Mannschaften</legend><div id="pushTeams"></div></fieldset>
+        <fieldset><legend>Meldungsarten</legend><div id="pushTypes"></div></fieldset>
+        <fieldset><legend>Spieler abonnieren</legend><p id="playerOptionsStatus">Beim Öffnen werden die Kader geladen.</p><div id="pushPlayers" class="player-options"></div></fieldset>
+      </div>
+      <button type="submit">Einstellungen speichern</button><span id="preferencesStatus" role="status"></span>
+      <p>„Push aktivieren“ oben erlaubt Benachrichtigungen. Die Überwachung prüft den Server, kann aber die Zustellung auf deinem Gerät nicht garantieren.</p>
+    </form>
+    <h3>Deine empfangenen Meldungen</h3><p>Die letzten 100 Meldungen auf diesem Gerät, auch bei geschlossener Seite. Beginn ab diesem Update.</p>
+    <div id="notificationHistory" class="notification-history"></div>
+  </details>
   <aside id="livePushAlert" class="live-push-alert" role="alert" aria-live="assertive" aria-atomic="true" hidden>
     <span class="live-push-alert-mark" aria-hidden="true">🎯</span>
     <span class="live-push-alert-copy"><small>LIVE-MELDUNG</small><strong id="livePushTitle">ClubIQ Darts</strong><span id="livePushBody"></span></span>
@@ -50,6 +65,12 @@
     <section id="todayPanel" class="sports-panel" aria-labelledby="todayHeading" hidden>
       <div class="sports-panel-head"><div><p class="eyebrow">Live-Matchcenter</p><h2 id="todayHeading">Heute spielen</h2><p id="todaySubtitle">Live-Spiele und die nächsten Begegnungen.</p></div><div class="today-actions"><span id="liveDataStatus" class="live-data-status">3K wird geladen</span><label for="favoriteTeam">Mein Team<select id="favoriteTeam"><option value="all">Alle Teams</option><option value="A">Barver A</option><option value="B">Barver B</option><option value="C">Barver C</option><option value="D">Barver D</option></select></label></div></div>
       <div id="todayGrid" class="today-grid"><p class="panel-loading">Spielstände werden geladen …</p></div>
+      <div class="season-toolbar" aria-label="Startseite filtern">
+        <label>Mannschaft<select id="homeTeam"><option value="all">Alle Teams</option><option>A</option><option>B</option><option>C</option><option>D</option></select></label>
+        <label>Liga / Wettbewerb<select id="homeLeague"><option value="all">Alle Wettbewerbe</option><option value="1445">Kreisligen 04 · A–C</option><option value="1460">Kreisklasse 11 · D</option><option value="special">Pokal & Sondertermine</option></select></label>
+        <label>Datum<input id="homeDate" type="date"></label><button id="resetHomeFilters" type="button">Filter zurücksetzen</button>
+      </div>
+      <div id="homeSchedule" class="home-schedule"></div>
     </section>
     <section id="leaguePanel" class="sports-panel" aria-labelledby="leagueHeading" hidden>
       <div class="sports-panel-head"><div><p class="eyebrow">Saison 2026 / 2027</p><h2 id="leagueHeading">Liga & Spieltage</h2><p>Spielplan, offizielle Rangfolge und Meldungen aus 3K auf einen Blick.</p></div><span class="club-logo panel-club-logo" aria-hidden="true"></span></div>

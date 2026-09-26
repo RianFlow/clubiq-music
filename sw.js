@@ -1,9 +1,9 @@
 "use strict";
 
-const CACHE = "clubiq-music-shell-20260927-1";
+const CACHE = "clubiq-music-shell-20260927-2";
 const SHELL = [
   "/", "/remote", "/party", "/darts", "/manifest.webmanifest",
-  "/static/darts.css?v=20260927-1", "/static/darts.js?v=20260927-1", "/static/darts-sponsors.json", "/static/darts-players.json", "/pics/sv-barver-darts-tight.png",
+  "/static/darts.css?v=20260927-2", "/static/darts.js?v=20260927-2", "/static/darts-sponsors.json", "/static/darts-players.json", "/pics/sv-barver-darts-tight.png",
   "/static/app.css?v=20260915-1", "/static/app.js?v=20260919-1",
   "/static/song-info.js?v=20260917-1", "/static/comfort.js?v=20260919-1", "/static/comfort.css?v=20260917-1",
   "/static/reliability.js?v=20260919-1",
@@ -32,9 +32,16 @@ self.addEventListener("fetch", event => {
   const url = new URL(request.url);
   if (request.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
   const cacheableAsset = url.pathname.startsWith("/static/") || url.pathname.startsWith("/pics/");
+  if (cacheableAsset && url.pathname.endsWith('.json')) {
+    // Editable player/sponsor configuration must not stay frozen in an old cache.
+    const refresh=fetch(request).then(async response=>{ if (response.ok) { const cache=await caches.open(CACHE); await cache.put(request,response.clone()); } return response; });
+    event.waitUntil(refresh.catch(()=>{}));
+    event.respondWith(caches.match(request).then(cached=>cached||refresh));
+    return;
+  }
   if (cacheableAsset) {
-    event.respondWith(caches.match(request).then(cached => cached || fetch(request).then(response => {
-      if (response.ok) caches.open(CACHE).then(cache => cache.put(request, response.clone()));
+    event.respondWith(caches.match(request).then(cached => cached || fetch(request).then(async response => {
+      if (response.ok) { const copy=response.clone(); const cache=await caches.open(CACHE); await cache.put(request,copy); }
       return response;
     })));
     return;
@@ -46,6 +53,7 @@ self.addEventListener("fetch", event => {
   }).catch(() => caches.match(request).then(cached => cached || caches.match("/"))));
 });
 
+let historyWrite=Promise.resolve();
 self.addEventListener("push", event => {
   let payload = {};
   try { payload = event.data ? event.data.json() : {}; } catch (_) { payload = {}; }
@@ -53,6 +61,13 @@ self.addEventListener("push", event => {
     title: typeof payload.title === "string" ? payload.title.slice(0, 120) : "ClubIQ Darts",
     body: typeof payload.body === "string" ? payload.body.slice(0, 240) : "Neue Meldung aus dem Darts-Matchcenter.",
   };
+  historyWrite=historyWrite.catch(()=>{}).then(async()=>{
+    const cache=await caches.open('clubiq-darts-notifications-v1');
+    const previous=await cache.match('/__darts_notification_history__');
+    const entries=previous?await previous.json():[];
+    const entry={...message,receivedAt:new Date().toISOString(),tag:payload.tag||''};
+    await cache.put('/__darts_notification_history__',new Response(JSON.stringify([entry,...entries].slice(0,100)),{headers:{'Content-Type':'application/json'}}));
+  });
   const broadcast = clients.matchAll({type:"window",includeUncontrolled:true}).then(windows => {
     for (const client of windows) client.postMessage({type:"clubiq-darts-push",payload:message});
   });
@@ -64,7 +79,7 @@ self.addEventListener("push", event => {
     renotify: true,
     data: {url: payload.url || "https://barverdarts.clubiq.party/"},
   });
-  event.waitUntil(Promise.all([broadcast,notification]));
+  event.waitUntil(Promise.all([broadcast,notification,historyWrite.catch(()=>{})]));
 });
 
 self.addEventListener("notificationclick", event => {

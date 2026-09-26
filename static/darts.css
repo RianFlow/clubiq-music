@@ -1,4 +1,26 @@
 :root { font-family: Inter, system-ui, sans-serif; color: #13211f; background: #f4f4ef; --green:#163c36; --line:#d9ddd7; }
+.personal-settings { margin:12px 24px; padding:12px 16px; border:1px solid var(--line); border-radius:12px; }
+.personal-settings summary { cursor:pointer; font-weight:750; min-height:32px; }
+.preferences-grid { display:grid; grid-template-columns:1fr 1fr 2fr; gap:16px; margin:16px 0; }
+.preferences-grid fieldset { min-width:0; border:1px solid var(--line); border-radius:10px; }
+.preferences-grid label { display:flex; align-items:center; gap:10px; min-height:38px; font-size:.9rem; }
+.preferences-grid input { width:18px; height:18px; accent-color:#24735f; }
+.player-options { max-height:240px; overflow:auto; }
+.notification-history { max-height:380px; overflow:auto; display:grid; gap:12px; }
+.notification-history article { border-top:1px solid var(--line); padding:12px 0; }
+.notification-history p { margin:5px 0; }
+#preferencesStatus { display:inline-block; padding:10px; }
+.home-schedule { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:20px; padding:0 20px 24px; }
+.home-schedule section { min-width:0; }
+.home-schedule h3 { border-bottom:3px solid #b2934f; padding-bottom:12px; }
+.home-schedule .team-profile-match { margin-bottom:10px; width:100%; }
+.home-schedule .live { border-left:4px solid #df4334; }
+.today-grid.featured-live { grid-template-columns:1fr; }
+#todayPanel > .match-center { margin:0 20px 18px; }
+#homeDate { min-height:44px; max-width:180px; border:1px solid var(--line); border-radius:8px; padding:8px; color:inherit; background:transparent; }
+body.tv-live .personal-settings,body.tv-live .home-schedule,body.tv-live #todayPanel > .season-toolbar { display:none; }
+@media(max-width:850px) { .home-schedule { grid-template-columns:1fr; } .preferences-grid { grid-template-columns:1fr 1fr; } .preferences-grid fieldset:last-child { grid-column:1/-1; } }
+@media(max-width:480px) { .personal-settings { margin:10px; } .preferences-grid { grid-template-columns:1fr; } .home-schedule { padding:0 12px 16px; } }
 * { box-sizing: border-box; }
 [hidden] { display:none !important; }
 body { margin:0; }
@@ -694,3 +716,17 @@ body:fullscreen .today-time { font-size:.9rem; }
   body:fullscreen .today-live-score strong { font-size:clamp(2rem,10vw,3.5rem); }
 }
 @media (prefers-reduced-motion:reduce) { .match-highlight-track { animation:none; padding:8px 12px; white-space:normal; flex-wrap:wrap; } }
+.ticker-item.highlight::before { content:'HIGHLIGHT'; background:#e7cc75; }
+.featured-live .today-live-games { grid-template-columns:repeat(auto-fit,minmax(270px,1fr)); gap:20px; }
+.featured-live .today-live-score strong { font-size:clamp(1.7rem,3vw,2.8rem); }
+.featured-live .today-live-score small { font-size:.85rem; }
+.featured-live .today-live-game { padding:10px; }
+body.tv-live .today-grid.featured-live { grid-template-columns:repeat(auto-fit,minmax(380px,1fr)); }
+@media(max-width:650px) {
+  #todayPanel .match-center-grid { grid-auto-flow:row; grid-auto-columns:auto; grid-template-columns:repeat(2,minmax(0,1fr)); overflow:visible; }
+  #todayPanel .match-center-card { min-width:0; padding:12px; }
+  #todayPanel .match-center-card strong { font-size:.8rem; overflow-wrap:anywhere; }
+  #todayPanel > .match-center { margin:8px 12px 18px; }
+  .featured-live .today-live-games { grid-template-columns:1fr; gap:4px; }
+  .featured-live .today-live-score small { font-size:.7rem; }
+}
