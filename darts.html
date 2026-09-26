@@ -8,14 +8,14 @@
   <meta name="description" content="SV Barver Darts A, B, C und D: Spielpläne, Spielberichte und Live-Ansichten gemeinsam verfolgen.">
   <link rel="icon" href="/pics/logo.png">
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
-  <link rel="stylesheet" href="/static/darts.css?v=20260925-5">
-  <script defer src="/static/darts.js?v=20260925-5"></script>
+  <link rel="stylesheet" href="/static/darts.css?v=20260926-1">
+  <script defer src="/static/darts.js?v=20260926-1"></script>
 </head>
 <body>
   <header class="darts-header">
     <a class="brand" href="https://musik.clubiq.party/" aria-label="Zur Musik-App"><img src="/pics/logo.png" alt=""><span>ClubIQ <b>Darts-Zentrale</b></span></a>
     <span class="club-logo header-club-logo" role="img" aria-label="SV Barver Darts"></span>
-    <nav aria-label="Anzeige"><button id="todayView" type="button">Heute</button><button id="leagueView" type="button">Liga</button><button id="gridView" type="button">Teams</button><button id="trainingView" type="button">Training</button><button id="pushToggle" class="push-toggle" type="button" aria-pressed="false">🔔 Push aktivieren</button><span id="pushHealth" class="push-health" role="status" hidden></span><button id="themeToggle" class="theme-switch" type="button" role="switch" aria-checked="false" aria-label="Dunkelmodus"><span class="theme-option theme-light">Hell</span><span class="theme-track" aria-hidden="true"><span></span></span><span class="theme-option theme-dark">Dunkel</span></button><button id="fullscreen" type="button">TV-Modus</button><a href="https://musik.clubiq.party/" target="_blank" rel="noopener">Zum Voting ↗</a></nav>
+    <nav aria-label="Anzeige"><button id="todayView" type="button">Live</button><button id="leagueView" type="button">Tabellen</button><button id="gridView" type="button">Spiele & Teams</button><button id="trainingView" type="button">Training</button><button id="pushToggle" class="push-toggle" type="button" aria-pressed="false">🔔 Push aktivieren</button><span id="pushHealth" class="push-health" role="status" hidden></span><button id="themeToggle" class="theme-switch" type="button" role="switch" aria-checked="false" aria-label="Dunkelmodus"><span class="theme-option theme-light">Hell</span><span class="theme-track" aria-hidden="true"><span></span></span><span class="theme-option theme-dark">Dunkel</span></button><button id="fullscreen" type="button">TV-Modus</button><a href="https://musik.clubiq.party/" target="_blank" rel="noopener">Zum Voting ↗</a></nav>
   </header>
   <aside id="livePushAlert" class="live-push-alert" role="alert" aria-live="assertive" aria-atomic="true" hidden>
     <span class="live-push-alert-mark" aria-hidden="true">🎯</span>
@@ -34,7 +34,7 @@
       <div><p class="eyebrow">SV Barver Darts · Saison 2026 / 2027</p><h1>Barver Darts im Blick</h1><p>Mannschaften, Training und Turniere.</p></div>
       <span class="club-logo intro-club-logo" aria-hidden="true"></span>
     </section>
-    <section id="layoutControls" class="layout-controls" aria-label="Spiele anordnen">
+    <section id="layoutControls" class="layout-controls" aria-label="Spiele anordnen" hidden>
       <label class="count-control" for="gameCount"><span>Ansicht</span><select id="gameCount"><option value="1">1 Team</option><option value="2">2 Teams</option><option value="3">3 Teams</option><option value="4" selected>4 Teams</option></select></label>
       <div id="teamChoices" class="team-choices" role="group" aria-label="Mannschaften auswählen"></div>
       <button id="loadAll" class="primary" type="button">Teams anzeigen</button>
@@ -45,7 +45,7 @@
       <div id="matchCenterGrid" class="match-center-grid"><p class="match-center-loading">3K-Spielplan wird geladen …</p></div>
     </section>
     <aside id="sponsorInline" class="sponsor-slot sponsor-slot-inline" data-placement="inline" aria-label="Werbepartner" hidden></aside>
-    <details class="source-note"><summary>Hinweis zu den 3K-Ansichten</summary><p>Beim Anzeigen verbindet sich dein Browser mit 3K Darts. Spielstände werden dort bereitgestellt – keine eigene Ergebniserfassung. Live funktioniert nur bei einer aktiven Übertragung.</p></details>
+    <details class="source-note"><summary>Woher kommen die Daten?</summary><p>ClubIQ bereitet die öffentlichen Ergebnisdaten von 3K Darts in einer eigenen, übersichtlichen Ansicht auf. 3K bleibt die offizielle Quelle; dorthin führt nur noch ein optionaler Quellenlink.</p></details>
     <p id="pageStatus" class="message" role="status" hidden></p>
     <section id="todayPanel" class="sports-panel" aria-labelledby="todayHeading" hidden>
       <div class="sports-panel-head"><div><p class="eyebrow">Live-Matchcenter</p><h2 id="todayHeading">Heute spielen</h2><p id="todaySubtitle">Live-Spiele und die nächsten Begegnungen.</p></div><div class="today-actions"><span id="liveDataStatus" class="live-data-status">3K wird geladen</span><label for="favoriteTeam">Mein Team<select id="favoriteTeam"><option value="all">Alle Teams</option><option value="A">Barver A</option><option value="B">Barver B</option><option value="C">Barver C</option><option value="D">Barver D</option></select></label></div></div>
@@ -65,7 +65,18 @@
       </div>
       <p class="data-note">ClubIQ zeigt ausschließlich öffentliche Sportdaten. 180er erscheinen, wenn sie im 3K-Spielbericht erfasst wurden.</p>
     </section>
-    <section id="teamGrid" class="team-grid" aria-label="Unsere vier Mannschaften"></section>
+    <section id="seasonPanel" class="sports-panel season-panel" aria-labelledby="seasonHeading" hidden>
+      <div class="sports-panel-head"><div><p class="eyebrow">Alles an einem Ort</p><h2 id="seasonHeading">Spiele & Mannschaften</h2><p>Alle vier Teams, Termine und Ergebnisse – ohne die unübersichtliche 3K-Seite.</p></div><span id="seasonFreshness" class="live-data-status">Saison wird geladen</span></div>
+      <div class="season-toolbar" aria-label="Spielplan filtern">
+        <label>Team<select id="seasonTeam"><option value="all">Alle Barver-Teams</option><option value="A">Barver A</option><option value="B">Barver B</option><option value="C">Barver C</option><option value="D">Barver D</option></select></label>
+        <div id="seasonStatus" class="season-status" role="group" aria-label="Zeitraum"><button type="button" data-status="upcoming" aria-pressed="true">Kommende</button><button type="button" data-status="final" aria-pressed="false">Ergebnisse</button><button type="button" data-status="all" aria-pressed="false">Alle</button></div>
+        <button id="reloadSeason" type="button">Aktualisieren</button>
+      </div>
+      <div id="seasonTeams" class="native-team-grid"><p class="panel-loading">Mannschaften werden geladen …</p></div>
+      <div class="season-list-head"><div><p class="eyebrow">Saisonspielplan</p><h3 id="seasonListHeading">Kommende Begegnungen</h3></div><span id="seasonCount"></span></div>
+      <div id="seasonMatches" class="native-match-list"><p class="panel-loading">Spielplan wird geladen …</p></div>
+    </section>
+    <section id="teamGrid" class="team-grid" aria-label="Unsere vier Mannschaften" hidden></section>
     <section id="activityPanel" class="team-card" aria-labelledby="activityHeading" hidden>
       <div class="team-head"><span class="team-letter">N</span><div><h2 id="activityHeading">Neu bei SV Barver</h2><p>Trainings, Turniere und weitere veröffentlichte Veranstaltungen</p></div></div>
       <div class="team-tools"><button id="reloadActivity" type="button">Aktualisieren</button><a class="external" href="https://portal.3k-darts.com/frontend/events/5/mandant/1931" target="_blank" rel="noopener noreferrer">Bei 3K öffnen ↗</a></div>
@@ -84,17 +95,11 @@
       <div id="trainingFrame" class="frame-wrap"><div class="placeholder"><strong>Euer Trainingsabend</strong><p>Teilnehmer, Spiele und Bestleistungen in der offiziellen 3K-Ansicht. Erst „Training anzeigen“ stellt die Verbindung her.</p></div></div>
       <p id="trainingNote" class="frame-note">Keine automatische 180-Animation oder Sieger-Meldung. Platzierungen sind erst verfügbar, wenn das Event in 3K abgeschlossen wurde.</p>
     </section>
-    <footer>Begegnungen werden nur auf diesem Gerät gespeichert. Für einen anderen Spieltag den neuen Link auswählen. <a href="https://portal.3k-darts.com/frontend/events" target="_blank" rel="noopener noreferrer">3K Darts öffnen ↗</a></footer>
+    <footer>ClubIQ zeigt öffentliche 3K-Ergebnisse in einer eigenen Ansicht. 3K bleibt die offizielle Quelle. <a href="https://portal.3k-darts.com/frontend/events" target="_blank" rel="noopener noreferrer">3K Darts öffnen ↗</a></footer>
   </main>
-  <dialog id="matchDialog" aria-labelledby="matchHeading">
-    <form id="matchForm">
-      <div class="dialog-head"><h2 id="matchHeading">Begegnung auswählen</h2><button id="closeMatch" type="button" aria-label="Schließen">×</button></div>
-      <p>In 3K die gewünschte Begegnung öffnen und den vollständigen Link hier einfügen. Ein Mannschaftslink allein wählt noch kein Spiel aus.</p>
-      <label for="matchUrl">Spielbericht- oder Live-Link<input id="matchUrl" type="url" maxlength="600" required placeholder="https://portal.3k-darts.com/…?matchId=…" autocomplete="off"></label>
-      <p class="subtle">Bitte prüfen, dass die Begegnung zur ausgewählten Mannschaft gehört. 3K bietet keine öffentliche Schnittstelle für eine automatische Zuordnung.</p>
-      <p id="matchError" class="error" role="alert" hidden></p>
-      <div class="dialog-actions"><button id="clearMatch" type="button">Auswahl entfernen</button><button class="primary" type="submit">Auf diesem Gerät speichern</button></div>
-    </form>
+  <dialog id="matchDialog" class="native-match-dialog" aria-labelledby="matchHeading">
+    <div class="dialog-head"><div><p class="eyebrow">ClubIQ Spielbericht</p><h2 id="matchHeading">Begegnung</h2></div><button id="closeMatch" type="button" aria-label="Schließen">×</button></div>
+    <div id="matchDetail"><p class="panel-loading">Spielbericht wird geladen …</p></div>
   </dialog>
 </body>
 </html>

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 
 import requests
@@ -8,14 +9,17 @@ import requests
 
 API = "https://backend-ddv.3k-darts.com/2k-backend-ddv/api/v1/frontend/event"
 LEAGUES = (
-    {"key": "kl04", "name": "Kreisligen 04", "short": "KL 04", "event": 1445, "phase": 2139, "teams": {174110, 174111, 174112}},
-    {"key": "kk11", "name": "Kreisklasse 11", "short": "KK 11", "event": 1460, "phase": 2154, "teams": {174266}},
+    {"key": "kl04", "name": "Kreisligen 04", "short": "KL 04", "event": 1445, "phase": 2139, "teams": {174110: "A", 174111: "B", 174112: "C"}},
+    {"key": "kk11", "name": "Kreisklasse 11", "short": "KK 11", "event": 1460, "phase": 2154, "teams": {174266: "D"}},
 )
 CACHE_SECONDS = 45
+SEASON_CACHE_SECONDS = 600
 _cache: dict | None = None
 _cache_time = 0.0
 _lock = Lock()
 _center_cache: dict[tuple[str, int], tuple[float, dict]] = {}
+_season_cache: tuple[float, dict] | None = None
+_match_cache: dict[int, tuple[float, dict]] = {}
 
 
 class DartsFeedUnavailable(RuntimeError):
@@ -77,6 +81,58 @@ def _ticker_item(match: dict, phase: int, round_id: int) -> dict:
         "plannedAt": planned.isoformat() if planned else None,
         "updatedAt": sort_time.isoformat() if sort_time else None,
         "url": f"https://portal.3k-darts.com/frontend/events/10/event/{event}/phase/{phase}/group/{round_id}?matchId={match_id}",
+    }
+
+
+def _league_public(league: dict) -> dict:
+    return {"key": league["key"], "name": league["name"], "short": league["short"]}
+
+
+def _barver_code(item: dict, league: dict) -> str | None:
+    return league["teams"].get(item.get("homeTeamId")) or league["teams"].get(item.get("awayTeamId"))
+
+
+def _season_match(match: dict, league: dict, round_info: dict) -> dict:
+    item = _ticker_item(match, league["phase"], int(round_info.get("id") or 0))
+    item.update({
+        "league": league["key"],
+        "leagueName": league["name"],
+        "leagueShort": league["short"],
+        "round": _safe_round(round_info),
+        "barverTeam": _barver_code(item, league),
+    })
+    return item
+
+
+def _average(participant: dict) -> float | None:
+    darts, score = participant.get("darts"), participant.get("score")
+    if isinstance(darts, (int, float)) and darts > 0 and isinstance(score, (int, float)):
+        return round(score * 3 / darts, 1)
+    return None
+
+
+def _public_game(game: dict) -> dict:
+    home, away = game.get("participantHome") or {}, game.get("participantGuest") or {}
+    number = int(game.get("gameNr") or game.get("gameNrRound") or 0)
+    if number <= 4:
+        block = "1. Block · Einzel"
+    elif number <= 6:
+        block = "2. Block · Doppel"
+    elif number <= 10:
+        block = "3. Block · Einzel"
+    else:
+        block = "4. Block · Doppel"
+    home_legs = game.get("legsHome") if isinstance(game.get("legsHome"), int) else game.get("liveLegsHome")
+    away_legs = game.get("legsAway") if isinstance(game.get("legsAway"), int) else game.get("liveLegsAway")
+    return {
+        "id": int(game.get("id") or 0),
+        "number": number,
+        "block": block,
+        "status": str(game.get("statusCd") or "OPEN").upper(),
+        "home": {"name": str(home.get("displayName") or "Noch offen")[:160], "average": _average(home)},
+        "away": {"name": str(away.get("displayName") or "Noch offen")[:160], "average": _average(away)},
+        "homeLegs": home_legs if isinstance(home_legs, int) else None,
+        "awayLegs": away_legs if isinstance(away_legs, int) else None,
     }
 
 
@@ -359,3 +415,153 @@ def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now:
             _, result = max(cached, key=lambda value: value[0])
             return {**result, "stale": True}
         raise DartsFeedUnavailable("3K-Spieltag ist gerade nicht erreichbar.") from exc
+
+
+def _public_get(url: str):
+    response = requests.get(
+        url,
+        headers={"User-Agent": "ClubIQ-Darts/1.0 (+https://barverdarts.clubiq.party/)"},
+        timeout=(3, 10),
+    )
+    response.raise_for_status()
+    return _json(response)
+
+
+def _load_league_season(league: dict, now: datetime) -> dict:
+    phase_url = f"{API}/{league['event']}/phase/{league['phase']}"
+    phase = _public_get(phase_url)
+    rounds = phase.get("rounds") or []
+    round_matches: dict[int, list[dict]] = {}
+
+    def load_round(round_info: dict) -> tuple[int, list[dict]]:
+        round_id = int(round_info.get("id") or 0)
+        payload = _public_get(f"{phase_url}/round/{round_id}")
+        matches = [
+            item for item in payload.get("matches") or []
+            if not item.get("byeHome") and not item.get("byeAway")
+        ]
+        return round_id, matches
+
+    # A season currently has 18 rounds. A small bounded pool keeps the first
+    # ClubIQ load responsive without flooding 3K's public service.
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        jobs = {executor.submit(load_round, item): item for item in rounds}
+        for job in as_completed(jobs):
+            round_id, matches = job.result()
+            round_matches[round_id] = matches
+
+    public_matches: list[dict] = []
+    for round_info in rounds:
+        for raw_match in round_matches.get(int(round_info.get("id") or 0), []):
+            home_id, _ = _participant(raw_match, "Home")
+            away_id, _ = _participant(raw_match, "Guest")
+            if home_id in league["teams"] or away_id in league["teams"]:
+                public_matches.append(_season_match(raw_match, league, round_info))
+
+    public_matches.sort(key=lambda item: (item.get("plannedAt") or item.get("updatedAt") or "", item["id"]))
+    selected = _preferred_round(rounds, now)
+    selected_matches = round_matches.get(int((selected or {}).get("id") or 0), [])
+    return {
+        "league": _league_public(league),
+        "rounds": [_safe_round(item) for item in rounds],
+        "selectedRound": _safe_round(selected) if selected else None,
+        "standings": _standings(selected_matches, set(league["teams"])),
+        "matches": public_matches,
+    }
+
+
+def _load_season(now: datetime) -> dict:
+    leagues = [_load_league_season(league, now) for league in LEAGUES]
+    all_matches = [match for league in leagues for match in league["matches"]]
+    standings_by_id = {
+        entry["id"]: entry
+        for league in leagues
+        for entry in league["standings"]
+    }
+    teams = []
+    for league in LEAGUES:
+        for team_id, code in league["teams"].items():
+            matches = [item for item in all_matches if item.get("barverTeam") == code]
+            results = [item for item in matches if item["kind"] == "final"]
+            upcoming = [item for item in matches if item["kind"] != "final"]
+            standing = standings_by_id.get(team_id) or {}
+            teams.append({
+                "code": code,
+                "id": team_id,
+                "name": standing.get("name") or f"SV Barver Darts {code}",
+                "league": _league_public(league),
+                "rank": standing.get("rank"),
+                "nextMatch": upcoming[0] if upcoming else None,
+                "lastMatch": results[-1] if results else None,
+                "matches": matches,
+            })
+    return {
+        "available": True,
+        "stale": False,
+        "updatedAt": now.isoformat(),
+        "leagues": leagues,
+        "teams": sorted(teams, key=lambda item: item["code"]),
+        "matches": all_matches,
+    }
+
+
+def get_darts_season(now: datetime | None = None) -> dict:
+    global _season_cache
+    now = now or datetime.now(timezone.utc)
+    with _lock:
+        cached = _season_cache
+        if cached and now.timestamp() - cached[0] < SEASON_CACHE_SECONDS:
+            return cached[1]
+    try:
+        result = _load_season(now)
+        with _lock:
+            _season_cache = (now.timestamp(), result)
+        return result
+    except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+        with _lock:
+            cached = _season_cache
+        if cached:
+            return {**cached[1], "stale": True}
+        raise DartsFeedUnavailable("Der 3K-Saisonspielplan ist gerade nicht erreichbar.") from exc
+
+
+def get_darts_match(match_id: int, now: datetime | None = None) -> dict:
+    global _match_cache
+    now = now or datetime.now(timezone.utc)
+    season = get_darts_season(now)
+    match = next((item for item in season.get("matches") or [] if item.get("id") == match_id), None)
+    if not match:
+        raise ValueError("Diese Begegnung gehört nicht zu einem freigegebenen Barver-Spielplan.")
+    ttl = CACHE_SECONDS if match["kind"] == "live" else SEASON_CACHE_SECONDS
+    with _lock:
+        cached = _match_cache.get(match_id)
+        if cached and now.timestamp() - cached[0] < ttl:
+            return cached[1]
+    league = next(item for item in LEAGUES if item["key"] == match["league"])
+    try:
+        report = _public_get(f"{API}/{league['event']}/match/{match_id}/report")
+        if not isinstance(report, list):
+            report = []
+        try:
+            performance_payload = _public_get(f"{API}/{league['event']}/performance/match/{match_id}?matchReport=1")
+        except requests.RequestException:
+            performance_payload = []
+        performances = _performance_events(performance_payload, {"id": match_id}) if isinstance(performance_payload, list) else []
+        result = {
+            "available": True,
+            "stale": False,
+            "updatedAt": now.isoformat(),
+            "match": match,
+            "games": sorted((_public_game(item) for item in report), key=lambda item: item["number"]),
+            "performances": performances,
+            "sourceUrl": match["url"],
+        }
+        with _lock:
+            _match_cache[match_id] = (now.timestamp(), result)
+        return result
+    except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+        with _lock:
+            cached = _match_cache.get(match_id)
+        if cached:
+            return {**cached[1], "stale": True}
+        raise DartsFeedUnavailable("Der 3K-Spielbericht ist gerade nicht erreichbar.") from exc

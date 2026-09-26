@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from db_config import connection_kwargs
-from darts_feed import DartsFeedUnavailable, get_darts_center, get_darts_feed
+from darts_feed import DartsFeedUnavailable, get_darts_center, get_darts_feed, get_darts_match, get_darts_season
 from darts_push import barver_push_candidates, push_payload, valid_push_endpoint, valid_push_key
 from radio_directory import DirectoryUnavailable, get_station, search_stations
 from radio_logos import CACHE_SECONDS, FAILURE_SECONDS, cached_logo
@@ -547,6 +547,24 @@ def darts_center(league: str = "kl04", round_id: int | None = None):
         return get_darts_center(league, round_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except DartsFeedUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/v1/darts/season")
+def darts_season():
+    try:
+        return get_darts_season()
+    except DartsFeedUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/v1/darts/matches/{match_id}")
+def darts_match(match_id: int):
+    try:
+        return get_darts_match(match_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except DartsFeedUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 

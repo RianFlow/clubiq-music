@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 
-from darts_feed import _game_events, _leg_events, _performance_events, _preferred_round, _relevant_rounds, _standings, _ticker_item
+from darts_feed import _game_events, _leg_events, _performance_events, _preferred_round, _public_game, _relevant_rounds, _season_match, _standings, _ticker_item
 
 
 class DartsFeedTests(unittest.TestCase):
@@ -91,6 +91,27 @@ class DartsFeedTests(unittest.TestCase):
         legs = _leg_events(games, match, "SV Barver Darts A")
         self.assertEqual([(event["winnerSide"], event["legCount"]) for event in legs], [("home", 2), ("away", 1)])
         self.assertEqual(legs[0]["text"], "Jannik 2:1 Max")
+
+    def test_season_match_adds_only_clubiq_team_and_round_metadata(self):
+        match = {
+            "id": 123, "eventId": 1445, "statusCd": "OPEN", "datePlanned": "2026-10-02T19:00:00+02:00",
+            "participantHome": {"id": 174110, "displayName": "SV Barver Darts A", "email": "hidden@example.test"},
+            "participantGuest": {"id": 9, "displayName": "Gast"},
+        }
+        league = {"key": "kl04", "name": "Kreisligen 04", "short": "KL 04", "event": 1445, "phase": 2139, "teams": {174110: "A"}}
+        item = _season_match(match, league, {"id": 77, "name": "Spieltag 4", "dateFrom": "2026-10-02T00:00:00+02:00"})
+        self.assertEqual((item["barverTeam"], item["leagueShort"], item["round"]["id"]), ("A", "KL 04", 77))
+        self.assertNotIn("email", str(item))
+
+    def test_public_game_calculates_average_and_drops_private_fields(self):
+        game = {
+            "id": 8, "gameNr": 5, "statusCd": "FINISH", "legsHome": 3, "legsAway": 1,
+            "participantHome": {"displayName": "Jannik & Tim", "score": 1500, "darts": 75, "email": "hidden@example.test"},
+            "participantGuest": {"displayName": "Gast", "score": 900, "darts": 60},
+        }
+        public = _public_game(game)
+        self.assertEqual((public["block"], public["home"]["average"], public["away"]["average"]), ("2. Block · Doppel", 60.0, 45.0))
+        self.assertNotIn("email", str(public))
 
 
 if __name__ == "__main__":
