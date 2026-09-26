@@ -115,6 +115,17 @@ function initDarts() {
     .then(response=>response.ok?response.json():Promise.reject(new Error('sponsors unavailable')))
     .then(config=>startSponsorRotation(dartsSponsors(config)))
     .catch(()=>document.querySelectorAll('.sponsor-slot').forEach(slot=>{ slot.hidden=true; slot.replaceChildren(); }));
+  let playerPhotos={};
+  fetch('/static/darts-players.json',{headers:{Accept:'application/json'},cache:'no-store'})
+    .then(response=>response.ok?response.json():Promise.reject(new Error('player photos unavailable')))
+    .then(config=>{
+      const safe={};
+      for (const [id,path] of Object.entries(config?.players || {})) {
+        if (/^\d{1,12}$/.test(id) && typeof path==='string' && /^\/pics\/players\/[a-z0-9][a-z0-9._-]*\.(?:avif|jpe?g|png|webp)$/i.test(path)) safe[id]=path;
+      }
+      playerPhotos=safe;
+    })
+    .catch(()=>{ playerPhotos={}; });
   let livePushAlertTimer=0;
   function closeLivePushAlert() {
     window.clearTimeout(livePushAlertTimer);
@@ -440,6 +451,51 @@ function initDarts() {
     row.append(meta,score); row.addEventListener('click',()=>{ q('#teamDialog').close(); openMatch(item.id); });
     return row;
   }
+  function playerInitials(name) {
+    const parts=String(name || '').trim().split(/\s+/).filter(Boolean);
+    return (parts.length>1 ? `${parts[0][0]}${parts.at(-1)[0]}` : parts[0]?.slice(0,2) || 'SV').toLocaleUpperCase('de-DE');
+  }
+  function playerAvatar(member, large=false) {
+    const avatar=document.createElement('span'); avatar.className=`player-avatar${large?' large':''}`;
+    const photo=member?.id ? playerPhotos[String(member.id)] : '';
+    if (photo) {
+      const image=document.createElement('img'); image.src=photo; image.alt=`Porträt von ${member.name}`; image.loading='lazy'; image.decoding='async';
+      image.addEventListener('error',()=>{ avatar.replaceChildren(document.createTextNode(playerInitials(member.name))); avatar.classList.add('placeholder'); },{once:true});
+      avatar.append(image);
+    } else { avatar.textContent=playerInitials(member?.name); avatar.classList.add('placeholder'); }
+    return avatar;
+  }
+  function openPlayerProfile(member, team) {
+    if (!member || !team) return;
+    q('#playerProfileHeading').textContent=member.name;
+    const target=q('#playerProfile'), record=team.record || {};
+    const hero=document.createElement('section'); hero.className='player-profile-hero';
+    const identity=document.createElement('div'); identity.append(playerAvatar(member,true));
+    const copy=document.createElement('div'); const name=document.createElement('h3'); name.textContent=member.name;
+    const meta=document.createElement('p'); meta.textContent=`${member.role} · ${team.name}`;
+    const photoNote=document.createElement('small'); photoNote.textContent=playerPhotos[String(member.id || '')]?'Vereinsfoto':'Vereinsfoto kann später ergänzt werden';
+    copy.append(name,meta,photoNote); identity.append(copy); hero.append(identity);
+    const facts=document.createElement('section'); facts.className='player-profile-facts';
+    for (const [label,value] of [['Mannschaft',`Barver ${team.code}`],['Liga',team.league?.short || '–'],['Teamspiele',record.played ?? 0],['Teamsiege',record.wins ?? 0]]) {
+      const item=document.createElement('div'); const text=document.createElement('span'); text.textContent=label; const strong=document.createElement('strong'); strong.textContent=value; item.append(text,strong); facts.append(item);
+    }
+    const grid=document.createElement('div'); grid.className='player-profile-grid';
+    const sport=document.createElement('section'); sport.className='team-profile-section'; const sportTitle=document.createElement('h3'); sportTitle.textContent='Sportlicher Überblick'; sport.append(sportTitle);
+    const role=document.createElement('p'); role.className='player-profile-copy'; role.textContent=`${member.name} hat im Kader von ${team.name} die Rolle „${member.role}“.`;
+    sport.append(role);
+    if (team.nextMatch) { const label=document.createElement('p'); label.className='eyebrow'; label.textContent='Nächster Mannschaftstermin'; sport.append(label,makeProfileMatch(team.nextMatch,team.code)); }
+    const results=document.createElement('section'); results.className='team-profile-section'; const resultsTitle=document.createElement('h3'); resultsTitle.textContent='Letzte Mannschaftsergebnisse'; results.append(resultsTitle);
+    const recent=(team.matches || []).filter(item=>item.kind==='final').slice(-3).reverse();
+    for (const item of recent) results.append(makeProfileMatch(item,team.code));
+    if (!recent.length) { const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent='Noch keine Ergebnisse vorhanden.'; results.append(empty); }
+    const stats=document.createElement('section'); stats.className='team-profile-section player-stats-note'; const statsTitle=document.createElement('h3'); statsTitle.textContent='Persönliche Statistiken';
+    const statsCopy=document.createElement('p'); statsCopy.textContent='180er, High Finishes, Averages und gewonnene Legs erscheinen hier, sobald sie zuverlässig aus den öffentlichen 3K-Spielberichten zusammengeführt werden können.';
+    const loading=document.createElement('small'); loading.textContent='Das Laden ausführlicher 3K-Statistiken kann später einige Sekunden dauern.';
+    stats.append(statsTitle,statsCopy,loading);
+    const back=document.createElement('button'); back.type='button'; back.className='primary'; back.textContent=`Zurück zu Barver ${team.code}`; back.addEventListener('click',()=>{ q('#playerDialog').close(); openTeamProfile(team); }); stats.append(back);
+    grid.append(sport,results,stats); target.replaceChildren(hero,facts,grid);
+    if (!q('#playerDialog').open) q('#playerDialog').showModal();
+  }
   function openTeamProfile(team) {
     if (!team) return;
     q('#teamProfileHeading').textContent=team.name;
@@ -466,7 +522,13 @@ function initDarts() {
     if (!team.nextMatch && !recent.length) { const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent='Noch keine Begegnungen vorhanden.'; schedule.append(empty); }
     const squad=document.createElement('section'); squad.className='team-profile-section'; const squadTitle=document.createElement('h3'); squadTitle.textContent='Kader'; squad.append(squadTitle);
     const roster=document.createElement('div'); roster.className='team-roster';
-    for (const member of team.roster || []) { const player=document.createElement('div'); const playerName=document.createElement('strong'); playerName.textContent=member.name; const role=document.createElement('span'); role.textContent=member.role; player.append(playerName,role); roster.append(player); }
+    for (const member of team.roster || []) {
+      const player=document.createElement('button'); player.type='button'; player.className='player-roster-card'; player.setAttribute('aria-label',`${member.name}, Spielerprofil öffnen`);
+      player.append(playerAvatar(member));
+      const playerCopy=document.createElement('span'); const playerName=document.createElement('strong'); playerName.textContent=member.name; const role=document.createElement('small'); role.textContent=member.role; playerCopy.append(playerName,role);
+      const open=document.createElement('b'); open.textContent='›'; open.setAttribute('aria-hidden','true'); player.append(playerCopy,open);
+      player.addEventListener('click',()=>{ q('#teamDialog').close(); openPlayerProfile(member,team); }); roster.append(player);
+    }
     if (!(team.roster || []).length) { const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent='Kader wird von 3K noch nicht bereitgestellt.'; roster.append(empty); }
     squad.append(roster);
     const venue=team.venue || {}; const venueSection=document.createElement('section'); venueSection.className='team-profile-section team-venue'; const venueTitle=document.createElement('h3'); venueTitle.textContent='Heimspielstätte'; venueSection.append(venueTitle);
@@ -984,6 +1046,7 @@ function initDarts() {
   q('#gridView').addEventListener('click',()=>{ setSection('teams'); loadSeason(); });
   q('#closeMatch').addEventListener('click',()=>q('#matchDialog').close());
   q('#closeTeamProfile').addEventListener('click',()=>q('#teamDialog').close());
+  q('#closePlayerProfile').addEventListener('click',()=>q('#playerDialog').close());
   q('#fullscreen').addEventListener('click',async()=>{
     try { if (document.fullscreenElement) await document.exitFullscreen(); else { setSection('today'); if (document.body.requestFullscreen) await document.body.requestFullscreen(); else message('TV-Modus wird hier nicht unterstützt. Du kannst die Heute-Ansicht normal verwenden.'); } }
     catch (_) { message('Vollbild nicht verfügbar. Bitte die Browser-Vollbildfunktion oder „Groß“ verwenden.'); }

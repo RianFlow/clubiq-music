@@ -8,8 +8,8 @@
   <meta name="description" content="SV Barver Darts A, B, C und D: Spielpläne, Spielberichte und Live-Ansichten gemeinsam verfolgen.">
   <link rel="icon" href="/pics/logo.png">
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
-  <link rel="stylesheet" href="/static/darts.css?v=20260926-9">
-  <script defer src="/static/darts.js?v=20260926-9"></script>
+  <link rel="stylesheet" href="/static/darts.css?v=20260926-10">
+  <script defer src="/static/darts.js?v=20260926-10"></script>
 </head>
 <body>
   <header class="darts-header">
@@ -67,6 +67,7 @@
     </section>
     <section id="seasonPanel" class="sports-panel season-panel" aria-labelledby="seasonHeading" hidden>
       <div class="sports-panel-head"><div><p class="eyebrow">Alles an einem Ort</p><h2 id="seasonHeading">Spiele & Mannschaften</h2><p>Alle vier Teams, Termine und Ergebnisse – ohne die unübersichtliche 3K-Seite.</p></div><span id="seasonFreshness" class="live-data-status">Saison wird geladen</span></div>
+      <p class="data-load-note">Spielpläne und Statistiken werden direkt aus 3K geladen. Der erste Abruf kann einige Sekunden dauern.</p>
       <div class="season-toolbar" aria-label="Spielplan filtern">
         <label>Team<select id="seasonTeam"><option value="all">Alle Barver-Teams</option><option value="A">Barver A</option><option value="B">Barver B</option><option value="C">Barver C</option><option value="D">Barver D</option></select></label>
         <div id="seasonStatus" class="season-status" role="group" aria-label="Zeitraum"><button type="button" data-status="upcoming" aria-pressed="true">Kommende</button><button type="button" data-status="final" aria-pressed="false">Ergebnisse</button><button type="button" data-status="all" aria-pressed="false">Alle</button></div>
@@ -108,6 +109,10 @@
   <dialog id="teamDialog" class="team-profile-dialog" aria-labelledby="teamProfileHeading">
     <div class="dialog-head"><div><p class="eyebrow">SV Barver Darts · Mannschaft</p><h2 id="teamProfileHeading">Mannschaft</h2></div><button id="closeTeamProfile" type="button" aria-label="Schließen">×</button></div>
     <div id="teamProfile"><p class="panel-loading">Mannschaft wird geladen …</p></div>
+  </dialog>
+  <dialog id="playerDialog" class="player-profile-dialog" aria-labelledby="playerProfileHeading">
+    <div class="dialog-head"><div><p class="eyebrow">SV Barver Darts · Spielerprofil</p><h2 id="playerProfileHeading">Spieler</h2></div><button id="closePlayerProfile" type="button" aria-label="Schließen">×</button></div>
+    <div id="playerProfile"><p class="panel-loading">Spielerprofil wird geladen …</p></div>
   </dialog>
 </body>
 </html>

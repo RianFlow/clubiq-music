@@ -1,7 +1,8 @@
 import unittest
 from datetime import datetime, timezone
+from unittest.mock import patch
 
-from darts_feed import _barver_code_from_name, _game_events, _is_special_event, _leg_events, _live_game_events, _performance_events, _preferred_round, _public_game, _public_live_games, _relevant_rounds, _season_match, _special_match, _standings, _team_record, _ticker_item
+from darts_feed import _barver_code_from_name, _game_events, _is_special_event, _leg_events, _live_game_events, _load_team_profile, _performance_events, _preferred_round, _public_game, _public_live_games, _relevant_rounds, _season_match, _special_match, _standings, _team_record, _ticker_item
 
 
 class DartsFeedTests(unittest.TestCase):
@@ -167,6 +168,17 @@ class DartsFeedTests(unittest.TestCase):
         record = _team_record(matches, "A")
         self.assertEqual((record["played"], record["wins"], record["draws"], record["losses"]), (3, 1, 1, 1))
         self.assertEqual(record["form"], ["S", "N", "U"])
+
+    def test_team_profile_exposes_player_id_but_no_private_registration_data(self):
+        payload = {"participant": {"displayName": "SV Barver Darts B", "teamSeason": {"teamMembers": [{
+            "displayName": "Jannik Beispiel", "tc1": True,
+            "member": {"id": 55, "player": {"id": 89034, "passNr": 47103326, "email": "hidden@example.test"}},
+        }]}}}
+        with patch("darts_feed._public_get", return_value=payload):
+            profile = _load_team_profile(174111)
+        self.assertEqual(profile["roster"], [{"id": 89034, "name": "Jannik Beispiel", "role": "Kapitän"}])
+        self.assertNotIn("passNr", str(profile))
+        self.assertNotIn("hidden@example.test", str(profile))
 
     def test_public_game_calculates_average_and_drops_private_fields(self):
         game = {

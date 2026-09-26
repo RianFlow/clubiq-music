@@ -710,8 +710,14 @@ def _load_team_profile(team_id: int) -> dict:
         name = str(member.get("displayName") or (member.get("member") or {}).get("displayName") or "").strip()
         if not name:
             continue
+        player = ((member.get("member") or {}).get("player") or {})
+        player_id = player.get("id")
         role = "Kapitän" if member.get("tc1") else "Stellvertretung" if member.get("tc2") else "Spieler"
-        roster.append({"name": name[:100], "role": role})
+        roster.append({
+            "id": int(player_id) if isinstance(player_id, int) and player_id > 0 else None,
+            "name": name[:100],
+            "role": role,
+        })
     roster.sort(key=lambda item: (item["role"] == "Spieler", item["name"]))
     venue = team.get("playingVenue") or {}
     safe_venue = {
