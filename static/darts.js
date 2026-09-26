@@ -460,9 +460,9 @@ function initDarts() {
     const photo=member?.id ? playerPhotos[String(member.id)] : '';
     if (photo) {
       const image=document.createElement('img'); image.src=photo; image.alt=`Porträt von ${member.name}`; image.loading='lazy'; image.decoding='async';
-      image.addEventListener('error',()=>{ avatar.replaceChildren(document.createTextNode(playerInitials(member.name))); avatar.classList.add('placeholder'); },{once:true});
+      image.addEventListener('error',()=>{ avatar.replaceChildren(document.createTextNode(playerInitials(member.name))); avatar.classList.add('avatar-fallback'); },{once:true});
       avatar.append(image);
-    } else { avatar.textContent=playerInitials(member?.name); avatar.classList.add('placeholder'); }
+    } else { avatar.textContent=playerInitials(member?.name); avatar.classList.add('avatar-fallback'); }
     return avatar;
   }
   function openPlayerProfile(member, team) {
@@ -515,12 +515,12 @@ function initDarts() {
       const item=document.createElement('div'); const number=document.createElement('strong'); number.textContent=value; const text=document.createElement('span'); text.textContent=label; item.append(number,text); stats.append(item);
     }
     const grid=document.createElement('div'); grid.className='team-profile-grid';
-    const schedule=document.createElement('section'); schedule.className='team-profile-section'; const scheduleTitle=document.createElement('h3'); scheduleTitle.textContent='Spiele'; schedule.append(scheduleTitle);
+    const schedule=document.createElement('section'); schedule.className='team-profile-section team-schedule'; const scheduleTitle=document.createElement('h3'); scheduleTitle.textContent='Spiele'; schedule.append(scheduleTitle);
     if (team.nextMatch) { const label=document.createElement('p'); label.className='eyebrow'; label.textContent='Als Nächstes'; schedule.append(label,makeProfileMatch(team.nextMatch,team.code)); }
     const recent=(team.matches || []).filter(item=>item.kind==='final').slice(-5).reverse();
     if (recent.length) { const label=document.createElement('p'); label.className='eyebrow'; label.textContent='Letzte Ergebnisse'; schedule.append(label); for (const item of recent) schedule.append(makeProfileMatch(item,team.code)); }
     if (!team.nextMatch && !recent.length) { const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent='Noch keine Begegnungen vorhanden.'; schedule.append(empty); }
-    const squad=document.createElement('section'); squad.className='team-profile-section'; const squadTitle=document.createElement('h3'); squadTitle.textContent='Kader'; squad.append(squadTitle);
+    const squad=document.createElement('section'); squad.className='team-profile-section team-squad'; const squadTitle=document.createElement('h3'); squadTitle.textContent='Kader'; squad.append(squadTitle);
     const roster=document.createElement('div'); roster.className='team-roster';
     for (const member of team.roster || []) {
       const player=document.createElement('button'); player.type='button'; player.className='player-roster-card'; player.setAttribute('aria-label',`${member.name}, Spielerprofil öffnen`);
