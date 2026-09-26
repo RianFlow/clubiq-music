@@ -1,9 +1,9 @@
 "use strict";
 
-const CACHE = "clubiq-music-shell-20260926-7";
+const CACHE = "clubiq-music-shell-20260927-1";
 const SHELL = [
   "/", "/remote", "/party", "/darts", "/manifest.webmanifest",
-  "/static/darts.css?v=20260926-7", "/static/darts.js?v=20260926-7", "/static/darts-sponsors.json", "/pics/sv-barver-darts-tight.png",
+  "/static/darts.css?v=20260927-1", "/static/darts.js?v=20260927-1", "/static/darts-sponsors.json", "/static/darts-players.json", "/pics/sv-barver-darts-tight.png",
   "/static/app.css?v=20260915-1", "/static/app.js?v=20260919-1",
   "/static/song-info.js?v=20260917-1", "/static/comfort.js?v=20260919-1", "/static/comfort.css?v=20260917-1",
   "/static/reliability.js?v=20260919-1",
@@ -31,6 +31,14 @@ self.addEventListener("fetch", event => {
   const request = event.request;
   const url = new URL(request.url);
   if (request.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
+  const cacheableAsset = url.pathname.startsWith("/static/") || url.pathname.startsWith("/pics/");
+  if (cacheableAsset) {
+    event.respondWith(caches.match(request).then(cached => cached || fetch(request).then(response => {
+      if (response.ok) caches.open(CACHE).then(cache => cache.put(request, response.clone()));
+      return response;
+    })));
+    return;
+  }
   event.respondWith(fetch(request).then(response => {
     const copy = response.clone();
     caches.open(CACHE).then(cache => cache.put(request, copy));

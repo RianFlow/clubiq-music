@@ -345,12 +345,21 @@ def poll_darts_push_events() -> None:
         print(f"[DARTS PUSH] {type(exc).__name__} ({cause}): Push-Prüfung wird später wiederholt.")
 
 
+def warm_darts_season() -> None:
+    """Keep the expensive 3K season overview ready before a visitor opens it."""
+    try:
+        get_darts_season()
+    except (DartsFeedUnavailable, ValueError, requests.RequestException) as exc:
+        print(f"[DARTS CACHE] {type(exc).__name__}: Saisonübersicht wird später erneut vorgeladen.")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     scheduler = BackgroundScheduler()
     scheduler.add_job(close_expired_cycles, "interval", minutes=1)
     scheduler.add_job(collect_playback_history, "interval", seconds=30, max_instances=1, next_run_time=datetime.now(timezone.utc))
     scheduler.add_job(poll_darts_push_events, "interval", seconds=45, max_instances=1, next_run_time=datetime.now(timezone.utc))
+    scheduler.add_job(warm_darts_season, "interval", minutes=9, max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(seconds=12))
     scheduler.start()
     yield
     scheduler.shutdown()

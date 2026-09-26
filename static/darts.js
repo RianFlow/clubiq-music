@@ -155,12 +155,12 @@ function initDarts() {
     states.forEach(show);
     if (states.some(state=>state.items.length>1)) window.setInterval(()=>states.forEach(show),config.displaySeconds*1000);
   }
-  fetch('/static/darts-sponsors.json',{headers:{Accept:'application/json'},cache:'no-store'})
+  fetch('/static/darts-sponsors.json',{headers:{Accept:'application/json'}})
     .then(response=>response.ok?response.json():Promise.reject(new Error('sponsors unavailable')))
     .then(config=>startSponsorRotation(dartsSponsors(config)))
     .catch(()=>document.querySelectorAll('.sponsor-slot').forEach(slot=>{ slot.hidden=true; slot.replaceChildren(); }));
   let playerProfiles={};
-  fetch('/static/darts-players.json',{headers:{Accept:'application/json'},cache:'no-store'})
+  fetch('/static/darts-players.json',{headers:{Accept:'application/json'}})
     .then(response=>response.ok?response.json():Promise.reject(new Error('player photos unavailable')))
     .then(config=>{ playerProfiles=dartsPlayerProfiles(config); })
     .catch(()=>{ playerProfiles={}; });
@@ -404,8 +404,11 @@ function initDarts() {
     try {
       const response = await fetch('/api/v1/darts/ticker',{headers:{Accept:'application/json'},signal:controller.signal});
       if (!response.ok) throw new Error('ticker unavailable');
-      const payload=await response.json(); renderTicker(demoLive?demoTicker(payload):payload); tickerDelay=30000;
-      loadLiveDetails();
+      const payload=await response.json(); const rendered=demoLive?demoTicker(payload):payload; renderTicker(rendered); tickerDelay=30000;
+      if (demoLive || (rendered.items || []).some(item=>item.kind==='live')) loadLiveDetails();
+      else {
+        liveCenters=[]; q('#liveDataStatus').dataset.state='ok'; q('#liveDataStatus').textContent='Spielplan aktuell';
+      }
     } catch (_) {
       q('#tickerUpdated').textContent='3K nicht erreichbar'; tickerDelay=Math.min(120000,tickerDelay*2);
     } finally { clearTimeout(timeout); setTimeout(loadTicker,tickerDelay); }
@@ -540,7 +543,7 @@ function initDarts() {
     const avatar=document.createElement('span'); avatar.className=`player-avatar${large?' large':''}`;
     const photo=member?.id ? playerProfiles[String(member.id)]?.image : '';
     if (photo) {
-      const image=document.createElement('img'); image.src=photo; image.alt=`Porträt von ${member.name}`; image.loading='lazy'; image.decoding='async';
+      const image=document.createElement('img'); image.src=photo; image.alt=`Porträt von ${member.name}`; image.loading=large?'eager':'lazy'; image.fetchPriority=large?'high':'low'; image.decoding='async';
       image.addEventListener('error',()=>{ avatar.replaceChildren(document.createTextNode(playerInitials(member.name))); avatar.classList.add('avatar-fallback'); },{once:true});
       avatar.append(image);
     } else { avatar.textContent=playerInitials(member?.name); avatar.classList.add('avatar-fallback'); }

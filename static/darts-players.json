@@ -1,42 +1,42 @@
 {
   "players": {
     "89034": {
-      "image": "/pics/players/joerg-renzelmann-cutout.png",
+      "image": "/pics/players/joerg-renzelmann-cutout.webp",
       "alias": "RenzelJo"
     },
     "89029": {
-      "image": "/pics/players/patrick-lammers-cutout.png",
+      "image": "/pics/players/patrick-lammers-cutout.webp",
       "alias": "Peddy"
     },
     "89017": {
-      "image": "/pics/players/justin-albrecht-cutout.png"
+      "image": "/pics/players/justin-albrecht-cutout.webp"
     },
     "89030": {
-      "image": "/pics/players/max-lowak-cutout.png",
+      "image": "/pics/players/max-lowak-cutout.webp",
       "alias": "Max"
     },
     "116999": {
-      "image": "/pics/players/rene-lange-cutout.png",
+      "image": "/pics/players/rene-lange-cutout.webp",
       "alias": "Full Metal"
     },
     "52376": {
-      "image": "/pics/players/robin-tiedemann-cutout.png",
+      "image": "/pics/players/robin-tiedemann-cutout.webp",
       "alias": "The Chipper"
     },
     "89019": {
-      "image": "/pics/players/denis-dieckmann-cutout.png",
+      "image": "/pics/players/denis-dieckmann-cutout.webp",
       "alias": "Otto"
     },
     "89022": {
-      "image": "/pics/players/eike-feldhaus-cutout.png",
+      "image": "/pics/players/eike-feldhaus-cutout.webp",
       "alias": "Mister Right Side"
     },
     "89027": {
-      "image": "/pics/players/jannik-klaening-cutout.png",
+      "image": "/pics/players/jannik-klaening-cutout.webp",
       "alias": "Jann7k"
     },
     "89038": {
-      "image": "/pics/players/till-schulze-cutout.png",
+      "image": "/pics/players/till-schulze-cutout.webp",
       "alias": "Dübbeldoktor"
     }
   }

@@ -23,6 +23,7 @@ SEASON_CACHE_SECONDS = 600
 _cache: dict | None = None
 _cache_time = 0.0
 _lock = Lock()
+_season_load_lock = Lock()
 _center_cache: dict[tuple[str, int], tuple[float, dict]] = {}
 _season_cache: tuple[float, dict] | None = None
 _special_cache: tuple[float, dict] | None = None
@@ -879,17 +880,22 @@ def get_darts_season(now: datetime | None = None) -> dict:
         cached = _season_cache
         if cached and now.timestamp() - cached[0] < SEASON_CACHE_SECONDS:
             return cached[1]
-    try:
-        result = _load_season(now)
-        with _lock:
-            _season_cache = (now.timestamp(), result)
-        return result
-    except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+    with _season_load_lock:
         with _lock:
             cached = _season_cache
-        if cached:
-            return {**cached[1], "stale": True}
-        raise DartsFeedUnavailable("Der 3K-Saisonspielplan ist gerade nicht erreichbar.") from exc
+            if cached and now.timestamp() - cached[0] < SEASON_CACHE_SECONDS:
+                return cached[1]
+        try:
+            result = _load_season(now)
+            with _lock:
+                _season_cache = (now.timestamp(), result)
+            return result
+        except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+            with _lock:
+                cached = _season_cache
+            if cached:
+                return {**cached[1], "stale": True}
+            raise DartsFeedUnavailable("Der 3K-Saisonspielplan ist gerade nicht erreichbar.") from exc
 
 
 def get_darts_match(match_id: int, now: datetime | None = None) -> dict:
