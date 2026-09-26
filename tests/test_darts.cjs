@@ -104,6 +104,8 @@ assert.match(script,/native-match-stats/);
 assert.match(script,/match-highlight-ticker/);
 assert.match(script,/Heimspiel/);
 assert.match(script,/Auswärtsspiel/);
+assert.match(script,/demoLive/);
+assert.match(script,/DEMO-MODUS/);
 assert.match(script,/https:\/\/portal\.3k-darts\.com\/frontend\/events\/5\/mandant\/1931/);
 assert.match(fs.readFileSync('sw.js','utf8'),/"\/darts"/);
 assert.match(fs.readFileSync('sw.js','utf8'),/addEventListener\("push"/);

@@ -78,6 +78,7 @@ if (typeof document !== 'undefined') initDarts();
 function initDarts() {
   const q = selector => document.querySelector(selector);
   const grid = q('#teamGrid'), cards = new Map(), selections = {};
+  const demoLive = ['127.0.0.1','localhost'].includes(location.hostname) && new URLSearchParams(location.search).get('demo') === 'live';
   const themeKey = 'clubiq_darts_theme';
   function applyTheme(theme, remember=false) {
     const selected=dartsTheme(theme);
@@ -306,13 +307,22 @@ function initDarts() {
     const updated = new Date(data.updatedAt);
     q('#tickerUpdated').textContent = `${data.stale ? 'Letzter Stand' : 'Stand'} ${updated.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}`;
   }
+  function demoTicker(data) {
+    const copy=JSON.parse(JSON.stringify(data));
+    const upcoming=(copy.items || []).filter(item=>item.kind==='upcoming').slice(0,2);
+    const scores=['5:4','3:2'];
+    upcoming.forEach((item,index)=>{ item.kind='live'; item.score=scores[index]; item.updatedAt=new Date().toISOString(); item.text=`LIVE: ${item.home} ${item.score} ${item.away}`; });
+    copy.items=[...upcoming,...(copy.items || []).filter(item=>!upcoming.some(live=>live.id===item.id))];
+    copy.updatedAt=new Date().toISOString(); copy.demo=true;
+    return copy;
+  }
   async function loadTicker() {
     if (document.hidden) { setTimeout(loadTicker,tickerDelay); return; }
     const controller = new AbortController(), timeout=setTimeout(()=>controller.abort(),8000);
     try {
       const response = await fetch('/api/v1/darts/ticker',{headers:{Accept:'application/json'},signal:controller.signal});
       if (!response.ok) throw new Error('ticker unavailable');
-      renderTicker(await response.json()); tickerDelay=30000;
+      const payload=await response.json(); renderTicker(demoLive?demoTicker(payload):payload); tickerDelay=30000;
       loadLiveDetails();
     } catch (_) {
       q('#tickerUpdated').textContent='3K nicht erreichbar'; tickerDelay=Math.min(120000,tickerDelay*2);
@@ -331,10 +341,19 @@ function initDarts() {
       }));
       const available=results.filter(result=>result.status==='fulfilled').map(result=>result.value);
       if (available.length) {
-        liveCenters=available; liveDetailsLoadedAt=Date.now(); renderToday(tickerData);
+        liveCenters=available;
+        if (demoLive) {
+          const liveItems=(tickerData.items || []).filter(item=>item.kind==='live');
+          liveCenters.unshift({barverMatches:liveItems,pushEvents:liveItems.flatMap((item,index)=>[
+            {type:'leg',matchId:item.id,order:10,text:index?'Dennis Beispiel 2:1 Gegner':'Gegner 1:2 Jannik Beispiel'},
+            {type:'180',matchId:item.id,player:index?'Tim Beispiel':'Jannik Beispiel',value:180},
+            ...(index?[{type:'high_finish',matchId:item.id,player:'Dennis Beispiel',value:121}]:[]),
+          ])});
+        }
+        liveDetailsLoadedAt=Date.now(); renderToday(tickerData);
         const stale=available.some(center=>center.stale);
         q('#liveDataStatus').dataset.state=stale?'warn':'ok';
-        q('#liveDataStatus').textContent=stale?'Letzter verfügbarer Stand':'Live-Daten verbunden';
+        q('#liveDataStatus').textContent=demoLive?'Demo-Live aktiv':stale?'Letzter verfügbarer Stand':'Live-Daten verbunden';
       } else throw new Error('no centers');
     } catch (_) {
       q('#liveDataStatus').dataset.state='warn'; q('#liveDataStatus').textContent='3K gerade nicht erreichbar';
@@ -401,7 +420,16 @@ function initDarts() {
     try {
       const response=await fetch('/api/v1/darts/season',{headers:{Accept:'application/json'},cache:force?'reload':'default'});
       if (!response.ok) throw new Error('season unavailable');
-      seasonData=await response.json(); renderSeason();
+      seasonData=await response.json();
+      if (demoLive) {
+        const liveById=new Map((tickerData.items || []).filter(item=>item.kind==='live').map(item=>[item.id,item]));
+        for (const item of seasonData.matches || []) if (liveById.has(item.id)) Object.assign(item,liveById.get(item.id),{kind:'live'});
+        for (const team of seasonData.teams || []) {
+          team.matches=(seasonData.matches || []).filter(item=>(item.barverTeams || [item.barverTeam]).includes(team.code));
+          team.nextMatch=team.matches.find(item=>item.kind!=='final') || null;
+        }
+      }
+      renderSeason();
       q('#seasonFreshness').textContent=seasonData.stale?'Letzter verfügbarer Stand':'Mit 3K abgeglichen'; q('#seasonFreshness').dataset.state=seasonData.stale?'warn':'ok';
     } catch (_) {
       q('#seasonFreshness').textContent='3K gerade nicht erreichbar'; q('#seasonFreshness').dataset.state='warn';
@@ -416,7 +444,7 @@ function initDarts() {
     const matchup=document.createElement('div'); matchup.className='native-match-score large';
     const home=document.createElement('strong'); home.textContent=match.home || 'Heim'; const score=document.createElement('b'); score.textContent=match.score || 'vs'; const away=document.createElement('strong'); away.textContent=match.away || 'Gast'; matchup.append(home,score,away);
     header.append(meta,matchup);
-    const finished=(data.games || []).filter(game=>Number.isInteger(game.homeLegs)&&Number.isInteger(game.awayLegs));
+    const finished=(data.games || []).filter(game=>game.status==='FINISH'&&Number.isInteger(game.homeLegs)&&Number.isInteger(game.awayLegs));
     const homeWins=finished.filter(game=>game.homeLegs>game.awayLegs).length, awayWins=finished.filter(game=>game.awayLegs>game.homeLegs).length;
     const homeLegs=finished.reduce((sum,game)=>sum+game.homeLegs,0), awayLegs=finished.reduce((sum,game)=>sum+game.awayLegs,0);
     const homeAverages=finished.map(game=>game.home.average).filter(Number.isFinite), awayAverages=finished.map(game=>game.away.average).filter(Number.isFinite);
@@ -454,11 +482,28 @@ function initDarts() {
     const source=document.createElement('a'); source.className='external match-source'; source.href=data.sourceUrl; source.target='_blank'; source.rel='noopener noreferrer'; source.textContent='Offizielle Quelle bei 3K ↗';
     target.replaceChildren(header,stats,ticker,highlights,games,source);
   }
+  function demoMatchData(base) {
+    const code=barverTeam(base) || 'A';
+    const side=(base.home || '').includes(`Barver Darts ${code}`)?'home':'away';
+    const scores=[[3,1],[2,3],[3,0],[3,2],[1,3],[3,2],[3,1],[2,3],[3,0]];
+    const homePlayers=['Jannik Beispiel','Tim Beispiel','Dennis Beispiel','Robin Beispiel','Jannik & Tim','Dennis & Robin','Max Beispiel','Jannik Beispiel','Tim Beispiel','Dennis Beispiel','Doppel Heim','Doppel Heim 2'];
+    const awayPlayers=['Gegner Eins','Gegner Zwei','Gegner Drei','Gegner Vier','Doppel Gast','Doppel Gast 2','Gegner Fünf','Gegner Sechs','Gegner Sieben','Gegner Acht','Doppel Gast 3','Doppel Gast 4'];
+    const games=Array.from({length:12},(_,index)=>{
+      const number=index+1, finished=number<=9, active=number===10, pair=finished?scores[index]:active?[2,1]:[null,null];
+      return {id:9000+number,number,block:number<=4?'1. Block · Einzel':number<=6?'2. Block · Doppel':number<=10?'3. Block · Einzel':'4. Block · Doppel',status:finished?'FINISH':active?'ACTIVE':'OPEN',home:{name:homePlayers[index],average:finished?45.2+index:null},away:{name:awayPlayers[index],average:finished?41.4+index/2:null},homeLegs:pair[0],awayLegs:pair[1]};
+    });
+    const match={...base,kind:'live',barverTeam:code,barverTeams:[code],barverSides:{[code]:side},leagueShort:'DEMO',round:{name:'Live-Simulation'},score:'5:4'};
+    return {available:true,stale:false,demo:true,match,games,performances:[{type:'180',player:'Jannik Beispiel',count:2,value:180},{type:'high_finish',player:'Dennis Beispiel',count:1,value:121}],sourceUrl:base.url || '#'};
+  }
   async function openMatch(matchId) {
     if (!Number.isInteger(Number(matchId)) || Number(matchId)<=0) return;
     q('#matchHeading').textContent='Begegnung wird geladen'; q('#matchDetail').innerHTML='<p class="panel-loading">Spielbericht wird geladen …</p>';
     if (!q('#matchDialog').open) q('#matchDialog').showModal();
     try {
+      if (demoLive) {
+        const base=(seasonData?.matches || []).find(item=>item.id===Number(matchId)) || (tickerData.items || []).find(item=>item.id===Number(matchId));
+        if (base?.kind==='live') { renderMatchDetail(demoMatchData(base)); q('#matchHeading').textContent=`DEMO · ${q('#matchHeading').textContent}`; return; }
+      }
       const response=await fetch(`/api/v1/darts/matches/${encodeURIComponent(matchId)}`,{headers:{Accept:'application/json'},cache:'no-store'});
       if (!response.ok) throw new Error('match unavailable'); renderMatchDetail(await response.json());
     } catch (_) { q('#matchDetail').innerHTML='<p class="error">Der Spielbericht konnte gerade nicht geladen werden. Bitte später erneut versuchen.</p>'; }
@@ -701,6 +746,7 @@ function initDarts() {
   }
   applyLayout();
   setSection('today');
+  if (demoLive) message('DEMO-MODUS: Die angezeigten Live-Spielstände und Highlights sind simuliert und werden nicht gespeichert.');
   q('#gameCount').addEventListener('change',()=>{
     layout = dartsLayout({...layout,count:Number(q('#gameCount').value)});
     focused = null; applyLayout(); saveLayout();
