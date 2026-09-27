@@ -38,6 +38,13 @@ assert.deepEqual(JSON.parse(JSON.stringify(dartsPlayerProfiles({players:{
   '124':{image:'/pics/players/legacy.jpg',alias:'',average:null,playerNumber:''},
   '125':{image:'',alias:'',average:null,playerNumber:'',personal:{darts:'Target Example',weightGrams:23,favoritePdcPlayer:'Luke Example',favoriteFinish:121,finishRoute:'T20 · 11 · Bull',walkOnSong:'Example Song'}},
 });
+const dartsPlayerStats = vm.runInContext('dartsPlayerStats',context);
+assert.deepEqual(JSON.parse(JSON.stringify(dartsPlayerStats({updatedAt:'2026-09-27T12:00:00Z',stale:true,players:{
+  '123':{average:61.26,playerNumber:'q8v4',gamesPlayed:5,gamesWon:3,gamesLost:2,legsFor:12,legsAgainst:9,singlesPlayed:3,count180:2,highFinishes:1,highFinish:121,winRate:60},
+  'bad':{average:999},
+}}))),{
+  '123':{average:61.3,playerNumber:'Q8V4',gamesPlayed:5,gamesWon:3,gamesLost:2,legsFor:12,legsAgainst:9,singlesPlayed:3,count180:2,highFinishes:1,highFinish:121,winRate:60,statsUpdatedAt:'2026-09-27T12:00:00Z',statsStale:true},
+});
 const dartsSponsors = vm.runInContext('dartsSponsors',context);
 const sponsorConfig = {displaySeconds:2,sponsors:[
   {id:'active',name:'Lokaler Betrieb',image:'/pics/sponsors/betrieb.png',href:'https://example.com',placements:['top','inline'],startsAt:'2026-01-01',endsAt:'2026-12-31'},

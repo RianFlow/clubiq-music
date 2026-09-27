@@ -26,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from db_config import connection_kwargs
-from darts_feed import DartsFeedUnavailable, get_darts_center, get_darts_feed, get_darts_match, get_darts_season
+from darts_feed import DartsFeedUnavailable, get_darts_center, get_darts_feed, get_darts_match, get_darts_player_stats, get_darts_season
 from darts_live import darts_live_hub
 from darts_push import barver_push_candidates, push_payload, valid_push_endpoint, valid_push_key, subscription_matches, PUSH_EVENT_TYPES
 from radio_directory import DirectoryUnavailable, get_station, search_stations
@@ -387,6 +387,14 @@ def warm_darts_season() -> None:
         print(f"[DARTS CACHE] {type(exc).__name__}: Saisonübersicht wird später erneut vorgeladen.")
 
 
+def warm_darts_player_stats() -> None:
+    """Prepare the expensive per-player rollup before a profile is opened."""
+    try:
+        get_darts_player_stats()
+    except (DartsFeedUnavailable, ValueError, requests.RequestException) as exc:
+        print(f"[DARTS STATS] {type(exc).__name__}: Spielerstatistiken werden später erneut vorgeladen.")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     scheduler = BackgroundScheduler()
@@ -396,6 +404,7 @@ async def lifespan(_: FastAPI):
     scheduler.add_job(sync_darts_live_groups, "interval", seconds=10, max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(seconds=2))
     scheduler.add_job(deliver_darts_live_events, "interval", seconds=2, max_instances=1, coalesce=True)
     scheduler.add_job(warm_darts_season, "interval", minutes=9, max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(seconds=12))
+    scheduler.add_job(warm_darts_player_stats, "interval", minutes=55, max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(seconds=35))
     scheduler.start()
     yield
     darts_live_hub.stop()
@@ -667,6 +676,14 @@ def darts_match(match_id: int):
         return get_darts_match(match_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DartsFeedUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/v1/darts/player-stats")
+def darts_player_stats():
+    try:
+        return get_darts_player_stats()
     except DartsFeedUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 

@@ -106,6 +106,24 @@ function dartsPlayerProfiles(config) {
   }
   return result;
 }
+function dartsPlayerStats(config) {
+  const result={};
+  const integer=(value,max=10000)=>Number.isInteger(value)&&value>=0&&value<=max?value:0;
+  for (const [id,item] of Object.entries(config?.players || {})) {
+    if (!/^\d{1,12}$/.test(id) || !item || typeof item!=='object') continue;
+    const average=typeof item.average==='number'&&Number.isFinite(item.average)&&item.average>=0&&item.average<=180?Math.round(item.average*10)/10:null;
+    const highFinish=Number.isInteger(item.highFinish)&&item.highFinish>=2&&item.highFinish<=170?item.highFinish:null;
+    const playerNumber=typeof item.playerNumber==='string'&&/^[A-Z0-9]{3,12}$/i.test(item.playerNumber.trim())?item.playerNumber.trim().toLocaleUpperCase('de-DE'):'';
+    result[id]={
+      average,playerNumber,gamesPlayed:integer(item.gamesPlayed),gamesWon:integer(item.gamesWon),gamesLost:integer(item.gamesLost),
+      legsFor:integer(item.legsFor),legsAgainst:integer(item.legsAgainst),singlesPlayed:integer(item.singlesPlayed),
+      count180:integer(item.count180),highFinishes:integer(item.highFinishes),highFinish,
+      winRate:Number.isInteger(item.winRate)&&item.winRate>=0&&item.winRate<=100?item.winRate:null,
+      statsUpdatedAt:typeof config.updatedAt==='string'?config.updatedAt:'',statsStale:config.stale===true,
+    };
+  }
+  return result;
+}
 function pushApplicationKey(value) {
   const padded = `${value}${'='.repeat((4-value.length%4)%4)}`.replace(/-/g,'+').replace(/_/g,'/');
   const raw = atob(padded);
@@ -212,11 +230,19 @@ function initDarts() {
     .then(response=>response.ok?response.json():Promise.reject(new Error('sponsors unavailable')))
     .then(config=>startSponsorRotation(dartsSponsors(config)))
     .catch(()=>document.querySelectorAll('.sponsor-slot').forEach(slot=>{ slot.hidden=true; slot.replaceChildren(); }));
-  let playerProfiles={};
+  let playerProfiles={}, playerProfileBase={}, playerStatCache={};
+  const mergePlayerProfiles=()=>{
+    const ids=new Set([...Object.keys(playerProfileBase),...Object.keys(playerStatCache)]);
+    playerProfiles=Object.fromEntries([...ids].map(id=>[id,{...(playerProfileBase[id]||{}),...(playerStatCache[id]||{})}]));
+  };
   fetch('/static/darts-players.json',{headers:{Accept:'application/json'}})
     .then(response=>response.ok?response.json():Promise.reject(new Error('player photos unavailable')))
-    .then(config=>{ playerProfiles=dartsPlayerProfiles(config); })
-    .catch(()=>{ playerProfiles={}; });
+    .then(config=>{ playerProfileBase=dartsPlayerProfiles(config); mergePlayerProfiles(); })
+    .catch(()=>{ playerProfileBase={}; mergePlayerProfiles(); });
+  fetch('/api/v1/darts/player-stats',{headers:{Accept:'application/json'}})
+    .then(response=>response.ok?response.json():Promise.reject(new Error('player stats unavailable')))
+    .then(config=>{ playerStatCache=dartsPlayerStats(config); mergePlayerProfiles(); })
+    .catch(()=>{ playerStatCache={}; mergePlayerProfiles(); });
   let livePushAlertTimer=0;
   function closeLivePushAlert() {
     window.clearTimeout(livePushAlertTimer);
@@ -839,9 +865,18 @@ function initDarts() {
     for (const item of recent) results.append(makeProfileMatch(item,team.code));
     if (!recent.length) { const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent='Noch keine Ergebnisse vorhanden.'; results.append(empty); }
     const stats=document.createElement('section'); stats.className='team-profile-section player-stats-note'; const statsTitle=document.createElement('h3'); statsTitle.textContent='Persönliche Statistiken';
-    const statsCopy=document.createElement('p'); statsCopy.textContent='180er, High Finishes, Averages und gewonnene Legs erscheinen hier, sobald sie zuverlässig aus den öffentlichen 3K-Spielberichten zusammengeführt werden können.';
-    const loading=document.createElement('small'); loading.textContent='Das Laden ausführlicher 3K-Statistiken kann später einige Sekunden dauern.';
-    stats.append(statsTitle,statsCopy,loading);
+    stats.append(statsTitle);
+    if (profile.statsUpdatedAt) {
+      const statsGrid=document.createElement('div'); statsGrid.className='player-personal-grid';
+      const values=[['Partien',profile.gamesPlayed],['Siege',profile.gamesWon],['Legs',`${profile.legsFor}:${profile.legsAgainst}`],['180er',profile.count180],['High Finishes',profile.highFinishes],['Bestes Finish',profile.highFinish || '–']];
+      for (const [label,value] of values) { const item=document.createElement('div'); const text=document.createElement('span'); text.textContent=label; const strong=document.createElement('strong'); strong.textContent=value; item.append(text,strong); statsGrid.append(item); }
+      const source=document.createElement('small'); source.textContent=`Aus öffentlichen 3K-Spielberichten zusammengeführt${profile.statsStale?' · letzter gespeicherter Stand':''}.`;
+      stats.append(statsGrid,source);
+    } else {
+      const statsCopy=document.createElement('p'); statsCopy.textContent='Die persönlichen 3K-Statistiken werden gerade zentral vorbereitet.';
+      const loading=document.createElement('small'); loading.textContent='Beim ersten Abruf kann das Zusammenführen einige Sekunden dauern; danach kommt der Wert aus dem schnellen Zwischenspeicher.';
+      stats.append(statsCopy,loading);
+    }
     const back=document.createElement('button'); back.type='button'; back.className='primary'; back.textContent=`Zurück zu Barver ${team.code}`; back.addEventListener('click',()=>{ q('#playerDialog').close(); openTeamProfile(team); }); stats.append(back);
     grid.append(sport,results,stats); target.replaceChildren(hero,facts,personalSection,grid);
     if (!q('#playerDialog').open) q('#playerDialog').showModal();

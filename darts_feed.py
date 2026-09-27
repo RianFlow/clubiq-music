@@ -20,6 +20,7 @@ TEAM_NUMBER_CODES = {"1": "A", "2": "B", "3": "C", "4": "D"}
 SPECIAL_EVENT_TERMS = ("pokal", "cup", "freundschaft", "sonder")
 CACHE_SECONDS = 45
 SEASON_CACHE_SECONDS = 600
+PLAYER_STATS_CACHE_SECONDS = 3600
 _cache: dict | None = None
 _cache_time = 0.0
 _lock = Lock()
@@ -28,6 +29,9 @@ _center_cache: dict[tuple[str, int], tuple[float, dict]] = {}
 _season_cache: tuple[float, dict] | None = None
 _special_cache: tuple[float, dict] | None = None
 _match_cache: dict[int, tuple[float, dict]] = {}
+_player_stats_cache: tuple[float, dict] | None = None
+_player_stats_load_lock = Lock()
+_player_match_stats_cache: dict[tuple[int, int], tuple[list[dict], list[dict]]] = {}
 
 
 class DartsFeedUnavailable(RuntimeError):
@@ -995,3 +999,154 @@ def get_darts_match(match_id: int, now: datetime | None = None) -> dict:
         if cached:
             return {**cached[1], "stale": True}
         raise DartsFeedUnavailable("Der 3K-Spielbericht ist gerade nicht erreichbar.") from exc
+
+
+def _player_names(value: str) -> list[str]:
+    return [part.strip() for part in str(value or "").split(" & ") if part.strip()]
+
+
+def _load_player_match_stats(event_id: int, match_id: int) -> tuple[list[dict], list[dict]]:
+    key = (event_id, match_id)
+    with _lock:
+        cached = _player_match_stats_cache.get(key)
+    if cached:
+        return cached
+    report = _public_get(f"{API}/{event_id}/match/{match_id}/report")
+    if not isinstance(report, list):
+        report = []
+    try:
+        performances = _public_get(f"{API}/{event_id}/performance/match/{match_id}?matchReport=1")
+    except (requests.RequestException, ValueError, KeyError, TypeError):
+        performances = []
+    if not isinstance(performances, list):
+        performances = []
+    with _lock:
+        _player_match_stats_cache[key] = (report, performances)
+    return report, performances
+
+
+def _load_player_stats(now: datetime) -> dict:
+    season = get_darts_season(now)
+    roster_by_name: dict[str, dict] = {}
+    for team in season.get("teams") or []:
+        for member in team.get("roster") or []:
+            name = str(member.get("name") or "").strip()
+            if name:
+                roster_by_name[name.casefold()] = {
+                    "id": member.get("id"), "name": name, "team": team.get("code")
+                }
+
+    stats: dict[str, dict] = {}
+    for key, member in roster_by_name.items():
+        player_id = member.get("id")
+        if isinstance(player_id, int) and player_id > 0:
+            stats[str(player_id)] = {
+                **member, "gamesPlayed": 0, "gamesWon": 0, "gamesLost": 0,
+                "legsFor": 0, "legsAgainst": 0, "singlesPlayed": 0,
+                "average": None, "count180": 0, "highFinishes": 0,
+                "highFinish": None, "playerNumber": "", "_score": 0, "_darts": 0,
+            }
+
+    def profile_for(name: str) -> dict | None:
+        member = roster_by_name.get(name.casefold())
+        return stats.get(str(member.get("id"))) if member else None
+
+    finished = {
+        (int(match.get("eventId") or 0), int(match.get("id") or 0))
+        for match in season.get("matches") or []
+        if match.get("kind") == "final" and match.get("eventId") and match.get("id")
+    }
+    loaded: list[tuple[list[dict], list[dict]]] = []
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        jobs = [executor.submit(_load_player_match_stats, event_id, match_id) for event_id, match_id in finished]
+        for job in as_completed(jobs):
+            try:
+                loaded.append(job.result())
+            except (requests.RequestException, ValueError, KeyError, TypeError):
+                continue
+
+    for report, performances in loaded:
+        for game in report:
+            if str(game.get("statusCd") or "").upper() != "FINISH":
+                continue
+            home = game.get("participantHome") or {}
+            away = game.get("participantGuest") or {}
+            home_legs, away_legs = game.get("legsHome"), game.get("legsAway")
+            if not isinstance(home_legs, int) or not isinstance(away_legs, int):
+                continue
+            for participant, legs_for, legs_against in ((home, home_legs, away_legs), (away, away_legs, home_legs)):
+                names = _player_names(participant.get("displayName"))
+                for name in names:
+                    player = profile_for(name)
+                    if not player:
+                        continue
+                    player["gamesPlayed"] += 1
+                    player["legsFor"] += legs_for
+                    player["legsAgainst"] += legs_against
+                    if legs_for > legs_against:
+                        player["gamesWon"] += 1
+                    elif legs_for < legs_against:
+                        player["gamesLost"] += 1
+                if len(names) == 1:
+                    player = profile_for(names[0])
+                    darts, score = participant.get("darts"), participant.get("score")
+                    if player and isinstance(darts, (int, float)) and darts > 0 and isinstance(score, (int, float)):
+                        player["singlesPlayed"] += 1
+                        player["_darts"] += darts
+                        player["_score"] += score
+
+        for performance in performances:
+            team_name = str((performance.get("team") or {}).get("name") or "")
+            if not _barver_code_from_name(team_name):
+                continue
+            kind, value = performance.get("performanceTypeCd"), performance.get("value")
+            count = performance.get("count") if isinstance(performance.get("count"), int) else 1
+            for entry in performance.get("performancePlayers") or []:
+                raw_player = entry.get("player") or {}
+                name = str(raw_player.get("displayName") or raw_player.get("firstnameLastname") or "").strip()
+                player = profile_for(name)
+                if not player:
+                    continue
+                number = str(raw_player.get("playerNumber") or "").strip().upper()
+                if number:
+                    player["playerNumber"] = number[:12]
+                if kind == "HS" and value == 180:
+                    player["count180"] += max(1, count)
+                elif kind == "HF" and isinstance(value, int) and 2 <= value <= 170:
+                    player["highFinishes"] += max(1, count)
+                    player["highFinish"] = max(player["highFinish"] or 0, value)
+
+    for player in stats.values():
+        darts = player.pop("_darts")
+        score = player.pop("_score")
+        player["average"] = round(score * 3 / darts, 1) if darts else None
+        player["winRate"] = round(player["gamesWon"] * 100 / player["gamesPlayed"]) if player["gamesPlayed"] else None
+    return {
+        "available": True, "stale": False, "updatedAt": now.isoformat(),
+        "matchesScanned": len(loaded), "players": stats,
+    }
+
+
+def get_darts_player_stats(now: datetime | None = None) -> dict:
+    global _player_stats_cache
+    now = now or datetime.now(timezone.utc)
+    with _lock:
+        cached = _player_stats_cache
+        if cached and now.timestamp() - cached[0] < PLAYER_STATS_CACHE_SECONDS:
+            return cached[1]
+    with _player_stats_load_lock:
+        with _lock:
+            cached = _player_stats_cache
+            if cached and now.timestamp() - cached[0] < PLAYER_STATS_CACHE_SECONDS:
+                return cached[1]
+        try:
+            result = _load_player_stats(now)
+            with _lock:
+                _player_stats_cache = (now.timestamp(), result)
+            return result
+        except (requests.RequestException, ValueError, KeyError, TypeError, DartsFeedUnavailable) as exc:
+            with _lock:
+                cached = _player_stats_cache
+            if cached:
+                return {**cached[1], "stale": True}
+            raise DartsFeedUnavailable("Die 3K-Spielerstatistiken sind gerade nicht erreichbar.") from exc
