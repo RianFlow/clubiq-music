@@ -231,6 +231,10 @@ h1 { font:500 clamp(1.7rem,3vw,2.7rem)/1.15 Georgia,serif; margin:0; }
 .special-event-card > div span,.special-event-card > div small { color:#6f6548; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .special-event-card > div small { font-size:.78rem; }
 .special-event-card button { white-space:nowrap; }
+.cup-panel { gap:14px; }
+.cup-panel .special-events-list { grid-template-columns:1fr; }
+.cup-panel .special-event-card { min-height:84px; }
+.cup-panel .special-events-list > .panel-loading { margin:0; padding:20px 16px; background:#fffdf3; }
 .native-team-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
 .native-team-card { display:grid; grid-template-columns:48px minmax(0,1fr); gap:11px; align-items:center; min-height:94px; padding:13px; text-align:left; border-radius:14px; background:#fffef9; }
 .native-team-card > b { display:grid; place-items:center; width:48px; height:48px; color:#f0d991; background:var(--green); border-radius:12px; font:700 1.45rem Georgia,serif; }
@@ -312,10 +316,13 @@ h1 { font:500 clamp(1.7rem,3vw,2.7rem)/1.15 Georgia,serif; margin:0; }
 .player-profile-hero .player-avatar.large { position:relative; z-index:1; flex-basis:220px; width:220px; min-width:220px; max-width:220px; height:220px; min-height:220px; max-height:220px; border:5px solid rgba(255,255,255,.38); box-shadow:0 18px 50px #0008; font-size:4rem; }
 .player-profile-hero .player-avatar.large:not(.avatar-fallback) { width:240px; min-width:240px; max-width:240px; height:278px; min-height:278px; max-height:278px; border:0; border-radius:24px 24px 0 0; background:transparent; box-shadow:none; }
 .player-profile-hero .player-avatar.large img { object-fit:cover; object-position:center top; }
-.player-profile-facts { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:8px; margin-bottom:12px; }
+.player-profile-facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(118px,1fr)); gap:8px; margin-bottom:12px; }
 .player-profile-facts > div { display:grid; gap:4px; min-height:72px; align-content:center; padding:10px 12px; text-align:center; background:#f5f7f2; border:1px solid var(--line); border-radius:11px; }
 .player-profile-facts span { color:#60706b; font-size:.72rem; text-transform:uppercase; }
 .player-profile-facts strong { color:#173b35; font:700 1.08rem Georgia,serif; }
+.team-group-photo { position:relative; margin:0 0 12px; overflow:hidden; background:#0b1714; border:1px solid var(--line); border-radius:14px; }
+.team-group-photo img { display:block; width:100%; height:auto; max-height:430px; object-fit:cover; object-position:center; }
+.team-group-photo figcaption { position:absolute; left:12px; bottom:12px; padding:7px 10px; color:white; background:#102f29df; border:1px solid #ffffff30; border-radius:8px; font-size:.78rem; font-weight:750; }
 .player-personal-section { gap:12px; margin-bottom:12px; padding:16px 18px; }
 .player-personal-section > h3 { margin:0; }
 .player-personal-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
@@ -538,6 +545,7 @@ body:fullscreen .today-time { font-size:.9rem; }
 [data-theme="dark"] .special-events-head>span { color:#d8c886; }
 [data-theme="dark"] .special-events-list { background:#554b2a; }
 [data-theme="dark"] .special-event-card { color:#e8f0ec; background:#1d241c; }
+[data-theme="dark"] .cup-panel .special-events-list>.panel-loading { background:#1d241c; }
 [data-theme="dark"] .special-event-card>div span,[data-theme="dark"] .special-event-card>div small { color:#bdb99e; }
 [data-theme="dark"] .season-toolbar select { color:#e8f0ec; background:#172722; border-color:#425c54; }
 [data-theme="dark"] .native-team-card strong { color:#e8f0ec; }

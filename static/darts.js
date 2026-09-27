@@ -54,6 +54,7 @@ function dartsPlayerProfiles(config) {
     if (!item || typeof item!=='object') continue;
     const image=typeof item.image==='string' && /^\/pics\/players\/[a-z0-9][a-z0-9._-]*\.(?:avif|jpe?g|png|webp)$/i.test(item.image) ? item.image : '';
     const alias=typeof item.alias==='string' ? item.alias.trim().slice(0,50) : '';
+    const playerNumber=typeof item.playerNumber==='string' && /^[A-Z0-9]{3,12}$/i.test(item.playerNumber.trim()) ? item.playerNumber.trim().toLocaleUpperCase('de-DE') : '';
     const numericAverage=typeof item.average==='number' ? item.average : Number.NaN;
     const average=Number.isFinite(numericAverage) && numericAverage>=0 && numericAverage<=180 ? Math.round(numericAverage*10)/10 : null;
     const rawPersonal=item.personal && typeof item.personal==='object' ? item.personal : {};
@@ -69,7 +70,7 @@ function dartsPlayerProfiles(config) {
       walkOnSong:cleanPersonalText(rawPersonal.walkOnSong,100),
     };
     const hasPersonal=personal.darts || personal.weightGrams!==null || personal.favoritePdcPlayer || personal.favoriteFinish!==null || personal.finishRoute || personal.walkOnSong;
-    result[id]={image,alias,average,...(hasPersonal?{personal}:{})};
+    result[id]={image,alias,average,playerNumber,...(hasPersonal?{personal}:{})};
   }
   return result;
 }
@@ -639,8 +640,12 @@ function initDarts() {
     const panel=q('#specialEvents'), target=q('#specialEventsList');
     const events=seasonData?.specialEvents || [];
     const matches=(seasonData?.matches || []).filter(item=>item.isSpecial);
-    panel.hidden=!events.length;
-    if (!events.length) { target.replaceChildren(); return; }
+    panel.hidden=false;
+    if (!events.length) {
+      q('#specialEventsCount').textContent='Noch kein Termin erkannt';
+      const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent=seasonLoading?'Pokalspiele werden geladen …':'Aktuell ist in 3K kein Pokalspiel für Barver erkannt.';
+      target.replaceChildren(empty); return;
+    }
     q('#specialEventsCount').textContent=`${matches.length} ${matches.length===1?'Begegnung':'Begegnungen'} erkannt`;
     const fragment=document.createDocumentFragment();
     for (const event of events) {
@@ -701,7 +706,7 @@ function initDarts() {
     const teamMark=document.createElement('b'); teamMark.className='player-profile-team-mark'; teamMark.textContent=team.code;
     visual.append(teamMark,playerAvatar(member,true)); hero.append(copy,visual);
     const facts=document.createElement('section'); facts.className='player-profile-facts';
-    for (const [label,value] of [['Mannschaft',`Barver ${team.code}`],['Liga',team.league?.short || '–'],['Funktion',member.role || 'Spieler'],['Aktueller Ø',profile.average===null || profile.average===undefined?'Noch offen':profile.average.toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1})],['Teamspiele',record.played ?? 0],['Teamsiege',record.wins ?? 0]]) {
+    for (const [label,value] of [['Mannschaft',`Barver ${team.code}`],['Liga',team.league?.short || '–'],['Funktion',member.role || 'Spieler'],['3K-Spielernummer',profile.playerNumber || 'Noch offen'],['Aktueller Ø',profile.average===null || profile.average===undefined?'Noch offen':profile.average.toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1})],['Teamspiele',record.played ?? 0],['Teamsiege',record.wins ?? 0]]) {
       const item=document.createElement('div'); const text=document.createElement('span'); text.textContent=label; const strong=document.createElement('strong');
       if (label==='Mannschaft') strong.append(makeTeamJump(team.code,value)); else strong.textContent=value;
       item.append(text,strong); facts.append(item);
@@ -757,6 +762,13 @@ function initDarts() {
     for (const result of record.form || []) { const chip=document.createElement('b'); chip.className=result==='S'?'win':result==='N'?'loss':'draw'; chip.textContent=result; form.append(chip); }
     if (!(record.form || []).length) { const empty=document.createElement('small'); empty.textContent='Noch keine Ergebnisse'; form.append(empty); }
     hero.append(identity,form);
+    const teamPhoto=team.code==='B' ? document.createElement('figure') : null;
+    if (teamPhoto) {
+      teamPhoto.className='team-group-photo';
+      const image=document.createElement('img'); image.src='/pics/teams/barver-b-team.webp'; image.alt='Mannschaftsfoto SV Barver Darts B'; image.width=1600; image.height=738; image.loading='lazy'; image.decoding='async';
+      const caption=document.createElement('figcaption'); caption.textContent='SV Barver Darts B · Mannschaft 2026 / 2027';
+      teamPhoto.append(image,caption);
+    }
     const stats=document.createElement('section'); stats.className='team-profile-stats';
     for (const [label,value] of [['Spiele',record.played ?? 0],['Siege',record.wins ?? 0],['Unentschieden',record.draws ?? 0],['Niederlagen',record.losses ?? 0],['Spielpunkte',`${record.setsFor ?? 0}:${record.setsAgainst ?? 0}`],['Kader',(team.roster || []).length]]) {
       const item=document.createElement('div'); const number=document.createElement('strong'); number.textContent=value; const text=document.createElement('span'); text.textContent=label; item.append(number,text); stats.append(item);
@@ -782,7 +794,7 @@ function initDarts() {
     const venueName=document.createElement('strong'); venueName.textContent=venue.name || 'Dorfgemeinschaftshaus Barver'; const address=document.createElement('span'); address.textContent=[venue.street,[venue.postalCode,venue.city].filter(Boolean).join(' ')].filter(Boolean).join(' · '); venueSection.append(venueName,address);
     if (venue.boards) { const boards=document.createElement('small'); boards.textContent=`${venue.boards} Boards laut 3K`; venueSection.append(boards); }
     const filter=document.createElement('button'); filter.type='button'; filter.className='primary'; filter.textContent='Nur Spiele dieser Mannschaft anzeigen'; filter.addEventListener('click',()=>{ q('#teamDialog').close(); q('#seasonTeam').value=team.code; renderSeason(); q('#seasonMatches').scrollIntoView({behavior:'smooth',block:'start'}); }); venueSection.append(filter);
-    grid.append(schedule,squad,venueSection); target.replaceChildren(hero,stats,grid);
+    grid.append(schedule,squad,venueSection); target.replaceChildren(hero,...(teamPhoto?[teamPhoto]:[]),stats,grid);
     if (!q('#teamDialog').open) q('#teamDialog').showModal();
   }
   function renderSeasonTeams() {
@@ -851,8 +863,10 @@ function initDarts() {
       renderSeason(); renderHomeSchedule();
       if (q('#personalSettings').open) renderPlayerOptions();
       q('#seasonFreshness').textContent=seasonData.stale?'Letzter verfügbarer Stand':'Mit 3K abgeglichen'; q('#seasonFreshness').dataset.state=seasonData.stale?'warn':'ok';
+      q('#cupFreshness').textContent=seasonData.stale?'Letzter verfügbarer Stand':'Mit 3K abgeglichen'; q('#cupFreshness').dataset.state=seasonData.stale?'warn':'ok';
     } catch (_) {
       q('#seasonFreshness').textContent='3K gerade nicht erreichbar'; q('#seasonFreshness').dataset.state='warn';
+      q('#cupFreshness').textContent='3K gerade nicht erreichbar'; q('#cupFreshness').dataset.state='warn';
       if (!seasonData) q('#seasonMatches').innerHTML='<p class="panel-loading">Der Saisonspielplan konnte gerade nicht geladen werden.</p>';
     } finally { seasonLoading=false; }
     })();
@@ -1164,8 +1178,10 @@ function initDarts() {
     q('#trainingPanel').hidden = section !== 'training';
     q('#todayPanel').hidden = section !== 'today';
     q('#leaguePanel').hidden = section !== 'league';
+    q('#cupPanel').hidden = section !== 'cup';
     q('#todayView').setAttribute('aria-pressed',String(section === 'today'));
     q('#leagueView').setAttribute('aria-pressed',String(section === 'league'));
+    q('#cupView').setAttribute('aria-pressed',String(section === 'cup'));
     q('#gridView').setAttribute('aria-pressed',String(section === 'teams'));
     q('#trainingView').setAttribute('aria-pressed',String(section === 'training'));
   }
@@ -1182,6 +1198,7 @@ function initDarts() {
   syncTraining();
   q('#todayView').addEventListener('click',()=>setSection('today'));
   q('#leagueView').addEventListener('click',()=>{ setSection('league'); for (const block of q('#leagueOverview').querySelectorAll('.league-block')) loadLeague(block.dataset.league,block.querySelector('[data-role="round"]').value); });
+  q('#cupView').addEventListener('click',()=>{ setSection('cup'); loadSeason(); });
   q('#seasonTeam').addEventListener('change',renderSeason);
   q('#seasonStatus').addEventListener('click',event=>{ const button=event.target.closest('button[data-status]'); if (!button) return; seasonStatus=button.dataset.status; renderSeason(); });
   q('#reloadSeason').addEventListener('click',()=>loadSeason(true));

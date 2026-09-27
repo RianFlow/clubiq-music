@@ -24,14 +24,14 @@ const orderedRoster = dartsRoster([
 assert.deepEqual(Array.from(orderedRoster,member=>member.name),['Klara Kapitän','Alex Stellvertreter','Berta Spielerin','Zeno Spieler']);
 const dartsPlayerProfiles = vm.runInContext('dartsPlayerProfiles',context);
 assert.deepEqual(JSON.parse(JSON.stringify(dartsPlayerProfiles({players:{
-  '123':{image:'/pics/players/max.webp',alias:'The Test',average:61.26},
+  '123':{image:'/pics/players/max.webp',alias:'The Test',average:61.26,playerNumber:'q8v4'},
   '124':'/pics/players/legacy.jpg',
   '125':{personal:{darts:'Target Example',weightGrams:23.04,favoritePdcPlayer:'Luke Example',favoriteFinish:121,finishRoute:'T20 · 11 · Bull',walkOnSong:'Example Song'}},
   'bad':{image:'/private/photo.jpg',alias:'Unsicher',average:999},
 }}))),{
-  '123':{image:'/pics/players/max.webp',alias:'The Test',average:61.3},
-  '124':{image:'/pics/players/legacy.jpg',alias:'',average:null},
-  '125':{image:'',alias:'',average:null,personal:{darts:'Target Example',weightGrams:23,favoritePdcPlayer:'Luke Example',favoriteFinish:121,finishRoute:'T20 · 11 · Bull',walkOnSong:'Example Song'}},
+  '123':{image:'/pics/players/max.webp',alias:'The Test',average:61.3,playerNumber:'Q8V4'},
+  '124':{image:'/pics/players/legacy.jpg',alias:'',average:null,playerNumber:''},
+  '125':{image:'',alias:'',average:null,playerNumber:'',personal:{darts:'Target Example',weightGrams:23,favoritePdcPlayer:'Luke Example',favoriteFinish:121,finishRoute:'T20 · 11 · Bull',walkOnSong:'Example Song'}},
 });
 const dartsSponsors = vm.runInContext('dartsSponsors',context);
 const sponsorConfig = {displaySeconds:2,sponsors:[
@@ -101,6 +101,8 @@ assert.match(html,/id="favoriteTeam"/);
 assert.match(html,/id="themeToggle"/);
 assert.match(html,/id="pushToggle"/);
 assert.match(html,/id="pushHealth"/);
+assert.match(html,/id="cupView"/);
+assert.match(html,/id="cupPanel"/);
 assert.match(html,/id="liveDataStatus"/);
 assert.match(html,/Push aktivieren/);
 assert.match(html,/id="livePushAlert"/);

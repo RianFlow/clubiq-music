@@ -8,14 +8,14 @@
   <meta name="description" content="SV Barver Darts A, B, C und D: Spielpläne, Spielberichte und Live-Ansichten gemeinsam verfolgen.">
   <link rel="icon" href="/pics/logo.png">
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
-  <link rel="stylesheet" href="/static/darts.css?v=20260927-2">
-  <script defer src="/static/darts.js?v=20260927-2"></script>
+  <link rel="stylesheet" href="/static/darts.css?v=20260927-cup1">
+  <script defer src="/static/darts.js?v=20260927-cup1"></script>
 </head>
 <body>
   <header class="darts-header">
     <a class="brand" href="https://musik.clubiq.party/" aria-label="Zur Musik-App"><img src="/pics/logo.png" alt=""><span>ClubIQ <b>Darts-Zentrale</b></span></a>
     <span class="club-logo header-club-logo" role="img" aria-label="SV Barver Darts"></span>
-    <nav aria-label="Anzeige"><button id="todayView" type="button">Live</button><button id="leagueView" type="button">Tabellen</button><button id="gridView" type="button">Spiele & Teams</button><button id="trainingView" type="button">Training</button><button id="pushToggle" class="push-toggle" type="button" aria-pressed="false">🔔 Push aktivieren</button><span id="pushHealth" class="push-health" role="status" hidden></span><button id="themeToggle" class="theme-switch" type="button" role="switch" aria-checked="false" aria-label="Dunkelmodus"><span class="theme-option theme-light">Hell</span><span class="theme-track" aria-hidden="true"><span></span></span><span class="theme-option theme-dark">Dunkel</span></button><button id="fullscreen" type="button">TV-Modus</button><a href="https://musik.clubiq.party/" target="_blank" rel="noopener">Zum Voting ↗</a></nav>
+    <nav aria-label="Anzeige"><button id="todayView" type="button">Live</button><button id="leagueView" type="button">Tabellen</button><button id="cupView" type="button">Pokal</button><button id="gridView" type="button">Spiele & Teams</button><button id="trainingView" type="button">Training</button><button id="pushToggle" class="push-toggle" type="button" aria-pressed="false">🔔 Push aktivieren</button><span id="pushHealth" class="push-health" role="status" hidden></span><button id="themeToggle" class="theme-switch" type="button" role="switch" aria-checked="false" aria-label="Dunkelmodus"><span class="theme-option theme-light">Hell</span><span class="theme-track" aria-hidden="true"><span></span></span><span class="theme-option theme-dark">Dunkel</span></button><button id="fullscreen" type="button">TV-Modus</button><a href="https://musik.clubiq.party/" target="_blank" rel="noopener">Zum Voting ↗</a></nav>
   </header>
   <details id="personalSettings" class="personal-settings">
     <summary>Mein Darts · Einstellungen & Meldungen</summary>
@@ -86,6 +86,14 @@
       </div>
       <p class="data-note">ClubIQ zeigt ausschließlich öffentliche Sportdaten. 180er erscheinen, wenn sie im 3K-Spielbericht erfasst wurden.</p>
     </section>
+    <section id="cupPanel" class="sports-panel cup-panel" aria-labelledby="cupHeading" hidden>
+      <div class="sports-panel-head"><div><p class="eyebrow">Pokal & Sondertermine</p><h2 id="cupHeading">Pokalspiele</h2><p>Alle automatisch erkannten Pokalbegegnungen in einem eigenen Menü.</p></div><span id="cupFreshness" class="live-data-status">3K wird geladen</span></div>
+      <p class="data-load-note">Die Pokaldaten werden automatisch aus 3K ergänzt. Der erste Abruf kann einige Sekunden dauern.</p>
+      <section id="specialEvents" class="special-events" aria-labelledby="specialEventsHeading">
+        <div class="special-events-head"><div><p class="eyebrow">Wettbewerb auswählen</p><h3 id="specialEventsHeading">Pokal-Menü</h3></div><span id="specialEventsCount"></span></div>
+        <div id="specialEventsList" class="special-events-list"><p class="panel-loading">Pokalspiele werden geladen …</p></div>
+      </section>
+    </section>
     <section id="seasonPanel" class="sports-panel season-panel" aria-labelledby="seasonHeading" hidden>
       <div class="sports-panel-head"><div><p class="eyebrow">Alles an einem Ort</p><h2 id="seasonHeading">Spiele & Mannschaften</h2><p>Alle vier Teams, Termine und Ergebnisse – ohne die unübersichtliche 3K-Seite.</p></div><span id="seasonFreshness" class="live-data-status">Saison wird geladen</span></div>
       <p class="data-load-note">Spielpläne und Statistiken werden direkt aus 3K geladen. Der erste Abruf kann einige Sekunden dauern.</p>
@@ -94,10 +102,6 @@
         <div id="seasonStatus" class="season-status" role="group" aria-label="Zeitraum"><button type="button" data-status="upcoming" aria-pressed="true">Kommende</button><button type="button" data-status="final" aria-pressed="false">Ergebnisse</button><button type="button" data-status="all" aria-pressed="false">Alle</button></div>
         <button id="reloadSeason" type="button">Aktualisieren</button>
       </div>
-      <section id="specialEvents" class="special-events" aria-labelledby="specialEventsHeading" hidden>
-        <div class="special-events-head"><div><p class="eyebrow">Automatisch aus 3K erkannt</p><h3 id="specialEventsHeading">Pokal & Sondertermine</h3></div><span id="specialEventsCount"></span></div>
-        <div id="specialEventsList" class="special-events-list"></div>
-      </section>
       <div id="seasonTeams" class="native-team-grid"><p class="panel-loading">Mannschaften werden geladen …</p></div>
       <div class="season-list-head"><div><p class="eyebrow">Saisonspielplan</p><h3 id="seasonListHeading">Kommende Begegnungen</h3></div><span id="seasonCount"></span></div>
       <div id="seasonMatches" class="native-match-list"><p class="panel-loading">Spielplan wird geladen …</p></div>

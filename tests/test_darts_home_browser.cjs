@@ -6,7 +6,7 @@ const day=n=>{const d=new Date();d.setDate(d.getDate()+n);d.setHours(19,30,0,0);
 const matches=[
   {id:901,barverTeam:'A',home:'SV Barver Darts A',away:'Demo-Gäste A',kind:'live',score:'5:4',eventId:1445,plannedAt:day(0)},
   {id:902,barverTeam:'D',home:'Demo-Gäste D',away:'SV Barver Darts D',kind:'live',score:'3:2',eventId:1460,plannedAt:day(0)},
-  {id:903,barverTeam:'B',home:'SV Barver Darts B',away:'Demo-Team B',kind:'upcoming',eventId:1445,plannedAt:day(2)},
+  {id:903,barverTeam:'B',home:'SV Barver Darts B',away:'Demo-Team B',kind:'upcoming',eventId:1445,plannedAt:day(2),isSpecial:true,league:'special-500',competitionBadge:'POKAL',round:{name:'Runde 1'}},
   {id:904,barverTeam:'C',home:'Demo-Team C',away:'SV Barver Darts C',kind:'final',score:'4:8',eventId:1445,plannedAt:day(-2)},
 ];
 const teams=['A','B','C','D'].map((code,i)=>({code,name:`SV Barver Darts ${code}`,league:{name:code==='D'?'Kreisklasse 11':'Kreisligen 04'},record:{},matches:matches.filter(m=>m.barverTeam===code),roster:[{id:89027+i,name:code==='A'?'Jannik Kläning':`Demo-Spieler ${code}`,role:'Kapitän'}]}));
@@ -18,7 +18,7 @@ const server=http.createServer((req,res)=>{
     if(fail) {res.writeHead(503);res.end('{}');return;}
     let data={};
     if(p.endsWith('/ticker')) data={items:matches,updatedAt:now(),stale:false};
-    if(p.endsWith('/season')) data={matches,teams,updatedAt:now(),specialEvents:[]};
+    if(p.endsWith('/season')) data={matches,teams,updatedAt:now(),specialEvents:[{id:500,name:'Bezirkspokal',badge:'POKAL',matchCount:1}]};
     if(p.endsWith('/center')) data={league:{key:url.searchParams.get('league')},updatedAt:now(),barverMatches:matches.filter(m=>m.kind==='live'),pushEvents:matches.filter(m=>m.kind==='live').flatMap(m=>[1,2].map(i=>({type:'live_game',matchId:m.id,homeName:i===1?'Jannik Beispiel':'Spieler Zwei',awayName:`Gast ${i}`,homeRemaining:i===1?320:201,awayRemaining:410,homeLegs:2,awayLegs:1,currentSide:'home'})))};
     if(p.endsWith('/highlights')) data={items:[{type:'180',matchId:904,title:'180! Demo-Spieler C',body:'Barver C · Rückblick',occurredAt:day(-2)}]};
     if(p.endsWith('/config')) data={available:false};
@@ -53,6 +53,10 @@ const server=http.createServer((req,res)=>{
     await page.selectOption('#homeTeam','D');
     assert.equal(await page.locator('#homeSchedule .team-profile-match').count(),1);
     await page.click('#resetHomeFilters');
+    await page.click('#cupView');
+    await page.getByText('Bezirkspokal',{exact:true}).waitFor();
+    assert.match(await page.locator('#specialEventsList').innerText(),/Demo-Team B/);
+    await page.click('#todayView');
     assert.equal(await page.locator('#homeSchedule .team-profile-match').count(),4);
     await page.selectOption('#homeLeague','1460');
     assert.equal(await page.locator('#homeSchedule .team-profile-match').count(),1);
@@ -86,6 +90,8 @@ const server=http.createServer((req,res)=>{
     await page.screenshot({path:path.join(root,'outputs/darts-home-mobile.png'),fullPage:true});
     await page.setViewportSize({width:1440,height:1080});
     await page.locator('#matchCenterGrid [data-team-code="B"]').first().click();
+    await page.locator('.team-group-photo img').waitFor();
+    assert.equal(await page.locator('.team-group-photo img').getAttribute('src'),'/pics/teams/barver-b-team.webp');
     await page.getByRole('button',{name:'Patrick Lammers, Spielerprofil öffnen'}).click();
     await page.getByText('95K von Aspinall',{exact:true}).waitFor();
     assert.match(await page.locator('#playerProfile').innerText(),/D16/);
