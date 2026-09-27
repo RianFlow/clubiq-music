@@ -110,7 +110,7 @@ function dartsPlayerProfiles(config) {
     if (!/^\d{1,12}$/.test(id)) continue;
     const item=typeof raw==='string'?{image:raw}:raw;
     if (!item || typeof item!=='object') continue;
-    const image=typeof item.image==='string' && /^\/pics\/players\/[a-z0-9][a-z0-9._-]*\.(?:avif|jpe?g|png|webp)$/i.test(item.image) ? item.image : '';
+    const image=typeof item.image==='string' && (/^\/pics\/players\/[a-z0-9][a-z0-9._-]*\.(?:avif|jpe?g|png|webp)$/i.test(item.image) || /^\/api\/v1\/darts\/players\/\d{1,12}\/photo(?:\?v=\d+)?$/i.test(item.image)) ? item.image : '';
     const alias=typeof item.alias==='string' ? item.alias.trim().slice(0,50) : '';
     const gender=dartsGender(item.gender);
     const playerNumber=typeof item.playerNumber==='string' && /^[A-Z0-9]{3,12}$/i.test(item.playerNumber.trim()) ? item.playerNumber.trim().toLocaleUpperCase('de-DE') : '';
@@ -262,8 +262,9 @@ function initDarts() {
     const ids=new Set([...Object.keys(playerProfileBase),...Object.keys(playerStatCache)]);
     playerProfiles=Object.fromEntries([...ids].map(id=>[id,{...(playerProfileBase[id]||{}),...(playerStatCache[id]||{})}]));
   };
-  fetch('/static/darts-players.json',{headers:{Accept:'application/json'}})
-    .then(response=>response.ok?response.json():Promise.reject(new Error('player photos unavailable')))
+  fetch('/api/v1/darts/player-profiles',{headers:{Accept:'application/json'}})
+    .then(response=>response.ok?response.json():Promise.reject(new Error('player profiles unavailable')))
+    .catch(()=>fetch('/static/darts-players.json',{headers:{Accept:'application/json'}}).then(response=>response.ok?response.json():Promise.reject(new Error('player photos unavailable'))))
     .then(config=>{ playerProfileBase=dartsPlayerProfiles(config); mergePlayerProfiles(); })
     .catch(()=>{ playerProfileBase={}; mergePlayerProfiles(); });
   fetch('/api/v1/darts/player-stats',{headers:{Accept:'application/json'}})

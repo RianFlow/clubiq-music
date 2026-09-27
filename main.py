@@ -478,6 +478,19 @@ class DartsPushUnsubscribe(BaseModel):
     endpoint: str = Field(min_length=20, max_length=2048)
 
 
+class DartsPlayerProfileUpdate(BaseModel):
+    player_number: str | None = Field(default=None, max_length=12, pattern=r"^[A-Za-z0-9]*$")
+    alias: str | None = Field(default=None, max_length=50)
+    gender: str | None = Field(default=None, pattern=r"^(female|male|diverse)?$")
+    darts: str | None = Field(default=None, max_length=80)
+    weight_grams: float | None = Field(default=None, ge=10, le=60)
+    favorite_pdc_player: str | None = Field(default=None, max_length=80)
+    favorite_finish: str | None = Field(default=None, max_length=30)
+    finish_route: str | None = Field(default=None, max_length=80)
+    walk_on_song: str | None = Field(default=None, max_length=100)
+    published: bool = False
+
+
 class SuggestionCreate(BaseModel):
     provider: str = Field(default="youtube", pattern=r"^[a-z0-9_-]{2,30}$")
     external_id: str = Field(min_length=1, max_length=100)
@@ -590,6 +603,14 @@ def darts_display():
     return FileResponse("darts.html")
 
 
+@app.get("/darts-admin")
+def darts_admin_display():
+    return FileResponse(
+        "darts-admin.html",
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
+
+
 @app.get("/impressum")
 def legal_notice():
     return FileResponse("impressum.html")
@@ -686,6 +707,233 @@ def darts_player_stats():
         return get_darts_player_stats()
     except DartsFeedUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+def _clean_profile_text(value: str | None) -> str | None:
+    cleaned = " ".join((value or "").strip().split())
+    return cleaned or None
+
+
+def _base_darts_player_profiles() -> dict[str, dict]:
+    try:
+        payload = json.loads(Path("static/darts-players.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return {}
+    players = payload.get("players") if isinstance(payload, dict) else None
+    return players if isinstance(players, dict) else {}
+
+
+def _profile_from_row(row) -> tuple[str, dict]:
+    player_id = str(row[0])
+    personal = {
+        "darts": row[4] or "",
+        "weightGrams": float(row[5]) if row[5] is not None else None,
+        "favoritePdcPlayer": row[6] or "",
+        "favoriteFinish": row[7] or "",
+        "finishRoute": row[8] or "",
+        "walkOnSong": row[9] or "",
+    }
+    profile = {
+        "playerNumber": row[1] or "",
+        "alias": row[2] or "",
+        "gender": row[3] or "",
+        "personal": personal,
+        "published": bool(row[13]),
+        "updatedAt": row[15],
+        "hasUploadedImage": row[10] is not None,
+        "imageVersion": int(row[12] or 0),
+    }
+    if row[10] is not None:
+        profile["image"] = f"/api/v1/darts/players/{player_id}/photo?v={int(row[12] or 0)}"
+    return player_id, profile
+
+
+def _darts_profile_rows() -> dict[str, dict]:
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT player_id, player_number, alias, gender, darts, weight_grams,
+                   favorite_pdc_player, favorite_finish, finish_route, walk_on_song,
+                   image_data, image_media_type, image_version, published, created_at, updated_at
+            FROM darts_player_profiles
+            ORDER BY player_id;
+            """
+        )
+        return dict(_profile_from_row(row) for row in cur.fetchall())
+
+
+def _public_darts_profiles() -> dict[str, dict]:
+    profiles = {str(key): dict(value) for key, value in _base_darts_player_profiles().items() if isinstance(value, dict)}
+    for player_id, stored in _darts_profile_rows().items():
+        if not stored["published"]:
+            profiles.pop(player_id, None)
+            continue
+        base = profiles.get(player_id, {})
+        personal = {key: value for key, value in stored["personal"].items() if value not in (None, "")}
+        public = dict(base)
+        for key in ("playerNumber", "alias", "gender", "image"):
+            if stored.get(key):
+                public[key] = stored[key]
+            elif key != "image":
+                public.pop(key, None)
+        if any(value not in (None, "") for value in personal.values()):
+            public["personal"] = personal
+        else:
+            public.pop("personal", None)
+        profiles[player_id] = public
+    return profiles
+
+
+@app.get("/api/v1/darts/player-profiles")
+def darts_player_profiles():
+    return Response(
+        content=json.dumps({"players": _public_darts_profiles()}, ensure_ascii=False, default=str),
+        media_type="application/json",
+        headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=300"},
+    )
+
+
+@app.get("/api/v1/darts/admin/players", dependencies=[Depends(require_admin)])
+def darts_admin_players():
+    base = _base_darts_player_profiles()
+    stored = _darts_profile_rows()
+    ids = sorted(set(base) | set(stored), key=lambda value: int(value) if value.isdigit() else value)
+    players = []
+    for player_id in ids:
+        source = dict(base.get(player_id) or {})
+        database = stored.get(player_id)
+        personal = dict(source.get("personal") or {})
+        if database:
+            personal = dict(database["personal"])
+            for key in ("playerNumber", "alias", "gender"):
+                source[key] = database.get(key) or ""
+            if database.get("image"):
+                source["image"] = database["image"]
+        source["personal"] = personal
+        source.update({
+            "playerId": int(player_id),
+            "published": database["published"] if database else True,
+            "stored": database is not None,
+            "hasUploadedImage": bool(database and database["hasUploadedImage"]),
+        })
+        players.append(source)
+    return Response(
+        content=json.dumps({"players": players}, ensure_ascii=False, default=str),
+        media_type="application/json",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.put("/api/v1/darts/admin/players/{player_id}", dependencies=[Depends(require_admin)])
+def darts_admin_update_player(player_id: int, update: DartsPlayerProfileUpdate):
+    values = {
+        "player_number": _clean_profile_text(update.player_number),
+        "alias": _clean_profile_text(update.alias),
+        "gender": _clean_profile_text(update.gender),
+        "darts": _clean_profile_text(update.darts),
+        "weight_grams": update.weight_grams,
+        "favorite_pdc_player": _clean_profile_text(update.favorite_pdc_player),
+        "favorite_finish": _clean_profile_text(update.favorite_finish),
+        "finish_route": _clean_profile_text(update.finish_route),
+        "walk_on_song": _clean_profile_text(update.walk_on_song),
+        "published": update.published,
+    }
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO darts_player_profiles (
+                player_id, player_number, alias, gender, darts, weight_grams,
+                favorite_pdc_player, favorite_finish, finish_route, walk_on_song, published
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (player_id) DO UPDATE SET
+                player_number=EXCLUDED.player_number, alias=EXCLUDED.alias,
+                gender=EXCLUDED.gender, darts=EXCLUDED.darts,
+                weight_grams=EXCLUDED.weight_grams,
+                favorite_pdc_player=EXCLUDED.favorite_pdc_player,
+                favorite_finish=EXCLUDED.favorite_finish,
+                finish_route=EXCLUDED.finish_route,
+                walk_on_song=EXCLUDED.walk_on_song,
+                published=EXCLUDED.published, updated_at=CURRENT_TIMESTAMP;
+            """,
+            (player_id, *values.values()),
+        )
+        cur.execute(
+            "INSERT INTO darts_player_profile_audit (player_id, action, detail_json) VALUES (%s, 'profile_saved', %s::jsonb);",
+            (player_id, json.dumps({"published": update.published}, separators=(",", ":"))),
+        )
+        conn.commit()
+    return {"status": "success", "player_id": player_id, "published": update.published}
+
+
+def _validated_player_image(data: bytes) -> tuple[str, bytes]:
+    if not data:
+        raise HTTPException(status_code=422, detail="Bitte ein Bild auswählen.")
+    if len(data) > 3 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Das optimierte Bild darf höchstens 3 MB groß sein.")
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg", data
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png", data
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp", data
+    raise HTTPException(status_code=422, detail="Erlaubt sind JPEG-, PNG- und WebP-Bilder.")
+
+
+@app.post("/api/v1/darts/admin/players/{player_id}/photo", dependencies=[Depends(require_admin)])
+async def darts_admin_upload_player_photo(player_id: int, photo: UploadFile = File(...)):
+    media_type, data = _validated_player_image(await photo.read(3 * 1024 * 1024 + 1))
+    version = int(datetime.now(timezone.utc).timestamp())
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO darts_player_profiles (player_id, image_data, image_media_type, image_version)
+            VALUES (%s,%s,%s,%s)
+            ON CONFLICT (player_id) DO UPDATE SET image_data=EXCLUDED.image_data,
+                image_media_type=EXCLUDED.image_media_type, image_version=EXCLUDED.image_version,
+                updated_at=CURRENT_TIMESTAMP;
+            """,
+            (player_id, data, media_type, version),
+        )
+        cur.execute(
+            "INSERT INTO darts_player_profile_audit (player_id, action) VALUES (%s, 'photo_uploaded');",
+            (player_id,),
+        )
+        conn.commit()
+    return {"status": "success", "image": f"/api/v1/darts/players/{player_id}/photo?v={version}"}
+
+
+@app.delete("/api/v1/darts/admin/players/{player_id}/photo", dependencies=[Depends(require_admin)])
+def darts_admin_delete_player_photo(player_id: int):
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """UPDATE darts_player_profiles SET image_data=NULL, image_media_type=NULL,
+               image_version=image_version+1, updated_at=CURRENT_TIMESTAMP WHERE player_id=%s;""",
+            (player_id,),
+        )
+        if cur.rowcount != 1:
+            raise HTTPException(status_code=404, detail="Spielerprofil nicht gefunden.")
+        cur.execute(
+            "INSERT INTO darts_player_profile_audit (player_id, action) VALUES (%s, 'photo_deleted');",
+            (player_id,),
+        )
+        conn.commit()
+    return {"status": "success"}
+
+
+@app.get("/api/v1/darts/players/{player_id}/photo")
+def darts_player_photo(player_id: int):
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT image_data, image_media_type, image_version FROM darts_player_profiles WHERE player_id=%s AND published=TRUE;",
+            (player_id,),
+        )
+        row = cur.fetchone()
+    if not row or row[0] is None:
+        raise HTTPException(status_code=404, detail="Kein veröffentlichtes Spielerbild vorhanden.")
+    return Response(
+        content=bytes(row[0]), media_type=row[1] or "image/webp",
+        headers={"Cache-Control": "public, max-age=31536000, immutable", "ETag": f'"{player_id}-{row[2]}"'},
+    )
 
 
 @app.get("/api/v1/darts/members")

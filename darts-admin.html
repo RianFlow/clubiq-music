@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#123b34">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>ClubIQ · Spielerverwaltung</title>
+  <link rel="icon" href="/pics/logo.png">
+  <link rel="stylesheet" href="/static/darts-admin.css?v=20260927-admin1">
+  <script defer src="/static/darts-admin.js?v=20260927-admin1"></script>
+</head>
+<body>
+  <header class="admin-header">
+    <a href="/darts" class="brand"><img src="/pics/logo.png" alt=""><span>ClubIQ <b>Spielerverwaltung</b></span></a>
+    <button id="logout" type="button" hidden>Abmelden</button>
+  </header>
+  <main>
+    <section id="loginPanel" class="login-card">
+      <p class="eyebrow">Geschützter Bereich</p>
+      <h1>Spielerprofile verwalten</h1>
+      <p>Hier bearbeitest du Bilder und freiwillige Profilangaben. Änderungen erscheinen erst, wenn „Profil veröffentlichen“ aktiviert und gespeichert wurde.</p>
+      <form id="loginForm">
+        <label>Verwaltungskennwort<input id="adminPassword" type="password" autocomplete="current-password" required></label>
+        <button type="submit">Verwaltung öffnen</button>
+        <p id="loginError" class="error" role="alert" hidden></p>
+      </form>
+    </section>
+
+    <section id="adminPanel" hidden>
+      <div class="admin-intro">
+        <div><p class="eyebrow">SV Barver Darts</p><h1>Spielerprofile</h1><p>Profil auswählen, bearbeiten und bewusst veröffentlichen.</p></div>
+        <span id="dataStatus" role="status">Kader werden geladen …</span>
+      </div>
+      <div class="admin-layout">
+        <aside class="player-browser">
+          <label>Spieler suchen<input id="playerSearch" type="search" placeholder="Name oder Alias" autocomplete="off"></label>
+          <label>Mannschaft<select id="teamFilter"><option value="all">Alle Mannschaften</option><option value="A">Barver A</option><option value="B">Barver B</option><option value="C">Barver C</option><option value="D">Barver D</option></select></label>
+          <div id="playerList" class="player-list"></div>
+        </aside>
+
+        <section id="editorEmpty" class="editor-card empty-state"><strong>Wähle links ein Profil aus.</strong><span>Auf dem Handy findest du die Spielerliste oberhalb des Formulars.</span></section>
+        <form id="profileForm" class="editor-card" hidden>
+          <div class="profile-heading">
+            <div id="photoPreview" class="photo-preview"><span>Foto</span></div>
+            <div><p id="profileTeam" class="eyebrow"></p><h2 id="profileName"></h2><span id="profileRole"></span></div>
+          </div>
+          <input id="playerId" type="hidden">
+          <div class="image-actions">
+            <label class="file-button">Neues Bild auswählen<input id="profilePhoto" type="file" accept="image/jpeg,image/png,image/webp"></label>
+            <button id="deletePhoto" class="secondary danger" type="button">Eigenes Bild entfernen</button>
+            <small>Das Bild wird im Browser automatisch verkleinert und als schnelles WebP gespeichert.</small>
+          </div>
+          <div class="form-grid">
+            <label>Spielername / Alias<input id="alias" maxlength="50"></label>
+            <label>3K-Spielernummer<input id="playerNumber" maxlength="12" pattern="[A-Za-z0-9]*" placeholder="z. B. Q8V4"></label>
+            <label>Ansprache<select id="gender"><option value="">Keine Angabe</option><option value="male">Spieler</option><option value="female">Spielerin</option><option value="diverse">Neutrale Form</option></select></label>
+            <label>Darts<input id="darts" maxlength="80" placeholder="z. B. 95K von Aspinall"></label>
+            <label>Gewicht in Gramm<input id="weightGrams" type="number" min="10" max="60" step="0.1"></label>
+            <label>PDC-Lieblingsspieler<input id="favoritePdcPlayer" maxlength="80"></label>
+            <label>Lieblingsfinish<input id="favoriteFinish" maxlength="30" placeholder="z. B. D16 oder 121"></label>
+            <label>Weg zum Finish<input id="finishRoute" maxlength="80" placeholder="z. B. T20 · T11 · D14"></label>
+            <label class="wide">Einlaufmusik<input id="walkOnSong" maxlength="100" placeholder="Titel – Interpret"></label>
+          </div>
+          <label class="publish-switch"><input id="published" type="checkbox"><span><strong>Profil veröffentlichen</strong><small>Nur aktivieren, wenn die Person der Veröffentlichung zugestimmt hat.</small></span></label>
+          <div class="form-actions"><button type="submit">Änderungen speichern</button><a id="publicPreview" href="/darts" target="_blank" rel="noopener">Öffentliche Seite ansehen</a></div>
+          <p id="formStatus" role="status" hidden></p>
+        </form>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

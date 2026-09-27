@@ -205,6 +205,39 @@ ALTER TABLE darts_push_events ADD COLUMN IF NOT EXISTS occurred_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_darts_events_time ON darts_push_events(occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_darts_push_subscriptions_enabled
 ON darts_push_subscriptions(enabled);
+
+CREATE TABLE IF NOT EXISTS darts_player_profiles (
+    player_id BIGINT PRIMARY KEY,
+    player_number VARCHAR(12),
+    alias VARCHAR(50),
+    gender VARCHAR(20),
+    darts VARCHAR(80),
+    weight_grams NUMERIC(4,1),
+    favorite_pdc_player VARCHAR(80),
+    favorite_finish VARCHAR(30),
+    finish_route VARCHAR(80),
+    walk_on_song VARCHAR(100),
+    image_data BYTEA,
+    image_media_type VARCHAR(30),
+    image_version BIGINT NOT NULL DEFAULT 0,
+    published BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK (gender IS NULL OR gender IN ('female', 'male', 'diverse')),
+    CHECK (weight_grams IS NULL OR (weight_grams >= 10 AND weight_grams <= 60))
+);
+CREATE INDEX IF NOT EXISTS idx_darts_player_profiles_published
+ON darts_player_profiles(published);
+
+CREATE TABLE IF NOT EXISTS darts_player_profile_audit (
+    id BIGSERIAL PRIMARY KEY,
+    player_id BIGINT NOT NULL,
+    action VARCHAR(30) NOT NULL,
+    detail_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_darts_player_profile_audit_time
+ON darts_player_profile_audit(created_at DESC);
 """
 
 DEFAULTS_SQL = """

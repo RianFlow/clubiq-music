@@ -24,6 +24,7 @@ const server=http.createServer((req,res)=>{
     if(p.endsWith('/config')) data={available:false};
     if(p.endsWith('/status')) data={configured:false};
     if(p.endsWith('/members')) data={members:['Patrick Lammers','Erika Beispiel']};
+    if(p.endsWith('/player-profiles')) data=JSON.parse(fs.readFileSync(path.join(root,'static/darts-players.json'),'utf8'));
     res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(data));return;
   }
   const file=path.resolve(root,`.${p==='/'||p==='/darts'?'/darts.html':p}`);

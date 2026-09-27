@@ -136,6 +136,47 @@ class SecurityContractTests(unittest.TestCase):
                 main.require_admin("wrong")
             self.assertEqual(context.exception.status_code, 401)
 
+    def test_darts_profile_admin_is_protected_and_payload_is_bounded(self):
+        for path in (
+            "/api/v1/darts/admin/players",
+            "/api/v1/darts/admin/players/{player_id}",
+            "/api/v1/darts/admin/players/{player_id}/photo",
+        ):
+            routes = [route for route in main.app.routes if getattr(route, "path", None) == path]
+            self.assertTrue(routes, path)
+            for route in routes:
+                self.assertIn(main.require_admin, [dependency.call for dependency in route.dependant.dependencies])
+        profile = main.DartsPlayerProfileUpdate(
+            player_number="Q8V4", alias="Peddy", favorite_finish="D16", published=True,
+        )
+        self.assertEqual(profile.player_number, "Q8V4")
+        with self.assertRaises(ValidationError):
+            main.DartsPlayerProfileUpdate(player_number="ungültig!", published=True)
+        with self.assertRaises(ValidationError):
+            main.DartsPlayerProfileUpdate(weight_grams=99, published=True)
+
+    def test_darts_profile_images_validate_content_not_filename(self):
+        media_type, data = main._validated_player_image(b"RIFF\x00\x00\x00\x00WEBPpayload")
+        self.assertEqual(media_type, "image/webp")
+        self.assertEqual(data[-7:], b"payload")
+        with self.assertRaises(HTTPException):
+            main._validated_player_image(b"<script>alert(1)</script>")
+
+    def test_unpublished_darts_profile_is_not_public(self):
+        stored = {
+            "1": {"published": False},
+            "2": {
+                "published": True, "alias": "Freigegeben", "gender": "", "playerNumber": "",
+                "image": "/api/v1/darts/players/2/photo?v=1",
+                "personal": {"darts": "", "weightGrams": None, "favoritePdcPlayer": "", "favoriteFinish": "", "finishRoute": "", "walkOnSong": ""},
+            },
+        }
+        with patch.object(main, "_base_darts_player_profiles", return_value={"1": {"alias": "Alt"}}), \
+             patch.object(main, "_darts_profile_rows", return_value=stored):
+            public = main._public_darts_profiles()
+        self.assertNotIn("1", public)
+        self.assertEqual(public["2"]["alias"], "Freigegeben")
+
     def test_security_headers_are_attached(self):
         request = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
 
@@ -241,6 +282,17 @@ class OfflineFrontendContractTests(unittest.TestCase):
         self.assertIn("music_cycle_playlists", schema)
         self.assertIn("playlist_target_count", schema)
         self.assertIn("reuse_previous_playlist", schema)
+        self.assertIn("darts_player_profiles", schema)
+        self.assertIn("darts_player_profile_audit", schema)
+
+    def test_darts_admin_ui_is_local_and_consent_aware(self):
+        html_source = (ROOT / "darts-admin.html").read_text(encoding="utf-8")
+        script_source = (ROOT / "static" / "darts-admin.js").read_text(encoding="utf-8")
+        self.assertIn("Profil veröffentlichen", html_source)
+        self.assertIn("der Veröffentlichung zugestimmt", html_source)
+        self.assertIn("/api/v1/darts/admin/players", script_source)
+        self.assertIn("image/webp", script_source)
+        self.assertNotRegex(html_source, r'https?://')
 
     def test_pwa_and_companion_views_are_local_only(self):
         manifest = (ROOT / "manifest.webmanifest").read_text(encoding="utf-8")

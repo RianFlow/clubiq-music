@@ -39,11 +39,13 @@ assert.deepEqual(JSON.parse(JSON.stringify(dartsPlayerProfiles({players:{
   '123':{image:'/pics/players/max.webp',alias:'The Test',average:61.26,playerNumber:'q8v4',gender:'female'},
   '124':'/pics/players/legacy.jpg',
   '125':{personal:{darts:'Target Example',weightGrams:23.04,favoritePdcPlayer:'Luke Example',favoriteFinish:121,finishRoute:'T20 · 11 · Bull',walkOnSong:'Example Song'}},
+  '126':{image:'/api/v1/darts/players/126/photo?v=123'},
   'bad':{image:'/private/photo.jpg',alias:'Unsicher',average:999},
 }}))),{
   '123':{image:'/pics/players/max.webp',alias:'The Test',average:61.3,playerNumber:'Q8V4',gender:'female'},
   '124':{image:'/pics/players/legacy.jpg',alias:'',average:null,playerNumber:''},
   '125':{image:'',alias:'',average:null,playerNumber:'',personal:{darts:'Target Example',weightGrams:23,favoritePdcPlayer:'Luke Example',favoriteFinish:121,finishRoute:'T20 · 11 · Bull',walkOnSong:'Example Song'}},
+  '126':{image:'/api/v1/darts/players/126/photo?v=123',alias:'',average:null,playerNumber:''},
 });
 const dartsPlayerStats = vm.runInContext('dartsPlayerStats',context);
 assert.deepEqual(JSON.parse(JSON.stringify(dartsPlayerStats({updatedAt:'2026-09-27T12:00:00Z',stale:true,players:{
@@ -135,6 +137,7 @@ assert.match(html,/id="sponsorTop"/);
 assert.match(html,/id="sponsorInline"/);
 assert.match(html,/href="\/impressum"/);
 assert.match(html,/href="\/datenschutz"/);
+assert.match(html,/href="\/darts-admin"/);
 assert.doesNotMatch(html,/<iframe|https:\/\/portal[^" ]+\.js/,'external content is opt-in');
 const script = fs.readFileSync('static/darts.js','utf8');
 assert.match(fs.readFileSync('static/darts.css','utf8'),/sv-barver-darts-tight\.png/);
@@ -148,6 +151,7 @@ assert.match(script,/\/api\/v1\/darts\/push\/subscribe/);
 assert.match(script,/clubiq-darts-push/);
 assert.match(script,/setTimeout\(closeLivePushAlert,15000\)/);
 assert.match(script,/\/api\/v1\/darts\/members/);
+assert.match(script,/\/api\/v1\/darts\/player-profiles/);
 assert.doesNotMatch(script,/Besondere Leistung laut 3K-Spielbericht/);
 assert.doesNotMatch(script,/\/api\/v1\/music\/.*command/,'darts view does not control music');
 assert.match(script,/fetch\('\/api\/v1\/darts\/ticker'/);
@@ -190,4 +194,6 @@ assert.match(fs.readFileSync('darts_feed.py','utf8'),/dartsscorer-liveticker\/ap
 assert.match(fs.readFileSync('darts_feed.py','utf8'),/homeRemaining/);
 assert.match(backend,/@app\.get\("\/api\/v1\/darts\/push\/status"\)/);
 assert.match(backend,/@app\.get\("\/api\/v1\/darts\/members"\)/);
+assert.match(backend,/@app\.get\("\/api\/v1\/darts\/player-profiles"\)/);
+assert.match(backend,/@app\.get\("\/api\/v1\/darts\/admin\/players"/);
 console.log('Darts: four verified teams, strict links, wrong-league guard, opt-in embedding and no playback writes OK.');
