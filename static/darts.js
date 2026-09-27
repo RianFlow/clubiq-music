@@ -129,7 +129,8 @@ function dartsPlayerProfiles(config) {
       walkOnSong:cleanPersonalText(rawPersonal.walkOnSong,100),
     };
     const hasPersonal=personal.darts || personal.weightGrams!==null || personal.favoritePdcPlayer || personal.favoriteFinish!==null || personal.finishRoute || personal.walkOnSong;
-    result[id]={image,alias,average,playerNumber,...(gender?{gender}:{}),...(hasPersonal?{personal}:{})};
+    const name=cleanPersonalText(item.name,100), team=/^[A-D]$/.test(item.team || '')?item.team:'', role=cleanPersonalText(item.role,50);
+    result[id]={image,alias,average,playerNumber,...(name?{name}:{}),...(team?{team}:{}),...(role?{role}:{}),...(gender?{gender}:{}),...(hasPersonal?{personal}:{})};
   }
   return result;
 }
@@ -262,10 +263,19 @@ function initDarts() {
     const ids=new Set([...Object.keys(playerProfileBase),...Object.keys(playerStatCache)]);
     playerProfiles=Object.fromEntries([...ids].map(id=>[id,{...(playerProfileBase[id]||{}),...(playerStatCache[id]||{})}]));
   };
+  const syncProfileRosters=()=>{
+    for (const [id,profile] of Object.entries(playerProfileBase)) {
+      if (!profile.name || !profile.team) continue;
+      DARTS_FALLBACK_ROSTERS[profile.team] ||= [];
+      const member={id:Number(id),name:profile.name,role:profile.role || 'Spieler'};
+      const index=DARTS_FALLBACK_ROSTERS[profile.team].findIndex(item=>String(item.id)===id);
+      if(index>=0) DARTS_FALLBACK_ROSTERS[profile.team][index]=member; else DARTS_FALLBACK_ROSTERS[profile.team].push(member);
+    }
+  };
   fetch('/api/v1/darts/player-profiles',{headers:{Accept:'application/json'}})
     .then(response=>response.ok?response.json():Promise.reject(new Error('player profiles unavailable')))
     .catch(()=>fetch('/static/darts-players.json',{headers:{Accept:'application/json'}}).then(response=>response.ok?response.json():Promise.reject(new Error('player photos unavailable'))))
-    .then(config=>{ playerProfileBase=dartsPlayerProfiles(config); mergePlayerProfiles(); })
+    .then(config=>{ playerProfileBase=dartsPlayerProfiles(config); syncProfileRosters(); mergePlayerProfiles(); })
     .catch(()=>{ playerProfileBase={}; mergePlayerProfiles(); });
   fetch('/api/v1/darts/player-stats',{headers:{Accept:'application/json'}})
     .then(response=>response.ok?response.json():Promise.reject(new Error('player stats unavailable')))

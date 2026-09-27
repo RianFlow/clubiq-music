@@ -35,6 +35,15 @@ function mergePlayers(profiles, season) {
   return [...byId.values()].sort((a,b)=>(a.team || 'Z').localeCompare(b.team || 'Z','de') || playerLabel(a).localeCompare(playerLabel(b),'de'));
 }
 
+function rosterPlayers(season) {
+  const players=[];
+  for (const team of season?.teams || []) for (const member of team.roster || []) {
+    if (!member?.id || !member?.name || !/^[A-D]$/.test(team.code || '')) continue;
+    players.push({player_id:Number(member.id),name:clean(member.name),team:team.code,role:clean(member.role) || 'Spieler'});
+  }
+  return players;
+}
+
 async function loadData() {
   $('#dataStatus').textContent = 'Profile und 3K-Kader werden geladen …';
   const selectedId=state.selected?.playerId;
@@ -43,7 +52,10 @@ async function loadData() {
     fetch('/api/v1/darts/season',{headers:{Accept:'application/json'},cache:'no-store'}).then(response=>response.ok?response.json():null),
   ]);
   if (profilesResult.status !== 'fulfilled') throw profilesResult.reason;
-  state.players = mergePlayers(profilesResult.value.players, seasonResult.status === 'fulfilled' ? seasonResult.value : null);
+  const season=seasonResult.status === 'fulfilled' ? seasonResult.value : null;
+  state.players = mergePlayers(profilesResult.value.players, season);
+  const roster=rosterPlayers(season);
+  if (roster.length) api('/api/v1/darts/admin/roster-cache',{method:'POST',body:JSON.stringify({players:roster})}).catch(()=>{});
   $('#dataStatus').textContent = seasonResult.status === 'fulfilled' && seasonResult.value ? `${state.players.length} Profile · 3K-Kader aktuell` : `${state.players.length} Profile · 3K-Kader gerade nicht erreichbar`;
   const selected=state.players.find(item=>item.playerId===selectedId) || state.players[0];
   if (selected) selectPlayer(selected); else renderPlayerList();
@@ -81,6 +93,7 @@ function selectPlayer(player) {
   $('#editorEmpty').hidden=true; $('#profileForm').hidden=false;
   $('#playerId').value=player.playerId; $('#profileTeam').textContent=player.team ? `SV Barver Darts ${player.team}` : 'Mannschaft offen';
   $('#profileName').textContent=playerLabel(player); $('#profileRole').textContent=player.role || 'Spielerprofil';
+  $('#displayName').value=player.name || ''; $('#profileTeamCode').value=player.team || 'A'; $('#profileRosterRole').value=player.role || 'Spieler';
   $('#alias').value=player.alias || ''; $('#playerNumber').value=player.playerNumber || ''; $('#gender').value=player.gender || '';
   const details=personal(player);
   $('#darts').value=details.darts || ''; $('#weightGrams').value=details.weightGrams ?? '';
@@ -107,6 +120,7 @@ async function saveProfile(event) {
   event.preventDefault(); if (!state.selected) return;
   const status=$('#formStatus'); status.hidden=false; status.textContent='Änderungen werden gespeichert …';
   const payload={
+    display_name:clean($('#displayName').value),team:$('#profileTeamCode').value,role:$('#profileRosterRole').value,
     player_number:clean($('#playerNumber').value),alias:clean($('#alias').value),gender:$('#gender').value,
     darts:clean($('#darts').value),weight_grams:$('#weightGrams').value ? Number($('#weightGrams').value) : null,
     favorite_pdc_player:clean($('#favoritePdcPlayer').value),favorite_finish:clean($('#favoriteFinish').value),
@@ -123,6 +137,16 @@ async function saveProfile(event) {
     const updated=state.players.find(item=>item.playerId===state.selected.playerId); if (updated) selectPlayer(updated);
     status.hidden=false; status.textContent=successMessage;
   } catch (error) { status.textContent=error.message; }
+}
+
+async function createPlayer(event) {
+  event.preventDefault(); const error=$('#newPlayerError'); error.hidden=true;
+  try {
+    const created=await api('/api/v1/darts/admin/players',{method:'POST',body:JSON.stringify({name:clean($('#newPlayerName').value),team:$('#newPlayerTeam').value,role:$('#newPlayerRole').value})});
+    $('#newPlayerDialog').close(); $('#newPlayerForm').reset();
+    state.selected={playerId:created.player_id}; await loadData();
+    const player=state.players.find(item=>item.playerId===created.player_id); if(player) selectPlayer(player);
+  } catch(problem) { error.textContent=problem.message; error.hidden=false; }
 }
 
 async function deletePhoto() {
@@ -145,6 +169,9 @@ $('#loginForm').addEventListener('submit',async event=>{event.preventDefault();c
 $('#logout').addEventListener('click',()=>{state.password='';sessionStorage.removeItem('clubiq_darts_admin');location.reload();});
 $('#playerSearch').addEventListener('input',renderPlayerList); $('#teamFilter').addEventListener('change',renderPlayerList);
 $('#profileForm').addEventListener('submit',saveProfile); $('#deletePhoto').addEventListener('click',deletePhoto);
+$('#newPlayer').addEventListener('click',()=>{$('#newPlayerError').hidden=true;$('#newPlayerDialog').showModal();$('#newPlayerName').focus();});
+$('#newPlayerForm').addEventListener('submit',createPlayer);
+$('[data-close-new-player]').addEventListener('click',()=>$('#newPlayerDialog').close());
 $('#profilePhoto').addEventListener('change',async event=>{const file=event.target.files?.[0];if(!file||!state.selected)return;const status=$('#formStatus');status.hidden=false;status.textContent='Bild wird für schnelle Darstellung optimiert …';try{state.pendingPhoto=await compressPhoto(file);state.previewUrl=await photoDataUrl(state.pendingPhoto);setPreview(state.selected,state.previewUrl);status.textContent=`Bild vorbereitet (${Math.max(1,Math.round(state.pendingPhoto.size/1024))} KB). Zum Übernehmen noch speichern.`;}catch(error){state.pendingPhoto=null;status.textContent=error.message;}});
 
 if (state.password) openAdmin(state.password).catch(()=>{state.password='';sessionStorage.removeItem('clubiq_darts_admin');});

@@ -139,6 +139,7 @@ class SecurityContractTests(unittest.TestCase):
     def test_darts_profile_admin_is_protected_and_payload_is_bounded(self):
         for path in (
             "/api/v1/darts/admin/players",
+            "/api/v1/darts/admin/roster-cache",
             "/api/v1/darts/admin/players/{player_id}",
             "/api/v1/darts/admin/players/{player_id}/photo",
         ):
@@ -154,6 +155,10 @@ class SecurityContractTests(unittest.TestCase):
             main.DartsPlayerProfileUpdate(player_number="ungültig!", published=True)
         with self.assertRaises(ValidationError):
             main.DartsPlayerProfileUpdate(weight_grams=99, published=True)
+        created = main.DartsPlayerCreate(name="Neue Spielerin", team="C", role="Spielerin")
+        self.assertEqual(created.team, "C")
+        with self.assertRaises(ValidationError):
+            main.DartsPlayerCreate(name="X", team="E")
 
     def test_darts_profile_images_validate_content_not_filename(self):
         media_type, data = main._validated_player_image(b"RIFF\x00\x00\x00\x00WEBPpayload")
@@ -291,6 +296,8 @@ class OfflineFrontendContractTests(unittest.TestCase):
         self.assertIn("Profil veröffentlichen", html_source)
         self.assertIn("der Veröffentlichung zugestimmt", html_source)
         self.assertIn("/api/v1/darts/admin/players", script_source)
+        self.assertIn("Neuen Spieler anlegen", html_source)
+        self.assertIn("/api/v1/darts/admin/roster-cache", script_source)
         self.assertIn("image/webp", script_source)
         self.assertNotRegex(html_source, r'https?://')
 

@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex,nofollow,noarchive">
   <title>ClubIQ · Spielerverwaltung</title>
   <link rel="icon" href="/pics/logo.png">
-  <link rel="stylesheet" href="/static/darts-admin.css?v=20260927-admin1">
-  <script defer src="/static/darts-admin.js?v=20260927-admin1"></script>
+  <link rel="stylesheet" href="/static/darts-admin.css?v=20260927-admin2">
+  <script defer src="/static/darts-admin.js?v=20260927-admin3"></script>
 </head>
 <body>
   <header class="admin-header">
@@ -34,6 +34,7 @@
       </div>
       <div class="admin-layout">
         <aside class="player-browser">
+          <button id="newPlayer" type="button">+ Neuen Spieler anlegen</button>
           <label>Spieler suchen<input id="playerSearch" type="search" placeholder="Name oder Alias" autocomplete="off"></label>
           <label>Mannschaft<select id="teamFilter"><option value="all">Alle Mannschaften</option><option value="A">Barver A</option><option value="B">Barver B</option><option value="C">Barver C</option><option value="D">Barver D</option></select></label>
           <div id="playerList" class="player-list"></div>
@@ -52,7 +53,10 @@
             <small>Das Bild wird im Browser automatisch verkleinert und als schnelles WebP gespeichert.</small>
           </div>
           <div class="form-grid">
-            <label>Spielername / Alias<input id="alias" maxlength="50"></label>
+            <label>Name<input id="displayName" minlength="2" maxlength="100" required></label>
+            <label>Mannschaft<select id="profileTeamCode" required><option value="A">Barver A</option><option value="B">Barver B</option><option value="C">Barver C</option><option value="D">Barver D</option></select></label>
+            <label>Funktion<input id="profileRosterRole" maxlength="50" placeholder="z. B. Spieler oder Kapitän"></label>
+            <label>Alias<input id="alias" maxlength="50"></label>
             <label>3K-Spielernummer<input id="playerNumber" maxlength="12" pattern="[A-Za-z0-9]*" placeholder="z. B. Q8V4"></label>
             <label>Ansprache<select id="gender"><option value="">Keine Angabe</option><option value="male">Spieler</option><option value="female">Spielerin</option><option value="diverse">Neutrale Form</option></select></label>
             <label>Darts<input id="darts" maxlength="80" placeholder="z. B. 95K von Aspinall"></label>
@@ -69,5 +73,16 @@
       </div>
     </section>
   </main>
+  <dialog id="newPlayerDialog">
+    <form id="newPlayerForm" class="new-player-form">
+      <p class="eyebrow">Neues Profil</p><h2>Spieler anlegen</h2>
+      <p>Das Profil wird zunächst als unveröffentlichter Entwurf gespeichert.</p>
+      <label>Name<input id="newPlayerName" minlength="2" maxlength="100" required></label>
+      <label>Mannschaft<select id="newPlayerTeam" required><option value="A">Barver A</option><option value="B">Barver B</option><option value="C">Barver C</option><option value="D">Barver D</option></select></label>
+      <label>Funktion<select id="newPlayerRole"><option value="Spieler">Spieler</option><option value="Kapitän">Kapitän</option><option value="Stellvertretung">Stellvertretung</option></select></label>
+      <p id="newPlayerError" class="error" hidden></p>
+      <div class="dialog-actions"><button type="button" class="secondary" data-close-new-player>Abbrechen</button><button type="submit">Profil anlegen</button></div>
+    </form>
+  </dialog>
 </body>
 </html>

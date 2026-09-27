@@ -208,6 +208,9 @@ ON darts_push_subscriptions(enabled);
 
 CREATE TABLE IF NOT EXISTS darts_player_profiles (
     player_id BIGINT PRIMARY KEY,
+    display_name VARCHAR(100),
+    team_code VARCHAR(1),
+    roster_role VARCHAR(50),
     player_number VARCHAR(12),
     alias VARCHAR(50),
     gender VARCHAR(20),
@@ -226,8 +229,20 @@ CREATE TABLE IF NOT EXISTS darts_player_profiles (
     CHECK (gender IS NULL OR gender IN ('female', 'male', 'diverse')),
     CHECK (weight_grams IS NULL OR (weight_grams >= 10 AND weight_grams <= 60))
 );
+ALTER TABLE darts_player_profiles ADD COLUMN IF NOT EXISTS display_name VARCHAR(100);
+ALTER TABLE darts_player_profiles ADD COLUMN IF NOT EXISTS team_code VARCHAR(1);
+ALTER TABLE darts_player_profiles ADD COLUMN IF NOT EXISTS roster_role VARCHAR(50);
 CREATE INDEX IF NOT EXISTS idx_darts_player_profiles_published
 ON darts_player_profiles(published);
+
+CREATE TABLE IF NOT EXISTS darts_roster_cache (
+    player_id BIGINT PRIMARY KEY,
+    display_name VARCHAR(100) NOT NULL,
+    team_code VARCHAR(1) NOT NULL,
+    roster_role VARCHAR(50) NOT NULL DEFAULT 'Spieler',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK (team_code IN ('A', 'B', 'C', 'D'))
+);
 
 CREATE TABLE IF NOT EXISTS darts_player_profile_audit (
     id BIGSERIAL PRIMARY KEY,

@@ -479,6 +479,9 @@ class DartsPushUnsubscribe(BaseModel):
 
 
 class DartsPlayerProfileUpdate(BaseModel):
+    display_name: str | None = Field(default=None, min_length=2, max_length=100)
+    team: str | None = Field(default=None, pattern=r"^[A-D]$")
+    role: str | None = Field(default=None, max_length=50)
     player_number: str | None = Field(default=None, max_length=12, pattern=r"^[A-Za-z0-9]*$")
     alias: str | None = Field(default=None, max_length=50)
     gender: str | None = Field(default=None, pattern=r"^(female|male|diverse)?$")
@@ -489,6 +492,23 @@ class DartsPlayerProfileUpdate(BaseModel):
     finish_route: str | None = Field(default=None, max_length=80)
     walk_on_song: str | None = Field(default=None, max_length=100)
     published: bool = False
+
+
+class DartsPlayerCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=100)
+    team: str = Field(pattern=r"^[A-D]$")
+    role: str = Field(default="Spieler", max_length=50)
+
+
+class DartsRosterMember(BaseModel):
+    player_id: int = Field(gt=0)
+    name: str = Field(min_length=2, max_length=100)
+    team: str = Field(pattern=r"^[A-D]$")
+    role: str = Field(default="Spieler", max_length=50)
+
+
+class DartsRosterCacheUpdate(BaseModel):
+    players: list[DartsRosterMember] = Field(max_length=100)
 
 
 class SuggestionCreate(BaseModel):
@@ -742,6 +762,9 @@ def _profile_from_row(row) -> tuple[str, dict]:
         "updatedAt": row[15],
         "hasUploadedImage": row[10] is not None,
         "imageVersion": int(row[12] or 0),
+        "name": row[16] or "",
+        "team": row[17] or "",
+        "role": row[18] or "",
     }
     if row[10] is not None:
         profile["image"] = f"/api/v1/darts/players/{player_id}/photo?v={int(row[12] or 0)}"
@@ -754,12 +777,24 @@ def _darts_profile_rows() -> dict[str, dict]:
             """
             SELECT player_id, player_number, alias, gender, darts, weight_grams,
                    favorite_pdc_player, favorite_finish, finish_route, walk_on_song,
-                   image_data, image_media_type, image_version, published, created_at, updated_at
+                   image_data, image_media_type, image_version, published, created_at, updated_at,
+                   display_name, team_code, roster_role
             FROM darts_player_profiles
             ORDER BY player_id;
             """
         )
         return dict(_profile_from_row(row) for row in cur.fetchall())
+
+
+def _darts_roster_rows() -> dict[str, dict]:
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT player_id, display_name, team_code, roster_role FROM darts_roster_cache ORDER BY player_id;"
+        )
+        return {
+            str(row[0]): {"name": row[1], "team": row[2], "role": row[3] or "Spieler"}
+            for row in cur.fetchall()
+        }
 
 
 def _public_darts_profiles() -> dict[str, dict]:
@@ -776,6 +811,9 @@ def _public_darts_profiles() -> dict[str, dict]:
                 public[key] = stored[key]
             elif key != "image":
                 public.pop(key, None)
+        for key in ("name", "team", "role"):
+            if stored.get(key):
+                public[key] = stored[key]
         if any(value not in (None, "") for value in personal.values()):
             public["personal"] = personal
         else:
@@ -797,16 +835,20 @@ def darts_player_profiles():
 def darts_admin_players():
     base = _base_darts_player_profiles()
     stored = _darts_profile_rows()
-    ids = sorted(set(base) | set(stored), key=lambda value: int(value) if value.isdigit() else value)
+    roster = _darts_roster_rows()
+    ids = sorted(set(base) | set(stored) | set(roster), key=lambda value: int(value) if value.isdigit() else value)
     players = []
     for player_id in ids:
         source = dict(base.get(player_id) or {})
+        source.update(roster.get(player_id) or {})
         database = stored.get(player_id)
         personal = dict(source.get("personal") or {})
         if database:
             personal = dict(database["personal"])
             for key in ("playerNumber", "alias", "gender"):
                 source[key] = database.get(key) or ""
+            for key in ("name", "team", "role"):
+                source[key] = database.get(key) or source.get(key) or ""
             if database.get("image"):
                 source["image"] = database["image"]
         source["personal"] = personal
@@ -824,9 +866,65 @@ def darts_admin_players():
     )
 
 
+@app.post("/api/v1/darts/admin/players", dependencies=[Depends(require_admin)])
+def darts_admin_create_player(player: DartsPlayerCreate):
+    name = _clean_profile_text(player.name)
+    role = _clean_profile_text(player.role) or "Spieler"
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT pg_advisory_xact_lock(2026092701);")
+        cur.execute(
+            "SELECT COALESCE(MAX(player_id), 899999999999) + 1 FROM darts_player_profiles WHERE player_id BETWEEN 900000000000 AND 999999999998;"
+        )
+        player_id = int(cur.fetchone()[0])
+        if player_id > 999999999999:
+            raise HTTPException(status_code=409, detail="Es können derzeit keine weiteren lokalen Profile angelegt werden.")
+        cur.execute(
+            """
+            INSERT INTO darts_player_profiles (player_id, display_name, team_code, roster_role, published)
+            VALUES (%s,%s,%s,%s,FALSE);
+            """,
+            (player_id, name, player.team, role),
+        )
+        cur.execute(
+            "INSERT INTO darts_player_profile_audit (player_id, action, detail_json) VALUES (%s, 'profile_created', %s::jsonb);",
+            (player_id, json.dumps({"name": name, "team": player.team}, ensure_ascii=False, separators=(",", ":"))),
+        )
+        conn.commit()
+    return {"status": "success", "player_id": player_id}
+
+
+@app.post("/api/v1/darts/admin/roster-cache", dependencies=[Depends(require_admin)])
+def darts_admin_cache_roster(update: DartsRosterCacheUpdate):
+    """Persist public roster labels so the editor remains useful during a 3K outage."""
+    with db_connect() as conn, conn.cursor() as cur:
+        for player in update.players:
+            cur.execute(
+                """
+                INSERT INTO darts_roster_cache (player_id, display_name, team_code, roster_role)
+                VALUES (%s,%s,%s,%s)
+                ON CONFLICT (player_id) DO UPDATE SET
+                    display_name=EXCLUDED.display_name,
+                    team_code=EXCLUDED.team_code,
+                    roster_role=EXCLUDED.roster_role,
+                    updated_at=CURRENT_TIMESTAMP;
+                """,
+                (
+                    player.player_id,
+                    _clean_profile_text(player.name),
+                    player.team,
+                    _clean_profile_text(player.role) or "Spieler",
+                ),
+            )
+        conn.commit()
+    return {"status": "success", "cached": len(update.players)}
+
+
 @app.put("/api/v1/darts/admin/players/{player_id}", dependencies=[Depends(require_admin)])
 def darts_admin_update_player(player_id: int, update: DartsPlayerProfileUpdate):
     values = {
+        "display_name": _clean_profile_text(update.display_name),
+        "team_code": _clean_profile_text(update.team),
+        "roster_role": _clean_profile_text(update.role),
         "player_number": _clean_profile_text(update.player_number),
         "alias": _clean_profile_text(update.alias),
         "gender": _clean_profile_text(update.gender),
@@ -842,10 +940,13 @@ def darts_admin_update_player(player_id: int, update: DartsPlayerProfileUpdate):
         cur.execute(
             """
             INSERT INTO darts_player_profiles (
-                player_id, player_number, alias, gender, darts, weight_grams,
+                player_id, display_name, team_code, roster_role, player_number, alias, gender, darts, weight_grams,
                 favorite_pdc_player, favorite_finish, finish_route, walk_on_song, published
-            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (player_id) DO UPDATE SET
+                display_name=EXCLUDED.display_name,
+                team_code=EXCLUDED.team_code,
+                roster_role=EXCLUDED.roster_role,
                 player_number=EXCLUDED.player_number, alias=EXCLUDED.alias,
                 gender=EXCLUDED.gender, darts=EXCLUDED.darts,
                 weight_grams=EXCLUDED.weight_grams,

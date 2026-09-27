@@ -1,10 +1,16 @@
 {
   "players": {
     "89034": {
+      "name": "Jörg Renzelmann",
+      "team": "B",
+      "role": "Spieler",
       "image": "/pics/players/joerg-renzelmann-cutout.webp",
       "alias": "RenzelJo"
     },
     "89029": {
+      "name": "Patrick Lammers",
+      "team": "B",
+      "role": "Spieler",
       "image": "/pics/players/patrick-lammers-cutout.webp",
       "alias": "Peddy",
       "personal": {
@@ -15,33 +21,57 @@
       }
     },
     "89017": {
+      "name": "Justin Albrecht",
+      "team": "B",
+      "role": "Spieler",
       "image": "/pics/players/justin-albrecht-cutout.webp"
     },
     "89030": {
+      "name": "Max Lowak",
+      "team": "B",
+      "role": "Spieler",
       "image": "/pics/players/max-lowak-cutout.webp",
       "alias": "Max"
     },
     "116999": {
+      "name": "René Lange",
+      "team": "B",
+      "role": "Spieler",
       "image": "/pics/players/rene-lange-cutout.webp",
       "alias": "Full Metal"
     },
     "52376": {
+      "name": "Robin Tiedemann",
+      "team": "B",
+      "role": "Spieler",
       "image": "/pics/players/robin-tiedemann-cutout.webp",
       "alias": "The Chipper"
     },
     "89019": {
+      "name": "Denis Dieckmann",
+      "team": "A",
+      "role": "Spieler",
       "image": "/pics/players/denis-dieckmann-cutout.webp",
       "alias": "Otto"
     },
     "89022": {
+      "name": "Eike Feldhaus",
+      "team": "A",
+      "role": "Stellvertretung",
       "image": "/pics/players/eike-feldhaus-cutout.webp",
       "alias": "Mister Right Side"
     },
     "89027": {
+      "name": "Jannik Kläning",
+      "team": "A",
+      "role": "Spieler",
       "image": "/pics/players/jannik-klaening-cutout.webp",
       "alias": "Jann7k"
     },
     "89038": {
+      "name": "Till Schulze",
+      "team": "A",
+      "role": "Spieler",
       "image": "/pics/players/till-schulze-cutout.webp",
       "alias": "Dübbeldoktor"
     }
