@@ -56,6 +56,32 @@ function dartsRoster(members) {
     roleRank(left?.role)-roleRank(right?.role) || String(left?.name || '').localeCompare(String(right?.name || ''),'de',{sensitivity:'base'})
   );
 }
+function dartsGender(value) {
+  const marker=String(value || '').trim().toLocaleLowerCase('de-DE');
+  if (['female','f','w','weiblich','frau'].includes(marker)) return 'female';
+  if (['male','m','männlich','maennlich','mann'].includes(marker)) return 'male';
+  if (['diverse','divers','d'].includes(marker)) return 'diverse';
+  return '';
+}
+function dartsMemberRole(member={}, profile={}) {
+  const role=String(member.role || 'Spieler').trim() || 'Spieler';
+  if (dartsGender(profile.gender || member.gender)!=='female') {
+    return role.toLocaleLowerCase('de-DE').includes('stell') ? 'Stellvertretender Kapitän' : role;
+  }
+  const normalized=role.toLocaleLowerCase('de-DE');
+  if (normalized.includes('kapit')) return 'Kapitänin';
+  if (normalized.includes('stell')) return 'Stellvertretende Kapitänin';
+  if (normalized.includes('spieler')) return 'Spielerin';
+  return role;
+}
+function dartsRoleSentence(member={}, team={}, profile={}) {
+  const role=dartsMemberRole(member,profile), name=String(member.name || 'Dieses Mitglied'), teamName=String(team.name || `Barver ${team.code || ''}`).trim();
+  if (role==='Kapitän') return `${name} führt ${teamName} als Kapitän an.`;
+  if (role==='Kapitänin') return `${name} führt ${teamName} als Kapitänin an.`;
+  if (role==='Stellvertretender Kapitän') return `${name} unterstützt ${teamName} als stellvertretender Kapitän.`;
+  if (role==='Stellvertretende Kapitänin') return `${name} unterstützt ${teamName} als stellvertretende Kapitänin.`;
+  return `${name} spielt für ${teamName}.`;
+}
 function dartsMatchCenterItem(items, code) {
   const candidates=(Array.isArray(items)?items:[]).filter(entry=>(entry.barverTeams || [entry.barverTeam || dartsTeamCode(`${entry.home || ''} ${entry.away || ''}`)]).includes(code));
   const live=candidates.filter(entry=>entry.kind==='live').sort((a,b)=>new Date(b.plannedAt||0)-new Date(a.plannedAt||0));
@@ -86,6 +112,7 @@ function dartsPlayerProfiles(config) {
     if (!item || typeof item!=='object') continue;
     const image=typeof item.image==='string' && /^\/pics\/players\/[a-z0-9][a-z0-9._-]*\.(?:avif|jpe?g|png|webp)$/i.test(item.image) ? item.image : '';
     const alias=typeof item.alias==='string' ? item.alias.trim().slice(0,50) : '';
+    const gender=dartsGender(item.gender);
     const playerNumber=typeof item.playerNumber==='string' && /^[A-Z0-9]{3,12}$/i.test(item.playerNumber.trim()) ? item.playerNumber.trim().toLocaleUpperCase('de-DE') : '';
     const numericAverage=typeof item.average==='number' ? item.average : Number.NaN;
     const average=Number.isFinite(numericAverage) && numericAverage>=0 && numericAverage<=180 ? Math.round(numericAverage*10)/10 : null;
@@ -102,7 +129,7 @@ function dartsPlayerProfiles(config) {
       walkOnSong:cleanPersonalText(rawPersonal.walkOnSong,100),
     };
     const hasPersonal=personal.darts || personal.weightGrams!==null || personal.favoritePdcPlayer || personal.favoriteFinish!==null || personal.finishRoute || personal.walkOnSong;
-    result[id]={image,alias,average,playerNumber,...(hasPersonal?{personal}:{})};
+    result[id]={image,alias,average,playerNumber,...(gender?{gender}:{}),...(hasPersonal?{personal}:{})};
   }
   return result;
 }
@@ -702,6 +729,7 @@ function initDarts() {
     } finally { window.clearTimeout(timeout); liveDetailsLoading=false; }
   }
   let seasonData=null, seasonStatus='upcoming', seasonLoading=false, seasonPromise=null;
+  let clubMembers=null, membersLoading=false, membersPromise=null, membersError='';
   try { const saved=JSON.parse(localStorage.getItem('clubiq_darts_last_ticker')||'null'); if (Array.isArray(saved?.items)) {renderTicker(saved);updateFreshness(true);} } catch (_) {}
   try { const saved=JSON.parse(localStorage.getItem('clubiq_darts_last_season')||'null'); if (Array.isArray(saved?.matches)&&Array.isArray(saved?.teams)) {seasonData=saved;renderSeason();renderHomeSchedule();renderCompleteMatchCenter();} } catch (_) {}
   loadTicker(); loadHighlights(); initServerLiveStream();
@@ -821,16 +849,17 @@ function initDarts() {
     const profile=playerProfiles[String(member.id || '')] || {};
     const hero=document.createElement('section'); hero.className='player-profile-hero';
     const copy=document.createElement('div'); copy.className='player-profile-identity';
-    const roleFlag=document.createElement('strong'); roleFlag.className='player-profile-kicker'; roleFlag.textContent=profile.alias ? `„${profile.alias}“` : member.role || 'Spieler';
+    const displayRole=dartsMemberRole(member,profile);
+    const roleFlag=document.createElement('strong'); roleFlag.className='player-profile-kicker'; roleFlag.textContent=profile.alias ? `„${profile.alias}“` : displayRole;
     const name=document.createElement('h3'); name.textContent=member.name;
-    const meta=document.createElement('p'); meta.append(`${member.role} · `,makeTeamJump(team.code,team.name),` · ${team.league?.short || 'Verein'}`);
+    const meta=document.createElement('p'); meta.append(`${displayRole} · `,makeTeamJump(team.code,team.name),` · ${team.league?.short || 'Verein'}`);
     const photoNote=document.createElement('small'); photoNote.textContent=profile.image?'Vereinsfoto':'Vereinsfoto kann später ergänzt werden';
     copy.append(roleFlag,name,meta,photoNote);
     const visual=document.createElement('div'); visual.className='player-profile-visual';
     const teamMark=document.createElement('b'); teamMark.className='player-profile-team-mark'; teamMark.textContent=team.code;
     visual.append(teamMark,playerAvatar(member,true)); hero.append(copy,visual);
     const facts=document.createElement('section'); facts.className='player-profile-facts';
-    for (const [label,value] of [['Mannschaft',`Barver ${team.code}`],['Liga',team.league?.short || '–'],['Funktion',member.role || 'Spieler'],['3K-Spielernummer',profile.playerNumber || 'Noch offen'],['Aktueller Ø',profile.average===null || profile.average===undefined?'Noch offen':profile.average.toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1})],['Teamspiele',record.played ?? 0],['Teamsiege',record.wins ?? 0]]) {
+    for (const [label,value] of [['Mannschaft',`Barver ${team.code}`],['Liga',team.league?.short || '–'],['Funktion',displayRole],['3K-Spielernummer',profile.playerNumber || 'Noch offen'],['Aktueller Ø',profile.average===null || profile.average===undefined?'Noch offen':profile.average.toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1})],['Teamspiele',record.played ?? 0],['Teamsiege',record.wins ?? 0]]) {
       const item=document.createElement('div'); const text=document.createElement('span'); text.textContent=label; const strong=document.createElement('strong');
       if (label==='Mannschaft') strong.append(makeTeamJump(team.code,value)); else strong.textContent=value;
       item.append(text,strong); facts.append(item);
@@ -857,7 +886,7 @@ function initDarts() {
     personalSection.append(personalTitle,personalIntro,personalGrid);
     const grid=document.createElement('div'); grid.className='player-profile-grid';
     const sport=document.createElement('section'); sport.className='team-profile-section'; const sportTitle=document.createElement('h3'); sportTitle.textContent='Sportlicher Überblick'; sport.append(sportTitle);
-    const role=document.createElement('p'); role.className='player-profile-copy'; role.append(`${member.name} hat im Kader von `,makeTeamJump(team.code,team.name),` die Rolle „${member.role}“.`);
+    const role=document.createElement('p'); role.className='player-profile-copy'; role.textContent=dartsRoleSentence(member,team,profile);
     sport.append(role);
     if (team.nextMatch) { const label=document.createElement('p'); label.className='eyebrow'; label.textContent='Nächster Mannschaftstermin'; sport.append(label,makeProfileMatch(team.nextMatch,team.code)); }
     const results=document.createElement('section'); results.className='team-profile-section'; const resultsTitle=document.createElement('h3'); resultsTitle.textContent='Letzte Mannschaftsergebnisse'; results.append(resultsTitle);
@@ -870,10 +899,10 @@ function initDarts() {
       const statsGrid=document.createElement('div'); statsGrid.className='player-personal-grid';
       const values=[['Partien',profile.gamesPlayed],['Siege',profile.gamesWon],['Legs',`${profile.legsFor}:${profile.legsAgainst}`],['180er',profile.count180],['High Finishes',profile.highFinishes],['Bestes Finish',profile.highFinish || '–']];
       for (const [label,value] of values) { const item=document.createElement('div'); const text=document.createElement('span'); text.textContent=label; const strong=document.createElement('strong'); strong.textContent=value; item.append(text,strong); statsGrid.append(item); }
-      const source=document.createElement('small'); source.textContent=`Aus öffentlichen 3K-Spielberichten zusammengeführt${profile.statsStale?' · letzter gespeicherter Stand':''}.`;
+      const source=document.createElement('small'); source.textContent=`Saisonwerte aus den bisherigen Partien${profile.statsStale?' · letzter gespeicherter Stand':''}.`;
       stats.append(statsGrid,source);
     } else {
-      const statsCopy=document.createElement('p'); statsCopy.textContent='Die persönlichen 3K-Statistiken werden gerade zentral vorbereitet.';
+      const statsCopy=document.createElement('p'); statsCopy.textContent='Die persönlichen Saisonwerte werden gerade vorbereitet.';
       const loading=document.createElement('small'); loading.textContent='Beim ersten Abruf kann das Zusammenführen einige Sekunden dauern; danach kommt der Wert aus dem schnellen Zwischenspeicher.';
       stats.append(statsCopy,loading);
     }
@@ -920,9 +949,10 @@ function initDarts() {
     const squad=document.createElement('section'); squad.className='team-profile-section team-squad'; const squadTitle=document.createElement('h3'); squadTitle.textContent='Kader'; squad.append(squadTitle);
     const roster=document.createElement('div'); roster.className='team-roster';
     for (const member of rosterMembers) {
-      const player=document.createElement('button'); player.type='button'; player.className='player-roster-card'; player.setAttribute('aria-label',`${member.name}, Spielerprofil öffnen`);
+      const profile=playerProfiles[String(member.id || '')] || {};
+      const player=document.createElement('button'); player.type='button'; player.className='player-roster-card'; player.setAttribute('aria-label',`${member.name}, Profil öffnen`);
       player.append(playerAvatar(member));
-      const playerCopy=document.createElement('span'); const playerName=document.createElement('strong'); playerName.textContent=member.name; const role=document.createElement('small'); role.textContent=member.role; playerCopy.append(playerName,role);
+      const playerCopy=document.createElement('span'); const playerName=document.createElement('strong'); playerName.textContent=member.name; const role=document.createElement('small'); role.textContent=dartsMemberRole(member,profile); playerCopy.append(playerName,role);
       const open=document.createElement('b'); open.textContent='›'; open.setAttribute('aria-hidden','true'); player.append(playerCopy,open);
       player.addEventListener('click',()=>{ q('#teamDialog').close(); openPlayerProfile(member,team); }); roster.append(player);
     }
@@ -930,7 +960,7 @@ function initDarts() {
     squad.append(roster);
     const venue=team.venue || {}; const venueSection=document.createElement('section'); venueSection.className='team-profile-section team-venue'; const venueTitle=document.createElement('h3'); venueTitle.textContent='Heimspielstätte'; venueSection.append(venueTitle);
     const venueName=document.createElement('strong'); venueName.textContent=venue.name || 'Dorfgemeinschaftshaus Barver'; const address=document.createElement('span'); address.textContent=[venue.street,[venue.postalCode,venue.city].filter(Boolean).join(' ')].filter(Boolean).join(' · '); venueSection.append(venueName,address);
-    if (venue.boards) { const boards=document.createElement('small'); boards.textContent=`${venue.boards} Boards laut 3K`; venueSection.append(boards); }
+    if (venue.boards) { const boards=document.createElement('small'); boards.textContent=`${venue.boards} Boards an der Spielstätte`; venueSection.append(boards); }
     const filter=document.createElement('button'); filter.type='button'; filter.className='primary'; filter.textContent='Nur Spiele dieser Mannschaft anzeigen'; filter.addEventListener('click',()=>{ q('#teamDialog').close(); q('#seasonTeam').value=team.code; renderSeason(); q('#seasonMatches').scrollIntoView({behavior:'smooth',block:'start'}); }); venueSection.append(filter);
     grid.append(schedule,squad,venueSection); target.replaceChildren(hero,...(teamPhoto?[teamPhoto]:[]),stats,grid);
     if (!q('#teamDialog').open) q('#teamDialog').showModal();
@@ -976,8 +1006,70 @@ function initDarts() {
     }
     q('#seasonMatches').replaceChildren(fragment.childNodes.length ? fragment : Object.assign(document.createElement('p'),{className:'panel-loading',textContent:'Für diese Auswahl sind keine Begegnungen vorhanden.'}));
   }
+  function memberNameKey(value) {
+    return String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').trim().toLocaleLowerCase('de-DE');
+  }
+  function memberDirectory() {
+    const people=new Map();
+    for (const name of clubMembers || []) {
+      const clean=String(name || '').trim().slice(0,100), key=memberNameKey(clean);
+      if (key) people.set(key,{name:clean,teams:[],member:null,team:null,kind:'club'});
+    }
+    for (const team of seasonData?.teams || []) for (const member of dartsTeamRoster({...team,roster:team.roster || team.members || []})) {
+      const key=memberNameKey(member.name); if (!key) continue;
+      const current=people.get(key) || {name:member.name,teams:[],member:null,team:null,kind:'teams'};
+      if (!current.teams.includes(team.code)) current.teams.push(team.code);
+      current.kind='teams'; current.member ||= member; current.team ||= team;
+      people.set(key,current);
+    }
+    return [...people.values()].sort((left,right)=>left.name.localeCompare(right.name,'de',{sensitivity:'base'}));
+  }
+  function renderMembers() {
+    const target=q('#membersGrid'), query=memberNameKey(q('#memberSearch').value), group=q('#memberGroup').value;
+    const members=memberDirectory().filter(item=>(group==='all'||item.kind===group) && (!query||memberNameKey(item.name).includes(query)));
+    const fragment=document.createDocumentFragment();
+    for (const item of members) {
+      const clickable=Boolean(item.member && item.team), card=document.createElement(clickable?'button':'article');
+      if (clickable) card.type='button';
+      card.className=`member-card ${item.kind}`;
+      const avatar=item.member ? playerAvatar(item.member) : document.createElement('span');
+      if (!item.member) { avatar.className='player-avatar avatar-fallback'; avatar.textContent=playerInitials(item.name); }
+      const copy=document.createElement('span'), name=document.createElement('strong'), meta=document.createElement('small');
+      name.textContent=item.name;
+      if (clickable) {
+        const profile=playerProfiles[String(item.member.id || '')] || {}, role=dartsMemberRole(item.member,profile);
+        meta.textContent=`${role} · ${item.teams.map(code=>`Barver ${code}`).join(' · ')}`;
+        card.setAttribute('aria-label',`${item.name}, Profil öffnen`);
+        card.addEventListener('click',()=>openPlayerProfile(item.member,item.team));
+      } else meta.textContent='Vereinsmitglied';
+      copy.append(name,meta); card.append(avatar,copy);
+      if (clickable) { const open=document.createElement('b'); open.textContent='›'; open.setAttribute('aria-hidden','true'); card.append(open); }
+      fragment.append(card);
+    }
+    target.replaceChildren(fragment.childNodes.length ? fragment : Object.assign(document.createElement('p'),{className:'panel-loading',textContent:'Für diese Auswahl wurden keine Mitglieder gefunden.'}));
+    q('#memberCount').textContent=`${members.length} ${members.length===1?'Mitglied':'Mitglieder'}`;
+    q('#membersStatus').hidden=!membersError && Array.isArray(clubMembers);
+    q('#membersStatus').textContent=membersError || 'Aktive Vereinsmitglieder und Mannschaftskader werden gemeinsam angezeigt.';
+  }
+  async function loadClubMembers(force=false) {
+    if (membersLoading) return membersPromise;
+    if (clubMembers && !force) { renderMembers(); return; }
+    membersLoading=true; q('#membersStatus').hidden=false; q('#membersStatus').textContent='Mitglieder werden geladen …';
+    membersPromise=(async()=>{
+      try {
+        const response=await fetch('/api/v1/darts/members',{headers:{Accept:'application/json'},cache:force?'reload':'default',signal:AbortSignal.timeout(15000)});
+        if (!response.ok) throw new Error('members unavailable');
+        const data=await response.json(); clubMembers=Array.isArray(data.members)?data.members:[]; membersError='';
+      } catch (_) {
+        if (!clubMembers) clubMembers=[];
+        membersError='Weitere Vereinsmitglieder konnten gerade nicht geladen werden. Die Mannschaftskader bleiben sichtbar.';
+      } finally { membersLoading=false; renderMembers(); }
+    })();
+    return membersPromise;
+  }
   function renderSeason() {
     renderSpecialEvents(); renderSeasonTeams(); renderSeasonMatches();
+    if (!q('#membersPanel').hidden) renderMembers();
     for (const button of q('#seasonStatus').querySelectorAll('button')) button.setAttribute('aria-pressed',String(button.dataset.status===seasonStatus));
   }
   async function loadSeason(force=false) {
@@ -1076,7 +1168,7 @@ function initDarts() {
     const makeHighlights=()=>{
       const highlights=document.createElement('div'); highlights.className='native-highlights';
       for (const event of data.performances || []) { const chip=document.createElement('span'); chip.textContent=event.type==='180'?`🎯 180 · ${event.player}`:`🔥 High Finish ${event.value} · ${event.player}`; highlights.append(chip); }
-      if (!highlights.childNodes.length) { const empty=document.createElement('p'); empty.className='match-detail-empty'; empty.textContent='Noch keine besonderen Leistungen in 3K erfasst.'; highlights.append(empty); }
+      if (!highlights.childNodes.length) { const empty=document.createElement('p'); empty.className='match-detail-empty'; empty.textContent='Noch keine Highlights in dieser Begegnung.'; highlights.append(empty); }
       return highlights;
     };
     const tickerItems=[];
@@ -1115,7 +1207,7 @@ function initDarts() {
         const item=document.createElement('div'); item.className='match-timeline-item highlight';
         const mark=document.createElement('b'); mark.textContent=event.type==='180'?'180':'HF';
         const copy=document.createElement('span'); const title=document.createElement('strong'); title.textContent=event.type==='180'?`${event.player} wirft eine 180`:`High Finish ${event.value} von ${event.player}`;
-        const detail=document.createElement('small'); detail.textContent='Besondere Leistung laut 3K-Spielbericht'; copy.append(title,detail); item.append(mark,copy); timeline.append(item);
+        const detail=document.createElement('small'); detail.textContent=event.type==='180'?'Maximum in dieser Partie':`Starkes Checkout über ${event.value} Punkte`; copy.append(title,detail); item.append(mark,copy); timeline.append(item);
       }
       for (const game of [...finished].reverse().slice(0,8)) {
         const homeWon=game.homeLegs>game.awayLegs; const winner=homeWon?game.home.name:game.away.name;
@@ -1171,10 +1263,10 @@ function initDarts() {
     const overview=panelMap.get('overview');
     if ((data.liveGames || []).length) overview.append(makeLiveScores());
     const overviewGrid=document.createElement('div'); overviewGrid.className='match-overview-grid';
-    const flowSection=document.createElement('section'); flowSection.className='match-detail-section'; flowSection.innerHTML='<div class="match-detail-section-head"><h3>Spielverlauf</h3><span>automatisch aus 3K</span></div>'; flowSection.append(makeTimeline());
+    const flowSection=document.createElement('section'); flowSection.className='match-detail-section'; flowSection.innerHTML='<div class="match-detail-section-head"><h3>Spielverlauf</h3><span>Highlights und gewonnene Partien</span></div>'; flowSection.append(makeTimeline());
     const sideColumn=document.createElement('div'); sideColumn.className='match-overview-side';
     const comparisonSection=document.createElement('section'); comparisonSection.className='match-detail-section'; comparisonSection.innerHTML='<div class="match-detail-section-head"><h3>Teamvergleich</h3></div>'; comparisonSection.append(makeComparison());
-    const lineupSection=document.createElement('section'); lineupSection.className='match-detail-section'; lineupSection.innerHTML='<div class="match-detail-section-head"><h3>Aufstellung</h3><span>soweit in 3K erfasst</span></div>'; lineupSection.append(makeLineups());
+    const lineupSection=document.createElement('section'); lineupSection.className='match-detail-section'; lineupSection.innerHTML='<div class="match-detail-section-head"><h3>Aufstellung</h3><span>Gemeldete Spielerinnen und Spieler</span></div>'; lineupSection.append(makeLineups());
     sideColumn.append(comparisonSection,lineupSection); overviewGrid.append(flowSection,sideColumn); overview.append(overviewGrid);
     const livePanel=panelMap.get('live'); livePanel.append(makeLiveScores()); const liveFlow=document.createElement('section'); liveFlow.className='match-detail-section'; liveFlow.innerHTML='<div class="match-detail-section-head"><h3>Live-Ereignisse</h3></div>'; liveFlow.append(makeTimeline()); livePanel.append(liveFlow);
     panelMap.get('games').append(makeGames());
@@ -1341,10 +1433,12 @@ function initDarts() {
     q('#todayPanel').hidden = section !== 'today';
     q('#leaguePanel').hidden = section !== 'league';
     q('#cupPanel').hidden = section !== 'cup';
+    q('#membersPanel').hidden = section !== 'members';
     q('#todayView').setAttribute('aria-pressed',String(section === 'today'));
     q('#leagueView').setAttribute('aria-pressed',String(section === 'league'));
     q('#cupView').setAttribute('aria-pressed',String(section === 'cup'));
     q('#gridView').setAttribute('aria-pressed',String(section === 'teams'));
+    q('#membersView').setAttribute('aria-pressed',String(section === 'members'));
     q('#trainingView').setAttribute('aria-pressed',String(section === 'training'));
   }
   function loadActivity() {
@@ -1369,6 +1463,9 @@ function initDarts() {
     }
   });
   q('#cupView').addEventListener('click',()=>{ setSection('cup'); loadSeason(); });
+  q('#membersView').addEventListener('click',async()=>{ setSection('members'); await Promise.all([loadSeason(),loadClubMembers()]); renderMembers(); });
+  q('#memberSearch').addEventListener('input',renderMembers);
+  q('#memberGroup').addEventListener('change',renderMembers);
   q('#seasonTeam').addEventListener('change',renderSeason);
   q('#seasonStatus').addEventListener('click',event=>{ const button=event.target.closest('button[data-status]'); if (!button) return; seasonStatus=button.dataset.status; renderSeason(); });
   q('#reloadSeason').addEventListener('click',()=>loadSeason(true));

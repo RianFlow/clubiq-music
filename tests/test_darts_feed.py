@@ -184,7 +184,7 @@ class DartsFeedTests(unittest.TestCase):
 
     def test_team_profile_exposes_player_id_but_no_private_registration_data(self):
         payload = {"participant": {"displayName": "SV Barver Darts B", "teamSeason": {"teamMembers": [
-            {"displayName": "Berta Spielerin", "member": {"player": {"id": 89036}}},
+            {"displayName": "Berta Spielerin", "member": {"player": {"id": 89036, "genderCd": "W"}}},
             {"displayName": "Alex Stellvertreter", "tc2": True, "member": {"player": {"id": 89035}}},
             {"displayName": "Jannik Beispiel", "tc1": True,
              "member": {"id": 55, "player": {"id": 89034, "passNr": 47103326, "email": "hidden@example.test"}}},
@@ -193,6 +193,7 @@ class DartsFeedTests(unittest.TestCase):
             profile = _load_team_profile(174111)
         self.assertEqual([item["role"] for item in profile["roster"]], ["Kapitän", "Stellvertretung", "Spieler"])
         self.assertEqual(profile["roster"][0], {"id": 89034, "name": "Jannik Beispiel", "role": "Kapitän"})
+        self.assertEqual(profile["roster"][2]["gender"], "female")
         self.assertNotIn("passNr", str(profile))
         self.assertNotIn("hidden@example.test", str(profile))
 

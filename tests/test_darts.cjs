@@ -22,6 +22,13 @@ const orderedRoster = dartsRoster([
   {name:'Klara Kapitän',role:'Kapitän'},
 ]);
 assert.deepEqual(Array.from(orderedRoster,member=>member.name),['Klara Kapitän','Alex Stellvertreter','Berta Spielerin','Zeno Spieler']);
+const dartsMemberRole = vm.runInContext('dartsMemberRole',context);
+const dartsRoleSentence = vm.runInContext('dartsRoleSentence',context);
+assert.equal(dartsMemberRole({role:'Spieler'},{gender:'female'}),'Spielerin');
+assert.equal(dartsMemberRole({role:'Kapitän'},{gender:'female'}),'Kapitänin');
+assert.equal(dartsMemberRole({role:'Stellvertretung'},{gender:'female'}),'Stellvertretende Kapitänin');
+assert.equal(dartsMemberRole({role:'Stellvertretung'},{}),'Stellvertretender Kapitän');
+assert.equal(dartsRoleSentence({name:'Bernd Aufdembrinke',role:'Stellvertretung'},{name:'SV Barver Darts D'},{}),'Bernd Aufdembrinke unterstützt SV Barver Darts D als stellvertretender Kapitän.');
 const dartsTeamRoster = vm.runInContext('dartsTeamRoster',context);
 const fallbackRoster=dartsTeamRoster({code:'B',roster:[{id:89029,name:'Patrick Lammers',role:'Kapitän'}]});
 assert.equal(fallbackRoster.length,6);
@@ -29,12 +36,12 @@ assert.equal(fallbackRoster[0].name,'Patrick Lammers');
 assert.equal(fallbackRoster[0].role,'Kapitän');
 const dartsPlayerProfiles = vm.runInContext('dartsPlayerProfiles',context);
 assert.deepEqual(JSON.parse(JSON.stringify(dartsPlayerProfiles({players:{
-  '123':{image:'/pics/players/max.webp',alias:'The Test',average:61.26,playerNumber:'q8v4'},
+  '123':{image:'/pics/players/max.webp',alias:'The Test',average:61.26,playerNumber:'q8v4',gender:'female'},
   '124':'/pics/players/legacy.jpg',
   '125':{personal:{darts:'Target Example',weightGrams:23.04,favoritePdcPlayer:'Luke Example',favoriteFinish:121,finishRoute:'T20 · 11 · Bull',walkOnSong:'Example Song'}},
   'bad':{image:'/private/photo.jpg',alias:'Unsicher',average:999},
 }}))),{
-  '123':{image:'/pics/players/max.webp',alias:'The Test',average:61.3,playerNumber:'Q8V4'},
+  '123':{image:'/pics/players/max.webp',alias:'The Test',average:61.3,playerNumber:'Q8V4',gender:'female'},
   '124':{image:'/pics/players/legacy.jpg',alias:'',average:null,playerNumber:''},
   '125':{image:'',alias:'',average:null,playerNumber:'',personal:{darts:'Target Example',weightGrams:23,favoritePdcPlayer:'Luke Example',favoriteFinish:121,finishRoute:'T20 · 11 · Bull',walkOnSong:'Example Song'}},
 });
@@ -115,6 +122,9 @@ assert.match(html,/id="pushToggle"/);
 assert.match(html,/id="pushHealth"/);
 assert.match(html,/id="cupView"/);
 assert.match(html,/id="cupPanel"/);
+assert.match(html,/id="membersView"/);
+assert.match(html,/id="membersPanel"/);
+assert.match(html,/id="membersGrid"/);
 assert.match(html,/id="liveDataStatus"/);
 assert.match(html,/Push aktivieren/);
 assert.match(html,/id="livePushAlert"/);
@@ -137,6 +147,8 @@ assert.match(script,/Notification\.requestPermission\(\)/);
 assert.match(script,/\/api\/v1\/darts\/push\/subscribe/);
 assert.match(script,/clubiq-darts-push/);
 assert.match(script,/setTimeout\(closeLivePushAlert,15000\)/);
+assert.match(script,/\/api\/v1\/darts\/members/);
+assert.doesNotMatch(script,/Besondere Leistung laut 3K-Spielbericht/);
 assert.doesNotMatch(script,/\/api\/v1\/music\/.*command/,'darts view does not control music');
 assert.match(script,/fetch\('\/api\/v1\/darts\/ticker'/);
 assert.match(script,/\/api\/v1\/darts\/center\?league=/);
@@ -154,7 +166,7 @@ assert.match(script,/Spielverlauf/);
 assert.match(script,/Teamvergleich/);
 assert.match(script,/Aufstellung/);
 assert.match(script,/Einzelpartien/);
-assert.match(script,/soweit in 3K erfasst/);
+assert.match(script,/Gemeldete Spielerinnen und Spieler/);
 assert.match(script,/Aktuelle Partien/);
 assert.match(script,/Punktestand wird noch geladen/);
 assert.doesNotMatch(script,/Restpunkte/);
@@ -177,4 +189,5 @@ assert.match(backend,/@app\.get\("\/api\/v1\/darts\/matches\/\{match_id\}"\)/);
 assert.match(fs.readFileSync('darts_feed.py','utf8'),/dartsscorer-liveticker\/api\/v1/);
 assert.match(fs.readFileSync('darts_feed.py','utf8'),/homeRemaining/);
 assert.match(backend,/@app\.get\("\/api\/v1\/darts\/push\/status"\)/);
+assert.match(backend,/@app\.get\("\/api\/v1\/darts\/members"\)/);
 console.log('Darts: four verified teams, strict links, wrong-league guard, opt-in embedding and no playback writes OK.');

@@ -688,6 +688,16 @@ def darts_player_stats():
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+@app.get("/api/v1/darts/members")
+def darts_members():
+    """Public directory: names only; never expose account or authentication data."""
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT display_name FROM club_members WHERE active = TRUE ORDER BY lower(display_name);"
+        )
+        return {"members": [row[0] for row in cur.fetchall()]}
+
+
 @app.get("/api/v1/darts/push/config")
 def darts_push_config():
     return {

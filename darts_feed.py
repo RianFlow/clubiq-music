@@ -53,6 +53,22 @@ def _iso(value: str | None) -> datetime | None:
         return None
 
 
+def _public_gender(*values) -> str | None:
+    """Keep only a small, presentation-safe gender marker from public 3K data."""
+    female = {"F", "FEMALE", "W", "WEIBLICH", "FRAU"}
+    male = {"M", "MALE", "MÄNNLICH", "MAENNLICH", "MANN"}
+    diverse = {"D", "DIVERSE", "DIVERS"}
+    for value in values:
+        marker = str(value or "").strip().upper()
+        if marker in female:
+            return "female"
+        if marker in male:
+            return "male"
+        if marker in diverse:
+            return "diverse"
+    return None
+
+
 def _participant(match: dict, side: str) -> tuple[int | None, str]:
     participant = match.get(f"participant{side}") or {}
     return participant.get("id"), str(participant.get("displayName") or "Unbekannt")
@@ -763,11 +779,20 @@ def _load_team_profile(team_id: int) -> dict:
         player = ((member.get("member") or {}).get("player") or {})
         player_id = player.get("id")
         role = "Kapitän" if member.get("tc1") else "Stellvertretung" if member.get("tc2") else "Spieler"
-        roster.append({
+        public_member = {
             "id": int(player_id) if isinstance(player_id, int) and player_id > 0 else None,
             "name": name[:100],
             "role": role,
-        })
+        }
+        gender = _public_gender(
+            player.get("genderCd"), player.get("gender"),
+            member.get("genderCd"), member.get("gender"),
+            (member.get("member") or {}).get("genderCd"),
+            (member.get("member") or {}).get("gender"),
+        )
+        if gender:
+            public_member["gender"] = gender
+        roster.append(public_member)
     role_order = {"Kapitän": 0, "Stellvertretung": 1, "Spieler": 2}
     roster.sort(key=lambda item: (role_order.get(item["role"], 3), item["name"]))
     venue = team.get("playingVenue") or {}

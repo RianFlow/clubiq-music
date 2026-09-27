@@ -8,13 +8,13 @@
   <meta name="description" content="SV Barver Darts A, B, C und D: Spielpläne, Spielberichte und Live-Ansichten gemeinsam verfolgen.">
   <link rel="icon" href="/pics/logo.png">
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
-  <link rel="stylesheet" href="/static/darts.css?v=20260927-stats1">
-  <script defer src="/static/darts.js?v=20260927-stats1"></script>
+  <link rel="stylesheet" href="/static/darts.css?v=20260927-members1">
+  <script defer src="/static/darts.js?v=20260927-members1"></script>
 </head>
 <body>
   <header class="darts-header">
     <a class="brand" href="/darts" aria-label="Zur Darts-Startseite"><img src="/pics/logo.png" alt=""><span>ClubIQ <b>Darts-Zentrale</b></span></a>
-    <nav class="primary-navigation" aria-label="Anzeige"><button id="todayView" type="button">Live</button><button id="leagueView" type="button">Tabellen</button><button id="cupView" type="button">Pokal</button><button id="gridView" type="button">Spiele & Teams</button><button id="trainingView" type="button">Training</button></nav>
+    <nav class="primary-navigation" aria-label="Anzeige"><button id="todayView" type="button">Live</button><button id="leagueView" type="button">Tabellen</button><button id="cupView" type="button">Pokal</button><button id="gridView" type="button">Spiele & Teams</button><button id="membersView" type="button">Mitglieder</button><button id="trainingView" type="button">Training</button></nav>
     <div class="header-tools"><button id="themeToggle" class="theme-switch" type="button" role="switch" aria-checked="false" aria-label="Dunkelmodus"><span class="theme-option theme-light">Hell</span><span class="theme-track" aria-hidden="true"><span></span></span><span class="theme-option theme-dark">Dunkel</span></button><button id="fullscreen" type="button">TV-Modus</button></div>
   </header>
   <details id="personalSettings" class="personal-settings">
@@ -78,11 +78,11 @@
       <div id="leagueOverview" class="league-overview">
         <section class="league-block" data-league="kl04" aria-labelledby="league-kl04-heading">
           <div class="league-block-head"><div><p class="eyebrow">Barver A · B · C</p><h3 id="league-kl04-heading">Kreisligen 04</h3></div><label>Spieltag<select data-role="round"><option>Lädt …</option></select></label><button data-role="reload" type="button">Aktualisieren</button></div>
-          <div class="league-dashboard"><article class="sport-card schedule-card"><div class="sport-card-title"><h3 data-role="round-heading">Spieltag</h3><span data-role="round-date"></span><b data-role="round-status" class="round-status">Status wird geprüft</b></div><div data-role="matches" class="round-matches"><p class="panel-loading">Spiele werden geladen …</p></div></article><article class="sport-card standings-card"><div class="sport-card-title"><h3>Tabelle</h3><span>Aktueller Rang laut 3K</span></div><ol data-role="standings" class="standings"><li class="panel-loading">Tabelle wird geladen …</li></ol></article><article class="sport-card events-card"><div class="sport-card-title"><h3>Highlights</h3><span>180er · High Finishes · Sieger</span></div><div data-role="events" class="event-list"><p class="panel-loading">Meldungen werden geladen …</p></div></article></div>
+          <div class="league-dashboard"><article class="sport-card schedule-card"><div class="sport-card-title"><h3 data-role="round-heading">Spieltag</h3><span data-role="round-date"></span><b data-role="round-status" class="round-status">Status wird geprüft</b></div><div data-role="matches" class="round-matches"><p class="panel-loading">Spiele werden geladen …</p></div></article><article class="sport-card standings-card"><div class="sport-card-title"><h3>Tabelle</h3><span>Aktueller Tabellenstand</span></div><ol data-role="standings" class="standings"><li class="panel-loading">Tabelle wird geladen …</li></ol></article><article class="sport-card events-card"><div class="sport-card-title"><h3>Highlights</h3><span>180er · High Finishes · Sieger</span></div><div data-role="events" class="event-list"><p class="panel-loading">Meldungen werden geladen …</p></div></article></div>
         </section>
         <section class="league-block" data-league="kk11" aria-labelledby="league-kk11-heading">
           <div class="league-block-head"><div><p class="eyebrow">Barver D</p><h3 id="league-kk11-heading">Kreisklasse 11</h3></div><label>Spieltag<select data-role="round"><option>Lädt …</option></select></label><button data-role="reload" type="button">Aktualisieren</button></div>
-          <div class="league-dashboard"><article class="sport-card schedule-card"><div class="sport-card-title"><h3 data-role="round-heading">Spieltag</h3><span data-role="round-date"></span><b data-role="round-status" class="round-status">Status wird geprüft</b></div><div data-role="matches" class="round-matches"><p class="panel-loading">Spiele werden geladen …</p></div></article><article class="sport-card standings-card"><div class="sport-card-title"><h3>Tabelle</h3><span>Aktueller Rang laut 3K</span></div><ol data-role="standings" class="standings"><li class="panel-loading">Tabelle wird geladen …</li></ol></article><article class="sport-card events-card"><div class="sport-card-title"><h3>Highlights</h3><span>180er · High Finishes · Sieger</span></div><div data-role="events" class="event-list"><p class="panel-loading">Meldungen werden geladen …</p></div></article></div>
+          <div class="league-dashboard"><article class="sport-card schedule-card"><div class="sport-card-title"><h3 data-role="round-heading">Spieltag</h3><span data-role="round-date"></span><b data-role="round-status" class="round-status">Status wird geprüft</b></div><div data-role="matches" class="round-matches"><p class="panel-loading">Spiele werden geladen …</p></div></article><article class="sport-card standings-card"><div class="sport-card-title"><h3>Tabelle</h3><span>Aktueller Tabellenstand</span></div><ol data-role="standings" class="standings"><li class="panel-loading">Tabelle wird geladen …</li></ol></article><article class="sport-card events-card"><div class="sport-card-title"><h3>Highlights</h3><span>180er · High Finishes · Sieger</span></div><div data-role="events" class="event-list"><p class="panel-loading">Meldungen werden geladen …</p></div></article></div>
         </section>
       </div>
       <p class="data-note">ClubIQ zeigt ausschließlich öffentliche Sportdaten. 180er erscheinen, wenn sie im 3K-Spielbericht erfasst wurden.</p>
@@ -106,6 +106,16 @@
       <div id="seasonTeams" class="native-team-grid"><p class="panel-loading">Mannschaften werden geladen …</p></div>
       <div class="season-list-head"><div><p class="eyebrow">Saisonspielplan</p><h3 id="seasonListHeading">Kommende Begegnungen</h3></div><span id="seasonCount"></span></div>
       <div id="seasonMatches" class="native-match-list"><p class="panel-loading">Spielplan wird geladen …</p></div>
+    </section>
+    <section id="membersPanel" class="sports-panel members-panel" aria-labelledby="membersHeading" hidden>
+      <div class="sports-panel-head"><div><p class="eyebrow">Unser Verein</p><h2 id="membersHeading">Mitglieder</h2><p>Mannschaftsspielerinnen, Mannschaftsspieler und weitere Vereinsmitglieder auf einen Blick.</p></div><span class="club-logo panel-club-logo" aria-hidden="true"></span></div>
+      <div class="members-toolbar">
+        <label for="memberSearch">Mitglied suchen<input id="memberSearch" type="search" maxlength="100" autocomplete="off" placeholder="Name eingeben"></label>
+        <label for="memberGroup">Bereich<select id="memberGroup"><option value="all">Alle Mitglieder</option><option value="teams">Mannschaften</option><option value="club">Weitere Vereinsmitglieder</option></select></label>
+        <span id="memberCount" class="members-count"></span>
+      </div>
+      <p id="membersStatus" class="data-load-note">Mitglieder werden geladen …</p>
+      <div id="membersGrid" class="members-grid" aria-live="polite"></div>
     </section>
     <section id="teamGrid" class="team-grid" aria-label="Unsere vier Mannschaften" hidden></section>
     <section id="activityPanel" class="team-card" aria-labelledby="activityHeading" hidden>

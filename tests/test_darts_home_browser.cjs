@@ -23,6 +23,7 @@ const server=http.createServer((req,res)=>{
     if(p.endsWith('/highlights')) data={items:[{type:'180',matchId:904,title:'180! Demo-Spieler C',body:'Barver C · Rückblick',occurredAt:day(-2)}]};
     if(p.endsWith('/config')) data={available:false};
     if(p.endsWith('/status')) data={configured:false};
+    if(p.endsWith('/members')) data={members:['Patrick Lammers','Erika Beispiel']};
     res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(data));return;
   }
   const file=path.resolve(root,`.${p==='/'||p==='/darts'?'/darts.html':p}`);
@@ -98,12 +99,18 @@ const server=http.createServer((req,res)=>{
     assert.equal(await page.locator('.team-group-crest').getAttribute('src'),'/pics/sv-barver-darts-tight.png');
     assert.equal(await page.locator('.player-roster-card').count(),6);
     assert.equal(await page.locator('.player-roster-card img').count(),6);
-    await page.getByRole('button',{name:'Patrick Lammers, Spielerprofil öffnen'}).click();
+    await page.getByRole('button',{name:'Patrick Lammers, Profil öffnen'}).click();
     await page.getByText('95K von Aspinall',{exact:true}).waitFor();
     assert.match(await page.locator('#playerProfile').innerText(),/D16/);
     assert.match(await page.locator('#playerProfile').innerText(),/Lieblingsfinish/i);
     assert.doesNotMatch(await page.locator('#playerProfile').innerText(),/Lieblingsdoppel/i);
     assert.match(await page.locator('#playerProfile').innerText(),/Journey/);
+    await page.locator('#playerDialog #closePlayerProfile').click();
+    await page.click('#membersView');
+    await page.getByText('Erika Beispiel',{exact:true}).waitFor();
+    assert.match(await page.locator('#membersPanel').innerText(),/Vereinsmitglied/);
+    assert.match(await page.locator('#membersPanel').innerText(),/Patrick Lammers/);
+    await page.screenshot({path:path.join(root,'outputs/darts-members-desktop.png'),fullPage:true});
     await page.screenshot({path:path.join(root,'outputs/peddy-personal.png'),fullPage:true});
     assert.deepEqual(errors,[]);
     console.log('Browser: homepage, two boards, favorites, filters, saved player/type preferences, reconnect, mobile OK');
