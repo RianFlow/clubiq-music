@@ -43,6 +43,8 @@ const server=http.createServer((req,res)=>{
     const context=await browser.newContext({viewport:{width:1440,height:1080},serviceWorkers:'block'});
     const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(`${origin}/darts`);
+    assert.equal(await page.getByRole('link',{name:/Voting/i}).count(),0);
+    assert.equal(await page.locator('.personal-settings #pushToggle').count(),1);
     await page.locator('#homeSchedule .team-profile-match').first().waitFor();
     await page.locator('#todayGrid .today-live-game').nth(1).waitFor();
     assert.equal(await page.locator('#matchCenterGrid .match-center-card').count(),4);

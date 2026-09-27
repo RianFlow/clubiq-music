@@ -89,7 +89,7 @@ for (const url of [
 assert.deepEqual(Array.from(DARTS_TEAMS,t=>t.participant),['174110','174111','174112','174266']);
 const html = fs.readFileSync('darts.html','utf8');
 assert.match(html,/id="teamGrid"/);
-assert.match(html,/https:\/\/musik\.clubiq\.party\//);
+assert.doesNotMatch(html,/https:\/\/musik\.clubiq\.party\//);
 assert.match(html,/id="activityPanel"/);
 assert.match(html,/Teams anzeigen/);
 assert.match(html,/id="matchCenterGrid"/);

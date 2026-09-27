@@ -8,17 +8,18 @@
   <meta name="description" content="SV Barver Darts A, B, C und D: Spielpläne, Spielberichte und Live-Ansichten gemeinsam verfolgen.">
   <link rel="icon" href="/pics/logo.png">
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
-  <link rel="stylesheet" href="/static/darts.css?v=20260927-cup4">
-  <script defer src="/static/darts.js?v=20260927-cup4"></script>
+  <link rel="stylesheet" href="/static/darts.css?v=20260927-cup5">
+  <script defer src="/static/darts.js?v=20260927-cup5"></script>
 </head>
 <body>
   <header class="darts-header">
-    <a class="brand" href="https://musik.clubiq.party/" aria-label="Zur Musik-App"><img src="/pics/logo.png" alt=""><span>ClubIQ <b>Darts-Zentrale</b></span></a>
-    <span class="club-logo header-club-logo" role="img" aria-label="SV Barver Darts"></span>
-    <nav aria-label="Anzeige"><button id="todayView" type="button">Live</button><button id="leagueView" type="button">Tabellen</button><button id="cupView" type="button">Pokal</button><button id="gridView" type="button">Spiele & Teams</button><button id="trainingView" type="button">Training</button><button id="pushToggle" class="push-toggle" type="button" aria-pressed="false">🔔 Push aktivieren</button><span id="pushHealth" class="push-health" role="status" hidden></span><button id="themeToggle" class="theme-switch" type="button" role="switch" aria-checked="false" aria-label="Dunkelmodus"><span class="theme-option theme-light">Hell</span><span class="theme-track" aria-hidden="true"><span></span></span><span class="theme-option theme-dark">Dunkel</span></button><button id="fullscreen" type="button">TV-Modus</button><a href="https://musik.clubiq.party/" target="_blank" rel="noopener">Zum Voting ↗</a></nav>
+    <a class="brand" href="/darts" aria-label="Zur Darts-Startseite"><img src="/pics/logo.png" alt=""><span>ClubIQ <b>Darts-Zentrale</b></span></a>
+    <nav class="primary-navigation" aria-label="Anzeige"><button id="todayView" type="button">Live</button><button id="leagueView" type="button">Tabellen</button><button id="cupView" type="button">Pokal</button><button id="gridView" type="button">Spiele & Teams</button><button id="trainingView" type="button">Training</button></nav>
+    <div class="header-tools"><button id="themeToggle" class="theme-switch" type="button" role="switch" aria-checked="false" aria-label="Dunkelmodus"><span class="theme-option theme-light">Hell</span><span class="theme-track" aria-hidden="true"><span></span></span><span class="theme-option theme-dark">Dunkel</span></button><button id="fullscreen" type="button">TV-Modus</button></div>
   </header>
   <details id="personalSettings" class="personal-settings">
-    <summary>Mein Darts · Einstellungen & Meldungen</summary>
+    <summary>Mein Darts</summary>
+    <div class="personal-push-actions"><button id="pushToggle" class="push-toggle" type="button" aria-pressed="false">🔔 Push aktivieren</button><span id="pushHealth" class="push-health" role="status" hidden></span></div>
     <form id="preferencesForm">
       <p>Gilt für diesen Browser. Deine Lieblingsmannschaft sortiert die Startseite. Push erhältst du für ausgewählte Teams <strong>oder</strong> abonnierte Spieler – nur für die ausgewählten Meldungsarten.</p>
       <div class="preferences-grid">

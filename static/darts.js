@@ -505,6 +505,9 @@ function initDarts() {
     }
     const duplicate = group.cloneNode(true); duplicate.setAttribute('aria-hidden','true'); duplicate.querySelectorAll('a,[role="link"]').forEach(link=>link.tabIndex=-1);
     track.replaceChildren(group,duplicate);
+    const pixelsPerSecond=window.matchMedia('(max-width:800px)').matches?22:26;
+    const duration=Math.max(80,Math.min(300,Math.round(Math.max(group.scrollWidth,window.innerWidth)/pixelsPerSecond)));
+    track.style.setProperty('--ticker-duration',`${duration}s`);
     const updated = new Date(data.updatedAt);
     q('#tickerUpdated').textContent = `${data.stale ? 'Letzter Stand' : 'Stand'} ${updated.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}`;
   }
