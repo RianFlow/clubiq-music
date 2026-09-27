@@ -3,8 +3,10 @@ from __future__ import annotations
 import hashlib
 import http.client
 import html
+import asyncio
 import json
 import os
+import queue
 import re
 import secrets
 import socket
@@ -19,12 +21,13 @@ import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from db_config import connection_kwargs
 from darts_feed import DartsFeedUnavailable, get_darts_center, get_darts_feed, get_darts_match, get_darts_season
+from darts_live import darts_live_hub
 from darts_push import barver_push_candidates, push_payload, valid_push_endpoint, valid_push_key, subscription_matches, PUSH_EVENT_TYPES
 from radio_directory import DirectoryUnavailable, get_station, search_stations
 from radio_logos import CACHE_SECONDS, FAILURE_SECONDS, cached_logo
@@ -272,13 +275,67 @@ _darts_push_status = {
 }
 
 
-def poll_darts_push_events() -> None:
+def _store_and_deliver_darts_events(detected: list[dict], stale: bool = False) -> None:
+    """Use the existing durable deduplication and subscriptions for every source."""
     checked_at = datetime.now(timezone.utc).isoformat()
     _darts_push_status["lastCheck"] = checked_at
     configured = bool(DARTS_VAPID_PUBLIC_KEY and DARTS_VAPID_PRIVATE_KEY and webpush)
+    new_events = []
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT EXISTS (SELECT 1 FROM darts_push_events LIMIT 1);")
+        has_event_history = bool(cur.fetchone()[0])
+        for event in detected:
+            cur.execute(
+                """
+                INSERT INTO darts_push_events (event_id, event_type, team, player, match_id, payload, occurred_at)
+                VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s)
+                ON CONFLICT (event_id) DO UPDATE SET
+                  payload = EXCLUDED.payload,
+                  occurred_at = COALESCE(darts_push_events.occurred_at, EXCLUDED.occurred_at)
+                RETURNING (xmax = 0);
+                """,
+                (event["event_id"], event["event_type"], event["team"], event["player"], event["match_id"], push_payload(event), event.get("occurred_at")),
+            )
+            if cur.fetchone()[0] and has_event_history and event.get("deliver"):
+                new_events.append(event)
+        cur.execute("SELECT endpoint, p256dh, auth, teams, players, event_types FROM darts_push_subscriptions WHERE enabled = TRUE;")
+        subscriptions = cur.fetchall()
+        conn.commit()
+    expired, sent, failed = [], 0, 0
+    for event in new_events:
+        for endpoint, p256dh, auth, teams, players, event_types in subscriptions:
+            if not configured or not subscription_matches(event, teams or [], players or [], event_types or []):
+                continue
+            try:
+                webpush(
+                    subscription_info={"endpoint": endpoint, "keys": {"p256dh": p256dh, "auth": auth}},
+                    data=push_payload(event), vapid_private_key=DARTS_VAPID_PRIVATE_KEY,
+                    vapid_claims={"sub": DARTS_VAPID_SUBJECT}, ttl=300,
+                )
+                sent += 1
+            except WebPushException as exc:
+                failed += 1
+                if getattr(getattr(exc, "response", None), "status_code", None) in (404, 410):
+                    expired.append(endpoint)
+                else:
+                    print("[DARTS PUSH] Eine Browser-Meldung konnte nicht zugestellt werden.")
+    if expired:
+        with db_connect() as conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM darts_push_subscriptions WHERE endpoint = ANY(%s);", (list(set(expired)),))
+            conn.commit()
+    _darts_push_status.update({
+        "configured": configured, "upstreamAvailable": not stale,
+        "lastSuccess": _darts_push_status["lastSuccess"] if stale else checked_at,
+        "lastError": "3K liefert zwischengespeicherte Daten." if stale else None,
+        "detected": len(detected), "sent": sent, "failed": failed,
+    })
+
+
+def poll_darts_push_events() -> None:
+    checked_at = datetime.now(timezone.utc).isoformat()
+    _darts_push_status["lastCheck"] = checked_at
     try:
-        detected = []
-        stale = False
+        detected, stale = [], False
         for league in ("kl04", "kk11"):
             try:
                 center = get_darts_center(league)
@@ -287,71 +344,39 @@ def poll_darts_push_events() -> None:
                 continue
             stale = stale or bool(center.get("stale"))
             if center.get("stale"):
-                continue  # Never consume new event IDs from a fallback response.
+                continue
             match_times = {m["id"]: m.get("updatedAt") or m.get("plannedAt") for m in center.get("barverMatches", [])}
-            detected.extend({**e, "occurred_at": match_times.get(e["match_id"]), "deliver": e["deliver"] and not center.get("stale")} for e in barver_push_candidates(league, center))
-        new_events = []
-        with db_connect() as conn, conn.cursor() as cur:
-            cur.execute("SELECT EXISTS (SELECT 1 FROM darts_push_events LIMIT 1);")
-            has_event_history = bool(cur.fetchone()[0])
-            for event in detected:
-                cur.execute(
-                    """
-                    INSERT INTO darts_push_events (event_id, event_type, team, player, match_id, payload, occurred_at)
-                    VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s)
-                    ON CONFLICT (event_id) DO UPDATE SET
-                      payload = EXCLUDED.payload,
-                      occurred_at = COALESCE(darts_push_events.occurred_at, EXCLUDED.occurred_at)
-                    RETURNING (xmax = 0);
-                    """,
-                    (event["event_id"], event["event_type"], event["team"], event["player"], event["match_id"], push_payload(event), event["occurred_at"]),
-                )
-                if cur.fetchone()[0] and has_event_history and event["deliver"]:
-                    new_events.append(event)
-            cur.execute(
-                "SELECT endpoint, p256dh, auth, teams, players, event_types FROM darts_push_subscriptions WHERE enabled = TRUE;"
-            )
-            subscriptions = cur.fetchall()
-            conn.commit()
-        expired = []
-        sent = 0
-        failed = 0
-        for event in new_events:
-            for endpoint, p256dh, auth, teams, players, event_types in subscriptions:
-                if not configured or not subscription_matches(event, teams or [], players or [], event_types or []):
-                    continue
-                try:
-                    webpush(
-                        subscription_info={"endpoint": endpoint, "keys": {"p256dh": p256dh, "auth": auth}},
-                        data=push_payload(event),
-                        vapid_private_key=DARTS_VAPID_PRIVATE_KEY,
-                        vapid_claims={"sub": DARTS_VAPID_SUBJECT},
-                        ttl=300,
-                    )
-                    sent += 1
-                except WebPushException as exc:
-                    failed += 1
-                    if getattr(getattr(exc, "response", None), "status_code", None) in (404, 410):
-                        expired.append(endpoint)
-                    else:
-                        print("[DARTS PUSH] Eine Browser-Meldung konnte nicht zugestellt werden.")
-        if expired:
-            with db_connect() as conn, conn.cursor() as cur:
-                cur.execute("DELETE FROM darts_push_subscriptions WHERE endpoint = ANY(%s);", (list(set(expired)),))
-                conn.commit()
-        _darts_push_status.update({
-            "configured": configured,
-            "upstreamAvailable": not stale,
-            "lastSuccess": _darts_push_status["lastSuccess"] if stale else checked_at,
-            "lastError": "3K liefert zwischengespeicherte Daten." if stale else None,
-            "detected": len(detected),
-            "sent": sent,
-            "failed": failed,
-        })
+            detected.extend({**e, "occurred_at": match_times.get(e["match_id"]), "deliver": e["deliver"]} for e in barver_push_candidates(league, center))
+        _store_and_deliver_darts_events(detected, stale)
     except (DartsFeedUnavailable, ValueError, psycopg.Error) as exc:
         cause = type(exc.__cause__).__name__ if exc.__cause__ else type(exc).__name__
         _darts_push_status.update({"upstreamAvailable": False, "lastError": cause, "detected": 0, "sent": 0})
         print(f"[DARTS PUSH] {type(exc).__name__} ({cause}): Push-Prüfung wird später wiederholt.")
+
+
+def sync_darts_live_groups() -> None:
+    try:
+        feed = get_darts_feed()
+        if not feed.get("stale"):
+            darts_live_hub.reconcile(feed.get("items") or [])
+    except (DartsFeedUnavailable, ValueError, requests.RequestException) as exc:
+        print(f"[DARTS LIVE] {type(exc).__name__}: Begegnungen werden später erneut geprüft.")
+
+
+def deliver_darts_live_events() -> None:
+    raw_events = darts_live_hub.drain_events()
+    detected = []
+    for raw in raw_events:
+        event = barver_push_event("live", raw)
+        if event:
+            detected.append({**event, "occurred_at": raw.get("occurred_at"), "deliver": True})
+    if not detected:
+        return
+    try:
+        _store_and_deliver_darts_events(detected)
+    except psycopg.Error as exc:
+        darts_live_hub.requeue_events(raw_events)
+        print(f"[DARTS LIVE PUSH] {type(exc).__name__}: Ereignisse werden durch den REST-Abgleich nachgeholt.")
 
 
 def warm_darts_season() -> None:
@@ -368,9 +393,12 @@ async def lifespan(_: FastAPI):
     scheduler.add_job(close_expired_cycles, "interval", minutes=1)
     scheduler.add_job(collect_playback_history, "interval", seconds=30, max_instances=1, next_run_time=datetime.now(timezone.utc))
     scheduler.add_job(poll_darts_push_events, "interval", seconds=45, max_instances=1, next_run_time=datetime.now(timezone.utc))
+    scheduler.add_job(sync_darts_live_groups, "interval", seconds=10, max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(seconds=2))
+    scheduler.add_job(deliver_darts_live_events, "interval", seconds=2, max_instances=1, coalesce=True)
     scheduler.add_job(warm_darts_season, "interval", minutes=9, max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(seconds=12))
     scheduler.start()
     yield
+    darts_live_hub.stop()
     scheduler.shutdown()
 
 
@@ -569,6 +597,50 @@ def darts_ticker():
         return get_darts_feed()
     except DartsFeedUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/v1/darts/live")
+def darts_live_snapshot():
+    """Normalized server-side state; browsers never connect to 3K directly."""
+    return darts_live_hub.snapshot()
+
+
+@app.get("/api/v1/darts/live/stream")
+def darts_live_stream():
+    channel = darts_live_hub.subscribe()
+
+    async def messages():
+        try:
+            yield "retry: 5000\n"
+            yield f"event: snapshot\ndata: {json.dumps(darts_live_hub.snapshot(), ensure_ascii=False, separators=(',', ':'))}\n\n"
+            while True:
+                message = None
+                for _ in range(20):
+                    try:
+                        message = channel.get_nowait()
+                        break
+                    except queue.Empty:
+                        await asyncio.sleep(1)
+                if message:
+                    event_name = "status" if message.get("type") == "live-status" else "update"
+                    yield f"event: {event_name}\ndata: {json.dumps(message, ensure_ascii=False, separators=(',', ':'))}\n\n"
+                else:
+                    yield ": ClubIQ live heartbeat\n\n"
+        finally:
+            darts_live_hub.unsubscribe(channel)
+
+    return StreamingResponse(
+        messages(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/v1/darts/live/{group_key}")
+def darts_live_group(group_key: int):
+    group = darts_live_hub.get_group(str(group_key))
+    if not group:
+        raise HTTPException(status_code=404, detail="Diese Begegnung ist derzeit nicht live.")
+    return group
 
 
 @app.get("/api/v1/darts/center")

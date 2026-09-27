@@ -365,6 +365,59 @@ function initDarts() {
   initPushNotifications();
   const favoriteKey = 'clubiq_darts_favorite';
   let tickerDelay = 30000, tickerData = {items:[]}, favorite = 'all', liveCenters = [];
+  const serverLiveGroups = new Map();
+  let serverLiveConnected = false, activeMatchDetailData = null;
+  function normalizedLiveGames(group) {
+    return (group?.matches || []).filter(match=>match.active || !match.finished).map(match=>({
+      id:match.id, matchKey:match.matchKey, board:match.board, mode:match.mode,
+      home:{name:match.home?.name || 'Heim',remaining:match.home?.points,legs:match.home?.legs,average:match.home?.average,lastScore:match.home?.lastScore,highFinish:match.home?.highFinish,count180:match.home?.count180},
+      away:{name:match.guest?.name || 'Gast',remaining:match.guest?.points,legs:match.guest?.legs,average:match.guest?.average,lastScore:match.guest?.lastScore,highFinish:match.guest?.highFinish,count180:match.guest?.count180},
+      currentSide:match.currentPlayerIndex===0?'home':match.currentPlayerIndex===1?'away':null,
+      lastUpdated:match.lastUpdate, active:match.active, finished:match.finished,
+    }));
+  }
+  function liveGroupAsCenter(group) {
+    const matchId=Number(group?.meta?.id || group?.groupKey);
+    return {liveGroup:true,barverMatches:[{id:matchId}],pushEvents:normalizedLiveGames(group).map(game=>({
+      type:'live_game',matchId,liveGameId:game.id,updatedAt:game.lastUpdated,
+      text:`${game.home.name} ${Number.isInteger(game.home.legs)?game.home.legs:'–'}:${Number.isInteger(game.away.legs)?game.away.legs:'–'} ${game.away.name}`,
+      homeName:game.home.name,awayName:game.away.name,homeLegs:game.home.legs,awayLegs:game.away.legs,
+      homeRemaining:game.home.remaining,awayRemaining:game.away.remaining,currentSide:game.currentSide,board:game.board,
+    }))};
+  }
+  function applyServerLiveGroup(group) {
+    if (!group?.groupKey) return;
+    serverLiveGroups.set(String(group.groupKey),group);
+    const serverCenters=[...serverLiveGroups.values()].filter(entry=>!entry.finished).map(liveGroupAsCenter);
+    const ids=new Set(serverCenters.flatMap(center=>center.barverMatches.map(match=>match.id)));
+    liveCenters=[...serverCenters,...liveCenters.filter(center=>!center.liveGroup&&!(center.barverMatches || []).some(match=>ids.has(match.id)))];
+    const item=(tickerData.items || []).find(entry=>entry.id===Number(group.meta?.id || group.groupKey));
+    const latest=(group.matches || []).slice().sort((a,b)=>(b.lastUpdateNs||0)-(a.lastUpdateNs||0))[0];
+    if (item && latest) {
+      if (Number.isInteger(latest.teamScoreHome)&&Number.isInteger(latest.teamScoreGuest)) item.score=`${latest.teamScoreHome}:${latest.teamScoreGuest}`;
+      item.kind=group.finished?'final':'live'; item.updatedAt=group.lastUpdate || item.updatedAt;
+      item.text=`${item.home} ${item.score || '–'} ${item.away}`;
+    }
+    if (activeMatchDetailData && q('#matchDialog')?.open && Number(q('#matchDialog').dataset.matchId)===Number(group.meta?.id || group.groupKey)) {
+      activeMatchDetailData={...activeMatchDetailData,liveGames:normalizedLiveGames(group),match:{...activeMatchDetailData.match,kind:group.finished?'final':'live',score:item?.score || activeMatchDetailData.match?.score}};
+      renderMatchDetail(activeMatchDetailData);
+    }
+    renderCompleteMatchCenter(); renderToday(tickerData); updateFreshness(!group.connected);
+  }
+  function initServerLiveStream() {
+    if (!('EventSource' in window) || demoLive) return;
+    const stream=new EventSource('/api/v1/darts/live/stream');
+    const receive=event=>{
+      try {
+        const payload=JSON.parse(event.data);
+        if (Array.isArray(payload.groups)) payload.groups.forEach(applyServerLiveGroup);
+        else if (payload.group) applyServerLiveGroup(payload.group);
+      } catch (_) { /* A malformed upstream update must not break the page. */ }
+    };
+    stream.addEventListener('snapshot',receive); stream.addEventListener('update',receive); stream.addEventListener('status',receive);
+    stream.onopen=()=>{serverLiveConnected=true;updateFreshness();};
+    stream.onerror=()=>{serverLiveConnected=false;updateFreshness(true);};
+  }
   try { favorite = ['A','B','C','D'].includes(localStorage.getItem(favoriteKey)) ? localStorage.getItem(favoriteKey) : 'all'; } catch (_) { /* Optional preference. */ }
   function tickerTime(item) {
     if (!item.plannedAt) return '';
@@ -557,9 +610,14 @@ function initDarts() {
     const age=Date.now()-Date.parse(tickerData.updatedAt||'');
     const detailsAge=Date.now()-(liveDetailsLoadedAt||liveDetailsFirstAttempt);
     const detailsStale=(tickerData.items||[]).some(m=>m.kind==='live') && liveDetailsFirstAttempt>0 && detailsAge>180000;
-    const stale=!Number.isFinite(age)||age>180000||detailsStale;
+    const activeServerGroups=[...serverLiveGroups.values()].filter(group=>!group.finished);
+    const upstreamLiveConnected=activeServerGroups.some(group=>group.connected);
+    const serverFallback=activeServerGroups.length>0&&(!serverLiveConnected||!upstreamLiveConnected);
+    const serverUpdates=activeServerGroups.map(group=>Date.parse(group.lastSuccess||group.lastUpdate||'')).filter(Number.isFinite);
+    const serverLiveStale=serverUpdates.length>0&&Date.now()-Math.max(...serverUpdates)>180000;
+    const stale=!Number.isFinite(age)||age>180000||detailsStale||serverLiveStale;
     const status=q('#liveDataStatus'); status.dataset.state=stale?'warn':reconnecting?'wait':'ok';
-    status.textContent=demoLive?'Demo-Live aktiv':!Number.isFinite(age)?'Verbindung wird aufgebaut':detailsStale?'Live-Punkte veraltet · neuer Versuch automatisch':stale?`Datenstand ${Math.max(1,Math.floor(age/60000))} Min. alt · neuer Versuch automatisch`:reconnecting||tickerData.stale?'Verbindung wird erneuert · letzter Stand sichtbar':'3K-Daten aktuell';
+    status.textContent=demoLive?'Demo-Live aktiv':!Number.isFinite(age)?'Verbindung wird aufgebaut':detailsStale||serverLiveStale?'Live-Punkte veraltet · neuer Versuch automatisch':stale?`Datenstand ${Math.max(1,Math.floor(age/60000))} Min. alt · neuer Versuch automatisch`:serverFallback?'Live-Fallback aktiv · letzter Stand sichtbar':activeServerGroups.length?'Live-Verbindung aktiv':reconnecting||tickerData.stale?'Verbindung wird erneuert · letzter Stand sichtbar':'3K-Daten aktuell';
     status.title=tickerData.updatedAt?`Letzter Datenabruf: ${new Date(tickerData.updatedAt).toLocaleString('de-DE')}`:'Noch kein Datenabruf erfolgreich';
   }
   let highlightsLoading=false, highlightsLoadedAt=0;
@@ -620,7 +678,7 @@ function initDarts() {
   let seasonData=null, seasonStatus='upcoming', seasonLoading=false, seasonPromise=null;
   try { const saved=JSON.parse(localStorage.getItem('clubiq_darts_last_ticker')||'null'); if (Array.isArray(saved?.items)) {renderTicker(saved);updateFreshness(true);} } catch (_) {}
   try { const saved=JSON.parse(localStorage.getItem('clubiq_darts_last_season')||'null'); if (Array.isArray(saved?.matches)&&Array.isArray(saved?.teams)) {seasonData=saved;renderSeason();renderHomeSchedule();renderCompleteMatchCenter();} } catch (_) {}
-  loadTicker(); loadHighlights();
+  loadTicker(); loadHighlights(); initServerLiveStream();
   for (const id of ['#homeTeam','#homeLeague','#homeDate']) q(id).addEventListener('change',renderHomeSchedule);
   q('#resetHomeFilters').addEventListener('click',()=>{q('#homeTeam').value='all';q('#homeLeague').value='all';q('#homeDate').value='';renderHomeSchedule();});
   function teamByCode(code) {
@@ -945,7 +1003,7 @@ function initDarts() {
       const liveScores=document.createElement('div'); liveScores.className='native-live-scores';
       for (const live of data.liveGames || []) {
         const panel=document.createElement('section'); panel.className='native-live-score';
-        const label=document.createElement('b'); label.textContent='AKTUELLES LEG';
+        const label=document.createElement('b'); label.textContent=live.board?`BOARD ${live.board}`:'AKTUELLES LEG';
         const leg=document.createElement('span'); leg.textContent=Number.isInteger(live.home?.legs)&&Number.isInteger(live.away?.legs)?`Legstand ${live.home.legs}:${live.away.legs}`:'Leg läuft';
         const scoreline=document.createElement('div');
         const homeLive=document.createElement('span'); homeLive.className=live.currentSide==='home'?'throwing':'';
@@ -956,7 +1014,19 @@ function initDarts() {
         const awayName=document.createElement('small'); awayName.textContent=live.away?.name || 'Gast';
         const divider=document.createElement('em'); divider.textContent=':';
         homeLive.append(homePoints,homeName); awayLive.append(awayPoints,awayName); scoreline.append(homeLive,divider,awayLive);
-        panel.append(label,leg,scoreline); liveScores.append(panel);
+        const facts=document.createElement('div'); facts.className='native-live-facts';
+        const factLine=side=>{
+          const player=live[side] || {}, line=document.createElement('small');
+          const values=[];
+          if (Number.isInteger(player.lastScore)) values.push(`Letzte Aufnahme ${player.lastScore}`);
+          if (Number.isFinite(player.average)) values.push(`Ø ${player.average.toFixed(1)}`);
+          if (Number.isInteger(player.count180)&&player.count180>0) values.push(`${player.count180}× 180`);
+          if (Number.isInteger(player.highFinish)&&player.highFinish>0) values.push(`HF ${player.highFinish}`);
+          line.textContent=`${player.name || (side==='home'?'Heim':'Gast')}: ${values.join(' · ') || 'Werte werden geladen'}`;
+          return line;
+        };
+        facts.append(factLine('home'),factLine('away'));
+        panel.append(label,leg,scoreline,facts); liveScores.append(panel);
       }
       if (!liveScores.childNodes.length) { const empty=document.createElement('p'); empty.className='match-detail-empty'; empty.textContent=match.kind==='live'?'3K überträgt aktuell noch keine Boarddaten.':'Diese Begegnung ist derzeit nicht live.'; liveScores.append(empty); }
       return liveScores;
@@ -1098,6 +1168,7 @@ function initDarts() {
   }
   async function openMatch(matchId) {
     if (!Number.isInteger(Number(matchId)) || Number(matchId)<=0) return;
+    q('#matchDialog').dataset.matchId=String(matchId); activeMatchDetailData=null;
     q('#matchHeading').textContent='Begegnung wird geladen'; q('#matchDetail').innerHTML='<p class="panel-loading">Spielbericht wird geladen …</p>';
     if (!q('#matchDialog').open) q('#matchDialog').showModal();
     try {
@@ -1106,7 +1177,11 @@ function initDarts() {
         if (base?.kind==='live') { renderMatchDetail(demoMatchData(base)); q('#matchHeading').textContent=`DEMO · ${q('#matchHeading').textContent}`; return; }
       }
       const response=await fetch(`/api/v1/darts/matches/${encodeURIComponent(matchId)}`,{headers:{Accept:'application/json'},cache:'no-store'});
-      if (!response.ok) throw new Error('match unavailable'); renderMatchDetail(await response.json());
+      if (!response.ok) throw new Error('match unavailable');
+      activeMatchDetailData=await response.json();
+      const group=serverLiveGroups.get(String(matchId));
+      if (group) activeMatchDetailData={...activeMatchDetailData,liveGames:normalizedLiveGames(group)};
+      renderMatchDetail(activeMatchDetailData);
     } catch (_) { q('#matchDetail').innerHTML='<p class="error">Der Spielbericht konnte gerade nicht geladen werden. Bitte später erneut versuchen.</p>'; }
   }
   const activityUrl = 'https://portal.3k-darts.com/frontend/events/5/mandant/1931';
