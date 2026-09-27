@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const context=vm.createContext({URL});
 vm.runInContext(fs.readFileSync('static/darts.js','utf8'),context);
-const {dartsPreferences,dartsHomeGroups}=vm.runInContext('({dartsPreferences,dartsHomeGroups})',context);
+const {dartsPreferences,dartsHomeGroups,dartsMatchCenterItem}=vm.runInContext('({dartsPreferences,dartsHomeGroups,dartsMatchCenterItem})',context);
 assert.equal(dartsPreferences().teams.length,4);
 assert.equal(dartsPreferences({teams:[],eventTypes:[]}).eventTypes.length,0);
 assert.deepEqual(Array.from(dartsPreferences({teams:['D','D','X']}).teams),['D']);
@@ -19,4 +19,9 @@ assert.equal(dartsHomeGroups(matches,{team:'C'},day).today.length,1);
 assert.equal(dartsHomeGroups(matches,{league:'1460'},day).upcoming.length,1);
 assert.equal(dartsHomeGroups(matches,{league:'special'},day).upcoming[0].id,5);
 assert.equal(dartsHomeGroups(matches,{date:'2026-09-28'},day).upcoming[0].id,2);
+const postponed=[
+  {id:6,kind:'upcoming',barverTeam:'A',plannedAt:stamp(5)},
+  {id:7,kind:'upcoming',barverTeam:'A',plannedAt:stamp(1),round:{name:'Spieltag 9'}},
+];
+assert.equal(dartsMatchCenterItem(postponed,'A').id,7,'moved fixture with the earliest real date wins');
 console.log('Darts homepage groups and personal preferences OK');

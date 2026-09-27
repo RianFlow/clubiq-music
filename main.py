@@ -553,6 +553,16 @@ def darts_display():
     return FileResponse("darts.html")
 
 
+@app.get("/impressum")
+def legal_notice():
+    return FileResponse("impressum.html")
+
+
+@app.get("/datenschutz")
+def privacy_notice():
+    return FileResponse("datenschutz.html")
+
+
 @app.get("/api/v1/darts/ticker")
 def darts_ticker():
     try:

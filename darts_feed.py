@@ -319,6 +319,50 @@ def _preferred_round(rounds: list[dict], now: datetime) -> dict | None:
     return max(previous, key=lambda entry: entry[2])[0] if previous else (rounds[0] if rounds else None)
 
 
+def _preferred_round_by_matches(rounds: list[dict], round_matches: dict[int, list[dict]], now: datetime) -> dict | None:
+    """Keep the oldest started matchday with unfinished fixtures selected.
+
+    3K fixtures can be moved far outside their matchday's published date window.
+    A calendar-only choice would then skip an unfinished matchday even though it
+    still contains an open match.
+    """
+    unfinished = []
+    for item in rounds:
+        starts = _iso(item.get("dateFrom"))
+        if not starts or starts > now:
+            continue
+        matches = [
+            match for match in round_matches.get(int(item.get("id") or 0), [])
+            if not match.get("byeHome") and not match.get("byeAway")
+        ]
+        if matches and any(str(match.get("statusCd") or "OPEN").upper() != "FINISH" for match in matches):
+            unfinished.append((starts, item))
+    if unfinished:
+        return min(unfinished, key=lambda entry: entry[0])[1]
+    return _preferred_round(rounds, now)
+
+
+def _round_status(round_info: dict, matches: list[dict]) -> dict:
+    playable = [match for match in matches if not match.get("byeHome") and not match.get("byeAway")]
+    open_matches = [match for match in playable if str(match.get("statusCd") or "OPEN").upper() != "FINISH"]
+    starts = _iso(round_info.get("dateFrom"))
+    ends = _iso(round_info.get("dateTo")) or starts
+    moved = 0
+    if starts and ends:
+        for match in playable:
+            planned = _iso(match.get("datePlanned"))
+            # 3K publishes matchday windows as calendar days, usually at
+            # midnight.  Compare dates so a normal evening fixture on the
+            # final matchday is not mistaken for a postponed match.
+            if planned and not (starts.date() <= planned.date() <= ends.date()):
+                moved += 1
+    return {
+        "complete": bool(playable) and not open_matches,
+        "openMatches": len(open_matches),
+        "movedMatches": moved,
+    }
+
+
 def _safe_round(item: dict) -> dict:
     return {
         "id": int(item.get("id") or 0),
@@ -575,6 +619,7 @@ def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now:
             "league": {"key": league["key"], "name": league["name"], "short": league["short"], "event": league["event"], "phase": league["phase"]},
             "rounds": [_safe_round(item) for item in rounds],
             "selectedRound": _safe_round(allowed[round_id]),
+            "roundStatus": _round_status(allowed[round_id], raw_matches),
             "matches": matches,
             "barverMatches": barver_matches,
             "standings": _standings(all_matches, league["teams"]),
@@ -804,7 +849,7 @@ def _load_league_season(league: dict, now: datetime) -> dict:
                 public_matches.append(_season_match(raw_match, league, round_info))
 
     public_matches.sort(key=lambda item: (item.get("plannedAt") or item.get("updatedAt") or "", item["id"]))
-    selected = _preferred_round(rounds, now)
+    selected = _preferred_round_by_matches(rounds, round_matches, now)
     selected_matches = round_matches.get(int((selected or {}).get("id") or 0), [])
     return {
         "league": _league_public(league),

@@ -56,6 +56,13 @@ function dartsRoster(members) {
     roleRank(left?.role)-roleRank(right?.role) || String(left?.name || '').localeCompare(String(right?.name || ''),'de',{sensitivity:'base'})
   );
 }
+function dartsMatchCenterItem(items, code) {
+  const candidates=(Array.isArray(items)?items:[]).filter(entry=>(entry.barverTeams || [entry.barverTeam || dartsTeamCode(`${entry.home || ''} ${entry.away || ''}`)]).includes(code));
+  const live=candidates.filter(entry=>entry.kind==='live').sort((a,b)=>new Date(b.plannedAt||0)-new Date(a.plannedAt||0));
+  const upcoming=candidates.filter(entry=>entry.kind==='upcoming').sort((a,b)=>new Date(a.plannedAt||'9999-12-31')-new Date(b.plannedAt||'9999-12-31'));
+  const finals=candidates.filter(entry=>entry.kind==='final').sort((a,b)=>new Date(b.plannedAt||0)-new Date(a.plannedAt||0));
+  return live[0] || upcoming[0] || finals[0] || null;
+}
 function dartsTeamRoster(team) {
   const merged=[], seen=new Set();
   for (const member of [...(Array.isArray(team?.roster)?team.roster:[]),...(DARTS_FALLBACK_ROSTERS[team?.code] || [])]) {
@@ -376,7 +383,7 @@ function initDarts() {
     const fragment = document.createDocumentFragment();
     const codes = ['A','B','C','D'].sort((a,b)=>favorite === a ? -1 : favorite === b ? 1 : 0);
     for (const code of codes) {
-      const item = Array.isArray(data.items) ? data.items.find(entry=>barverTeam(entry)===code) : null;
+      const item=dartsMatchCenterItem(data.items,code);
       const card = document.createElement(item?.id ? 'a' : 'article');
       card.className=`match-center-card ${item?.kind || 'empty'}`;
       if (item?.id) { card.href=`#match-${item.id}`; card.addEventListener('click',event=>{ event.preventDefault(); openMatch(item.id); }); }
@@ -477,10 +484,15 @@ function initDarts() {
       target.append(section);
     }
   }
+  function renderCompleteMatchCenter() {
+    const byId=new Map((seasonData?.matches || []).map(item=>[item.id,item]));
+    for (const item of tickerData.items || []) byId.set(item.id,{...byId.get(item.id),...item});
+    renderMatchCenter({items:[...byId.values()]});
+  }
   function renderTicker(data) {
     const track = q('#tickerTrack');
     tickerData = data;
-    renderMatchCenter(data);
+    renderCompleteMatchCenter();
     renderToday(data);
     renderHomeSchedule();
     if (!Array.isArray(data.items) || !data.items.length) {
@@ -607,7 +619,7 @@ function initDarts() {
   }
   let seasonData=null, seasonStatus='upcoming', seasonLoading=false, seasonPromise=null;
   try { const saved=JSON.parse(localStorage.getItem('clubiq_darts_last_ticker')||'null'); if (Array.isArray(saved?.items)) {renderTicker(saved);updateFreshness(true);} } catch (_) {}
-  try { const saved=JSON.parse(localStorage.getItem('clubiq_darts_last_season')||'null'); if (Array.isArray(saved?.matches)&&Array.isArray(saved?.teams)) {seasonData=saved;renderSeason();renderHomeSchedule();} } catch (_) {}
+  try { const saved=JSON.parse(localStorage.getItem('clubiq_darts_last_season')||'null'); if (Array.isArray(saved?.matches)&&Array.isArray(saved?.teams)) {seasonData=saved;renderSeason();renderHomeSchedule();renderCompleteMatchCenter();} } catch (_) {}
   loadTicker(); loadHighlights();
   for (const id of ['#homeTeam','#homeLeague','#homeDate']) q(id).addEventListener('change',renderHomeSchedule);
   q('#resetHomeFilters').addEventListener('click',()=>{q('#homeTeam').value='all';q('#homeLeague').value='all';q('#homeDate').value='';renderHomeSchedule();});
@@ -893,7 +905,7 @@ function initDarts() {
           team.nextMatch=team.matches.find(item=>item.kind!=='final') || null;
         }
       }
-      renderSeason(); renderHomeSchedule();
+      renderSeason(); renderHomeSchedule(); renderCompleteMatchCenter();
       if (q('#personalSettings').open) renderPlayerOptions();
       q('#seasonFreshness').textContent=seasonData.stale?'Letzter verfügbarer Stand':'Mit 3K abgeglichen'; q('#seasonFreshness').dataset.state=seasonData.stale?'warn':'ok';
       q('#cupFreshness').textContent=seasonData.stale?'Letzter verfügbarer Stand':'Mit 3K abgeglichen'; q('#cupFreshness').dataset.state=seasonData.stale?'warn':'ok';
@@ -1154,6 +1166,13 @@ function initDarts() {
     const round = data.selectedRound || {};
     inside('[data-role="round-heading"]').textContent = `${round.name || 'Spieltag'} · ${data.league.short}`;
     inside('[data-role="round-date"]').textContent = formatDate(round.dateFrom);
+    const roundStatus=inside('[data-role="round-status"]'), status=data.roundStatus || {};
+    if (roundStatus) {
+      roundStatus.dataset.state=status.complete?'complete':'open';
+      roundStatus.textContent=status.complete
+        ? 'Spieltag abgeschlossen'
+        : `${status.openMatches || 0} Spiel${status.openMatches===1?'':'e'} offen${status.movedMatches?` · ${status.movedMatches} verlegt`:''}`;
+    }
     const roundSelect=inside('[data-role="round"]');
     const current=String(round.id || '');
     roundSelect.replaceChildren(...(data.rounds || []).map(item=>{
@@ -1230,7 +1249,15 @@ function initDarts() {
   }
   syncTraining();
   q('#todayView').addEventListener('click',()=>setSection('today'));
-  q('#leagueView').addEventListener('click',()=>{ setSection('league'); for (const block of q('#leagueOverview').querySelectorAll('.league-block')) loadLeague(block.dataset.league,block.querySelector('[data-role="round"]').value); });
+  q('#leagueView').addEventListener('click',async()=>{
+    setSection('league');
+    await loadSeason();
+    for (const block of q('#leagueOverview').querySelectorAll('.league-block')) {
+      const league=seasonData?.leagues?.find(item=>item.league?.key===block.dataset.league);
+      const selected=league?.selectedRound?.id || block.querySelector('[data-role="round"]').value || null;
+      loadLeague(block.dataset.league,selected);
+    }
+  });
   q('#cupView').addEventListener('click',()=>{ setSection('cup'); loadSeason(); });
   q('#seasonTeam').addEventListener('change',renderSeason);
   q('#seasonStatus').addEventListener('click',event=>{ const button=event.target.closest('button[data-status]'); if (!button) return; seasonStatus=button.dataset.status; renderSeason(); });

@@ -2,7 +2,7 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-from darts_feed import _barver_code_from_name, _game_events, _is_special_event, _leg_events, _live_game_events, _load_team_profile, _performance_events, _preferred_round, _public_game, _public_live_games, _relevant_rounds, _season_match, _special_match, _standings, _team_record, _ticker_item
+from darts_feed import _barver_code_from_name, _game_events, _is_special_event, _leg_events, _live_game_events, _load_team_profile, _performance_events, _preferred_round, _preferred_round_by_matches, _public_game, _public_live_games, _relevant_rounds, _round_status, _season_match, _special_match, _standings, _team_record, _ticker_item
 
 
 class DartsFeedTests(unittest.TestCase):
@@ -30,6 +30,19 @@ class DartsFeedTests(unittest.TestCase):
         ]
         selected = _preferred_round(rounds, datetime(2026, 9, 30, 18, 0, tzinfo=timezone.utc))
         self.assertEqual(selected["id"], 4)
+
+    def test_postponed_open_match_keeps_older_round_selected(self):
+        rounds = [
+            {"id": 3, "dateFrom": "2026-09-24T22:00:00+00:00", "dateTo": "2026-09-26T22:00:00+00:00"},
+            {"id": 4, "dateFrom": "2026-10-08T22:00:00+00:00", "dateTo": "2026-10-10T22:00:00+00:00"},
+        ]
+        matches = {
+            3: [{"statusCd": "OPEN", "datePlanned": "2026-10-30T18:30:00+00:00"}],
+            4: [{"statusCd": "OPEN", "datePlanned": "2026-10-09T18:30:00+00:00"}],
+        }
+        selected = _preferred_round_by_matches(rounds, matches, datetime(2026, 10, 12, tzinfo=timezone.utc))
+        self.assertEqual(selected["id"], 3)
+        self.assertEqual(_round_status(rounds[0], matches[3]), {"complete": False, "openMatches": 1, "movedMatches": 1})
 
     def test_finished_match_names_winner_and_whitelists_fields(self):
         match = {
