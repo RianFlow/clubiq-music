@@ -1,0 +1,11 @@
+ARG BASE_IMAGE=clubiq_music_dev-web:latest
+FROM ${BASE_IMAGE}
+
+USER root
+WORKDIR /app
+COPY vendor/websocket_client-1.9.2-py3-none-any.whl /tmp/clubiq-wheels/
+RUN pip install --no-index /tmp/clubiq-wheels/websocket_client-1.9.2-py3-none-any.whl \
+    && rm -rf /tmp/clubiq-wheels
+COPY . .
+RUN chown -R clubiq:clubiq /app
+USER clubiq
