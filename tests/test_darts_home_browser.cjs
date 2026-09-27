@@ -90,8 +90,10 @@ const server=http.createServer((req,res)=>{
     await page.screenshot({path:path.join(root,'outputs/darts-home-mobile.png'),fullPage:true});
     await page.setViewportSize({width:1440,height:1080});
     await page.locator('#matchCenterGrid [data-team-code="B"]').first().click();
-    await page.locator('.team-group-photo img').waitFor();
-    assert.equal(await page.locator('.team-group-photo img').getAttribute('src'),'/pics/teams/barver-b-team-cutout.webp?v=20260927-2');
+    await page.locator('.team-group-players').waitFor();
+    assert.equal(await page.locator('.team-group-players').getAttribute('src'),'/pics/teams/barver-b-team-cutout.webp?v=20260927-2');
+    assert.equal(await page.locator('.team-group-wordmark strong').innerText(),'BARVER B');
+    assert.equal(await page.locator('.team-group-crest').getAttribute('src'),'/pics/sv-barver-darts-tight.png');
     assert.equal(await page.locator('.player-roster-card').count(),6);
     assert.equal(await page.locator('.player-roster-card img').count(),6);
     await page.getByRole('button',{name:'Patrick Lammers, Spielerprofil öffnen'}).click();

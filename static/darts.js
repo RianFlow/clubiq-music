@@ -790,9 +790,14 @@ function initDarts() {
     const teamPhoto=team.code==='B' ? document.createElement('figure') : null;
     if (teamPhoto) {
       teamPhoto.className='team-group-photo';
-      const image=document.createElement('img'); image.src='/pics/teams/barver-b-team-cutout.webp?v=20260927-2'; image.alt='Freigestelltes Mannschaftsfoto SV Barver Darts B'; image.width=1600; image.height=738; image.loading='lazy'; image.decoding='async';
+      const wordmark=document.createElement('span'); wordmark.className='team-group-wordmark';
+      const clubName=document.createElement('small'); clubName.textContent='SV BARVER DARTS';
+      const teamName=document.createElement('strong'); teamName.textContent='BARVER B';
+      wordmark.append(clubName,teamName);
+      const crest=document.createElement('img'); crest.className='team-group-crest'; crest.src='/pics/sv-barver-darts-tight.png'; crest.alt=''; crest.width=340; crest.height=340; crest.loading='lazy'; crest.decoding='async';
+      const image=document.createElement('img'); image.className='team-group-players'; image.src='/pics/teams/barver-b-team-cutout.webp?v=20260927-2'; image.alt='Freigestelltes Mannschaftsfoto SV Barver Darts B'; image.width=1600; image.height=738; image.loading='lazy'; image.decoding='async';
       const caption=document.createElement('figcaption'); caption.textContent='SV Barver Darts B · Mannschaft 2026 / 2027';
-      teamPhoto.append(image,caption);
+      teamPhoto.append(wordmark,crest,image,caption);
     }
     const stats=document.createElement('section'); stats.className='team-profile-stats';
     for (const [label,value] of [['Spiele',record.played ?? 0],['Siege',record.wins ?? 0],['Unentschieden',record.draws ?? 0],['Niederlagen',record.losses ?? 0],['Spielpunkte',`${record.setsFor ?? 0}:${record.setsAgainst ?? 0}`],['Kader',rosterMembers.length]]) {
