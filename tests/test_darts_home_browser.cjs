@@ -91,7 +91,7 @@ const server=http.createServer((req,res)=>{
     await page.setViewportSize({width:1440,height:1080});
     await page.locator('#matchCenterGrid [data-team-code="B"]').first().click();
     await page.locator('.team-group-photo img').waitFor();
-    assert.equal(await page.locator('.team-group-photo img').getAttribute('src'),'/pics/teams/barver-b-team-cutout.webp');
+    assert.equal(await page.locator('.team-group-photo img').getAttribute('src'),'/pics/teams/barver-b-team-cutout.webp?v=20260927-2');
     assert.equal(await page.locator('.player-roster-card').count(),6);
     assert.equal(await page.locator('.player-roster-card img').count(),6);
     await page.getByRole('button',{name:'Patrick Lammers, Spielerprofil öffnen'}).click();

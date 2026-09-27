@@ -790,7 +790,7 @@ function initDarts() {
     const teamPhoto=team.code==='B' ? document.createElement('figure') : null;
     if (teamPhoto) {
       teamPhoto.className='team-group-photo';
-      const image=document.createElement('img'); image.src='/pics/teams/barver-b-team-cutout.webp'; image.alt='Freigestelltes Mannschaftsfoto SV Barver Darts B'; image.width=1600; image.height=738; image.loading='lazy'; image.decoding='async';
+      const image=document.createElement('img'); image.src='/pics/teams/barver-b-team-cutout.webp?v=20260927-2'; image.alt='Freigestelltes Mannschaftsfoto SV Barver Darts B'; image.width=1600; image.height=738; image.loading='lazy'; image.decoding='async';
       const caption=document.createElement('figcaption'); caption.textContent='SV Barver Darts B · Mannschaft 2026 / 2027';
       teamPhoto.append(image,caption);
     }
