@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 FROM python:3.11-slim
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -6,7 +7,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends libpq5 \
     && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,id=clubiq-pip-cache,target=/root/.cache/pip \
+    pip install --retries 12 --timeout 120 --prefer-binary -r requirements.txt
 COPY . .
 RUN useradd --system --uid 10001 --home /app clubiq \
     && chown -R clubiq:clubiq /app
