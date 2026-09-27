@@ -22,6 +22,11 @@ const orderedRoster = dartsRoster([
   {name:'Klara Kapitän',role:'Kapitän'},
 ]);
 assert.deepEqual(Array.from(orderedRoster,member=>member.name),['Klara Kapitän','Alex Stellvertreter','Berta Spielerin','Zeno Spieler']);
+const dartsTeamRoster = vm.runInContext('dartsTeamRoster',context);
+const fallbackRoster=dartsTeamRoster({code:'B',roster:[{id:89029,name:'Patrick Lammers',role:'Kapitän'}]});
+assert.equal(fallbackRoster.length,6);
+assert.equal(fallbackRoster[0].name,'Patrick Lammers');
+assert.equal(fallbackRoster[0].role,'Kapitän');
 const dartsPlayerProfiles = vm.runInContext('dartsPlayerProfiles',context);
 assert.deepEqual(JSON.parse(JSON.stringify(dartsPlayerProfiles({players:{
   '123':{image:'/pics/players/max.webp',alias:'The Test',average:61.26,playerNumber:'q8v4'},

@@ -5,6 +5,22 @@ const DARTS_TEAMS = [
   {id:'c',name:'SV Barver Darts C',event:'1445',participant:'174112',league:'Kreisligen 04'},
   {id:'d',name:'SV Barver Darts D',event:'1460',participant:'174266',league:'Kreisklasse 11'},
 ];
+const DARTS_FALLBACK_ROSTERS = {
+  A: [
+    {id:89019,name:'Denis Dieckmann',role:'Spieler'},
+    {id:89022,name:'Eike Feldhaus',role:'Stellvertretung'},
+    {id:89027,name:'Jannik Kläning',role:'Spieler'},
+    {id:89038,name:'Till Schulze',role:'Spieler'},
+  ],
+  B: [
+    {id:89034,name:'Jörg Renzelmann',role:'Spieler'},
+    {id:89029,name:'Patrick Lammers',role:'Spieler'},
+    {id:89017,name:'Justin Albrecht',role:'Spieler'},
+    {id:89030,name:'Max Lowak',role:'Spieler'},
+    {id:116999,name:'René Lange',role:'Spieler'},
+    {id:52376,name:'Robin Tiedemann',role:'Spieler'},
+  ],
+};
 const DARTS_STORAGE = 'clubiq_darts_matches_2026_27';
 const DARTS_EVENT_LABELS = {'180':'180er',high_finish:'High Finishes',leg:'Gewonnene Legs',game:'Einzel- & Doppelpartien',match:'Gesamtergebnisse'};
 function dartsPreferences(value={}) {
@@ -39,6 +55,15 @@ function dartsRoster(members) {
   return [...(Array.isArray(members) ? members : [])].sort((left,right)=>
     roleRank(left?.role)-roleRank(right?.role) || String(left?.name || '').localeCompare(String(right?.name || ''),'de',{sensitivity:'base'})
   );
+}
+function dartsTeamRoster(team) {
+  const merged=[], seen=new Set();
+  for (const member of [...(Array.isArray(team?.roster)?team.roster:[]),...(DARTS_FALLBACK_ROSTERS[team?.code] || [])]) {
+    const key=member?.id ? `id:${member.id}` : `name:${String(member?.name || '').toLocaleLowerCase('de-DE')}`;
+    if (!member?.name || seen.has(key)) continue;
+    seen.add(key); merged.push(member);
+  }
+  return dartsRoster(merged);
 }
 function dartsTeamCode(value) {
   const match=String(value || '').match(/(?:SV\s+)?Barver(?:\s+Darts)?\s+([A-D1-4])\b/i);
@@ -228,7 +253,7 @@ function initDarts() {
   for (const [type,label] of Object.entries(DARTS_EVENT_LABELS)) preferenceCheckbox(q('#pushTypes'),'eventTypes',type,label,preferences.eventTypes.includes(type));
   function renderPlayerOptions() {
     const names=new Map();
-    for (const team of seasonData?.teams || []) for (const member of team.roster || team.members || []) {
+    for (const team of seasonData?.teams || []) for (const member of dartsTeamRoster({...team,roster:team.roster || team.members || []})) {
       if (member.name) names.set(member.name,`${member.name} · ${team.code}`);
     }
     for (const name of preferences.players) if (!names.has(name)) names.set(name,name);
@@ -751,7 +776,7 @@ function initDarts() {
   function openTeamProfile(team) {
     if (!team) return;
     q('#teamProfileHeading').textContent=team.name;
-    const target=q('#teamProfile'), record=team.record || {};
+    const target=q('#teamProfile'), record=team.record || {}, rosterMembers=dartsTeamRoster(team);
     const hero=document.createElement('section'); hero.className='team-profile-hero';
     const identity=document.createElement('div');
     const mark=document.createElement('b'); mark.textContent=team.code;
@@ -765,12 +790,12 @@ function initDarts() {
     const teamPhoto=team.code==='B' ? document.createElement('figure') : null;
     if (teamPhoto) {
       teamPhoto.className='team-group-photo';
-      const image=document.createElement('img'); image.src='/pics/teams/barver-b-team.webp'; image.alt='Mannschaftsfoto SV Barver Darts B'; image.width=1600; image.height=738; image.loading='lazy'; image.decoding='async';
+      const image=document.createElement('img'); image.src='/pics/teams/barver-b-team-cutout.webp'; image.alt='Freigestelltes Mannschaftsfoto SV Barver Darts B'; image.width=1600; image.height=738; image.loading='lazy'; image.decoding='async';
       const caption=document.createElement('figcaption'); caption.textContent='SV Barver Darts B · Mannschaft 2026 / 2027';
       teamPhoto.append(image,caption);
     }
     const stats=document.createElement('section'); stats.className='team-profile-stats';
-    for (const [label,value] of [['Spiele',record.played ?? 0],['Siege',record.wins ?? 0],['Unentschieden',record.draws ?? 0],['Niederlagen',record.losses ?? 0],['Spielpunkte',`${record.setsFor ?? 0}:${record.setsAgainst ?? 0}`],['Kader',(team.roster || []).length]]) {
+    for (const [label,value] of [['Spiele',record.played ?? 0],['Siege',record.wins ?? 0],['Unentschieden',record.draws ?? 0],['Niederlagen',record.losses ?? 0],['Spielpunkte',`${record.setsFor ?? 0}:${record.setsAgainst ?? 0}`],['Kader',rosterMembers.length]]) {
       const item=document.createElement('div'); const number=document.createElement('strong'); number.textContent=value; const text=document.createElement('span'); text.textContent=label; item.append(number,text); stats.append(item);
     }
     const grid=document.createElement('div'); grid.className='team-profile-grid';
@@ -781,14 +806,14 @@ function initDarts() {
     if (!team.nextMatch && !recent.length) { const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent='Noch keine Begegnungen vorhanden.'; schedule.append(empty); }
     const squad=document.createElement('section'); squad.className='team-profile-section team-squad'; const squadTitle=document.createElement('h3'); squadTitle.textContent='Kader'; squad.append(squadTitle);
     const roster=document.createElement('div'); roster.className='team-roster';
-    for (const member of dartsRoster(team.roster)) {
+    for (const member of rosterMembers) {
       const player=document.createElement('button'); player.type='button'; player.className='player-roster-card'; player.setAttribute('aria-label',`${member.name}, Spielerprofil öffnen`);
       player.append(playerAvatar(member));
       const playerCopy=document.createElement('span'); const playerName=document.createElement('strong'); playerName.textContent=member.name; const role=document.createElement('small'); role.textContent=member.role; playerCopy.append(playerName,role);
       const open=document.createElement('b'); open.textContent='›'; open.setAttribute('aria-hidden','true'); player.append(playerCopy,open);
       player.addEventListener('click',()=>{ q('#teamDialog').close(); openPlayerProfile(member,team); }); roster.append(player);
     }
-    if (!(team.roster || []).length) { const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent='Kader wird von 3K noch nicht bereitgestellt.'; roster.append(empty); }
+    if (!rosterMembers.length) { const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent='Kader wird von 3K noch nicht bereitgestellt.'; roster.append(empty); }
     squad.append(roster);
     const venue=team.venue || {}; const venueSection=document.createElement('section'); venueSection.className='team-profile-section team-venue'; const venueTitle=document.createElement('h3'); venueTitle.textContent='Heimspielstätte'; venueSection.append(venueTitle);
     const venueName=document.createElement('strong'); venueName.textContent=venue.name || 'Dorfgemeinschaftshaus Barver'; const address=document.createElement('span'); address.textContent=[venue.street,[venue.postalCode,venue.city].filter(Boolean).join(' ')].filter(Boolean).join(' · '); venueSection.append(venueName,address);
