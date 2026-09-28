@@ -550,7 +550,13 @@ function initDarts() {
     const target = q('#todayGrid');
     if (!target) return;
     const items = Array.isArray(data.items) ? data.items.slice() : [];
-    const wanted = items.sort((a,b)=>Number(barverTeam(b)===favorite)-Number(barverTeam(a)===favorite));
+    const teamOrder=item=>({A:0,B:1,C:2,D:3})[barverTeam(item)] ?? 99;
+    const wanted = items.sort((a,b)=>
+      Number(barverTeam(b)===favorite)-Number(barverTeam(a)===favorite)
+      || teamOrder(a)-teamOrder(b)
+      || String(a.plannedAt || '').localeCompare(String(b.plannedAt || ''))
+      || Number(a.id || 0)-Number(b.id || 0)
+    );
     const live = wanted.filter(item=>item.kind==='live');
     const upcoming = wanted.filter(item=>item.kind==='upcoming');
     const finals = wanted.filter(item=>item.kind==='final');
@@ -577,7 +583,11 @@ function initDarts() {
       card.append(badge,team,matchLabel,matchup);
       const center=liveCenters.find(entry=>(entry.barverMatches || []).some(match=>match.id===item.id));
       const events=(center?.pushEvents || []).filter(event=>event.matchId===item.id);
-      const liveGames=events.filter(event=>event.type==='live_game').sort((a,b)=>String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+      const liveGames=events.filter(event=>event.type==='live_game').sort((a,b)=>{
+        const boardA=Number.parseInt(a.board,10), boardB=Number.parseInt(b.board,10);
+        return (Number.isFinite(boardA)?boardA:999)-(Number.isFinite(boardB)?boardB:999)
+          || String(a.liveGameId || '').localeCompare(String(b.liveGameId || ''));
+      });
       const current=liveGames[0]
         || events.filter(event=>event.type==='leg').sort((a,b)=>(b.order || 0)-(a.order || 0))[0]
         || events.filter(event=>event.type==='game').sort((a,b)=>(b.order || 0)-(a.order || 0))[0];
