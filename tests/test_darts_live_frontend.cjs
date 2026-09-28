@@ -6,6 +6,7 @@ const root = path.resolve(__dirname, '..');
 const frontend = fs.readFileSync(path.join(root, 'static', 'darts.js'), 'utf8');
 const backend = fs.readFileSync(path.join(root, 'main.py'), 'utf8');
 const live = fs.readFileSync(path.join(root, 'darts_live.py'), 'utf8');
+const css = fs.readFileSync(path.join(root, 'static', 'darts.css'), 'utf8');
 
 assert.match(frontend, /new EventSource\('\/api\/v1\/darts\/live\/stream'\)/);
 assert.doesNotMatch(frontend, /live\.3k-darts\.com.*websocket/i);
@@ -18,4 +19,8 @@ assert.match(frontend, /for \(const group of serverLiveGroups\.values\(\)\) upse
 assert.match(frontend, /value === 0 \? 'CHECK'/);
 assert.match(frontend, /LIVE_FINISH_GRACE_MS = 20_000/);
 assert.match(frontend, /now-updatedMs<=LIVE_FINISH_GRACE_MS/);
+assert.match(frontend, /target\.dataset\.liveCount=String\(shown\.length\)/);
+assert.match(frontend, /today-live-board/);
+assert.match(css, /body\.tv-live \.today-grid\.featured-live\[data-live-count="1"\]/);
+assert.match(css, /body\.tv-live #todayPanel > \.match-center \{ display:none; \}/);
 console.log('Darts live frontend architecture checks passed.');
