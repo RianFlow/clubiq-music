@@ -23,4 +23,8 @@ assert.match(frontend, /target\.dataset\.liveCount=String\(shown\.length\)/);
 assert.match(frontend, /today-live-board/);
 assert.match(css, /body\.tv-live \.today-grid\.featured-live\[data-live-count="1"\]/);
 assert.match(css, /body\.tv-live #todayPanel > \.match-center \{ display:none; \}/);
+assert.match(frontend, /MANNSCHAFTSSPIEL/);
+assert.match(frontend, /LAUFENDE BOARDS/);
+assert.match(frontend, /today-live-legs/);
+assert.match(css, /body\.tv-live \.today-live-legs/);
 console.log('Darts live frontend architecture checks passed.');
