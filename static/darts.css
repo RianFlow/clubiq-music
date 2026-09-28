@@ -956,3 +956,31 @@ footer a { color:#d8e9e3; }
   .intro-badge { display:none; }
   .sports-panel-head h2 { font-size:2.35rem; }
 }
+
+@media(max-width:800px) {
+  .darts-header { grid-template-columns:minmax(0,1fr) auto; }
+  .darts-header .brand { grid-column:1; grid-row:1; }
+  .darts-header .header-tools { grid-column:2; grid-row:1; }
+  .darts-header .primary-navigation { grid-column:1/-1; grid-row:2; }
+  .sports-panel { grid-template-columns:minmax(0,1fr); min-width:0; }
+  .sports-panel > * { min-width:0; max-width:100%; }
+  .sports-panel-head { flex-direction:column; align-items:stretch; }
+  .sports-panel-head > * { min-width:0; max-width:100%; }
+  .sports-panel-head .live-data-status { align-self:flex-start; justify-self:start; }
+  .sports-panel-head h2 { overflow-wrap:anywhere; }
+  .season-toolbar { grid-template-columns:minmax(0,1fr); }
+  .season-toolbar label,.season-toolbar select { width:100%; min-width:0; }
+  .season-status { grid-column:1; width:100%; min-width:0; }
+  .season-status button { min-width:0; padding-inline:7px; }
+  .season-toolbar > button:last-child { grid-column:1; width:100%; }
+  .native-team-grid,.native-match-list,.season-list-head { min-width:0; max-width:100%; }
+}
+
+@media(max-width:520px) {
+  .sports-panel-head { padding:18px 14px; }
+  .sports-panel-head h2 { font-size:clamp(1.65rem,8.5vw,2rem); line-height:.92; overflow-wrap:normal; word-break:normal; }
+  .season-toolbar { padding:12px; }
+  .season-status { gap:5px; }
+  .season-status button { font-size:.84rem; }
+  .data-load-note,.season-list-head,.native-team-grid,.native-match-list { overflow-wrap:anywhere; }
+}
