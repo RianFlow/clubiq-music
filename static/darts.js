@@ -434,8 +434,14 @@ function initDarts() {
   function liveRemaining(value) {
     return Number.isInteger(value) ? (value === 0 ? 'CHECK' : String(value)) : '–';
   }
+  const LIVE_FINISH_GRACE_MS = 20_000;
   function normalizedLiveGames(group) {
-    return (group?.matches || []).filter(match=>match.active || !match.finished).map(match=>({
+    const now=Date.now();
+    return (group?.matches || []).filter(match=>{
+      if (match.active || !match.finished) return true;
+      const updatedMs=Number(match.lastUpdateNs)/1e6;
+      return Number.isFinite(updatedMs) && now-updatedMs<=LIVE_FINISH_GRACE_MS;
+    }).map(match=>({
       id:match.id, matchKey:match.matchKey, board:match.board, mode:match.mode,
       home:{name:match.home?.name || 'Heim',remaining:match.home?.points,legs:match.home?.legs,average:match.home?.average,lastScore:match.home?.lastScore,highFinish:match.home?.highFinish,count180:match.home?.count180},
       away:{name:match.guest?.name || 'Gast',remaining:match.guest?.points,legs:match.guest?.legs,average:match.guest?.average,lastScore:match.guest?.lastScore,highFinish:match.guest?.highFinish,count180:match.guest?.count180},
