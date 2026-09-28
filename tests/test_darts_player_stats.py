@@ -27,7 +27,8 @@ class DartsPlayerStatsTests(unittest.TestCase):
              "performancePlayers": [{"player": {"displayName": "Jannik Kläning"}}]},
         ]
         with patch.object(darts_feed, "get_darts_season", return_value=season), \
-             patch.object(darts_feed, "_load_player_match_stats", return_value=(report, performances)):
+             patch.object(darts_feed, "_load_player_match_stats", return_value=(report, performances)), \
+             patch.object(darts_feed, "_official_league_player_stats", return_value=({}, [])):
             result = darts_feed._load_player_stats(datetime(2026, 9, 27, tzinfo=timezone.utc))
 
         player = result["players"]["89027"]
@@ -42,6 +43,54 @@ class DartsPlayerStatsTests(unittest.TestCase):
         self.assertEqual(player["playerNumber"], "WTDU")
         self.assertEqual(result["matchesScanned"], 1)
 
+    def test_official_3k_stats_override_fallback_for_roster_player(self):
+        season = {
+            "teams": [{"code": "A", "roster": [{"id": 89027, "name": "Jannik Kläning"}]}],
+            "matches": [],
+        }
+        official = {("A", "jannik kläning"): {
+            "average": 65.9, "average9": 76.6, "average12": 73.2, "average15": 74.9, "average18": 72.5,
+            "gamesPlayed": 6, "gamesWon": 6, "gamesLost": 0, "singlesPlayed": 6,
+            "legsFor": 18, "legsAgainst": 5, "count180": 3, "count140Plus": 11,
+            "count100Plus": 29, "count80Plus": 14, "highFinish": 91,
+            "statsSource": "3k", "league": "kl04",
+        }}
+        with patch.object(darts_feed, "get_darts_season", return_value=season), \
+             patch.object(darts_feed, "_official_league_player_stats", return_value=(official, ["kl04"])):
+            result = darts_feed._load_player_stats(datetime(2026, 9, 28, tzinfo=timezone.utc))
+
+        player = result["players"]["89027"]
+        self.assertEqual(player["average"], 65.9)
+        self.assertEqual(player["gamesPlayed"], 6)
+        self.assertEqual(player["gamesWon"], 6)
+        self.assertEqual(player["count180"], 3)
+        self.assertEqual(player["highFinish"], 91)
+        self.assertEqual(player["statsSource"], "3k")
+        self.assertEqual(result["officialLeagues"], ["kl04"])
+
+    def test_official_endpoint_ignores_doubles_and_non_barver_rows(self):
+        payload = [
+            {"displayName": "Jannik Kläning", "scoreTotal": 11421, "dartsTotal": 520, "matchesTotal": 6, "matchesWon": 6,
+             "matchesDraw": 0, "legCount": 18, "legCountOpponent": 5, "count180": 3, "count140": 11, "count170": 0,
+             "count100": 27, "count130": 2, "count80": 8, "count90": 6, "checkoutMax": 91,
+             "team": {"name": "SV Barver Darts A"}},
+            {"displayName": "Christian Fecht & Jannik Kläning", "scoreTotal": 7642, "dartsTotal": 349,
+             "team": {"name": "SV Barver Darts A"}},
+            {"displayName": "Gegner Eins", "scoreTotal": 6000, "dartsTotal": 300,
+             "team": {"name": "OSC Damme C"}},
+        ]
+        def fake_get(url):
+            return payload if "/1445/statistics" in url else []
+
+        with patch.object(darts_feed, "_public_get", side_effect=fake_get):
+            rows, leagues = darts_feed._official_league_player_stats()
+
+        self.assertIn(("A", "jannik kläning"), rows)
+        self.assertNotIn(("A", "christian fecht & jannik kläning"), rows)
+        self.assertEqual(rows[("A", "jannik kläning")]["average"], 65.9)
+        self.assertEqual(rows[("A", "jannik kläning")]["count100Plus"], 29)
+        self.assertIn("kl04", leagues)
+
     def test_doubles_count_but_do_not_distort_individual_average(self):
         season = {
             "teams": [{"code": "A", "roster": [
@@ -55,7 +104,8 @@ class DartsPlayerStatsTests(unittest.TestCase):
             "participantGuest": {"displayName": "Gegner A & Gegner B", "darts": 80, "score": 1700},
         }]
         with patch.object(darts_feed, "get_darts_season", return_value=season), \
-             patch.object(darts_feed, "_load_player_match_stats", return_value=(report, [])):
+             patch.object(darts_feed, "_load_player_match_stats", return_value=(report, [])), \
+             patch.object(darts_feed, "_official_league_player_stats", return_value=({}, [])):
             result = darts_feed._load_player_stats(datetime(2026, 9, 27, tzinfo=timezone.utc))
         for player in result["players"].values():
             self.assertEqual(player["gamesPlayed"], 1)
