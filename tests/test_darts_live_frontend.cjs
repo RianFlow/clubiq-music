@@ -27,4 +27,6 @@ assert.match(frontend, /MANNSCHAFTSSPIEL/);
 assert.match(frontend, /LAUFENDE BOARDS/);
 assert.match(frontend, /today-live-legs/);
 assert.match(css, /body\.tv-live \.today-live-legs/);
+assert.match(frontend, /Number\.parseInt\(a\.board,10\)[\s\S]*Number\.parseInt\(b\.board,10\)/);
+assert.match(frontend, /teamOrder\(a\)-teamOrder\(b\)/);
 console.log('Darts live frontend architecture checks passed.');
