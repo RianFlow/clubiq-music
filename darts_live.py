@@ -24,6 +24,7 @@ REST_FALLBACK_SECONDS = 7
 RECONNECT_SECONDS = 5
 LIVE_WATCH_EARLY_SECONDS = 30 * 60
 LIVE_WATCH_LATE_SECONDS = 8 * 60 * 60
+TEAM_MATCH_GAMES = 12
 _STAMP = re.compile(r"^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?(Z|[+-]\d\d:\d\d)?$")
 
 
@@ -284,7 +285,18 @@ class DartsLiveHub:
             group["lastError"] = None
             if group["matches"]:
                 group["lastUpdate"] = max((item.get("lastUpdate") or "" for item in group["matches"].values()), default="") or now
-                group["finished"] = all(item.get("finished") for item in group["matches"].values())
+                # 3K's live endpoint exposes the current board games. Between blocks,
+                # every returned board can be finished although the team match is not.
+                # Use the aggregate team score instead: DVWE league/cup matches contain
+                # 12 individual games, so only a 12-game aggregate is the real finish.
+                totals = [
+                    (item.get("teamScoreHome"), item.get("teamScoreGuest"))
+                    for item in group["matches"].values()
+                ]
+                group["finished"] = any(
+                    isinstance(home, int) and isinstance(guest, int) and home + guest >= TEAM_MATCH_GAMES
+                    for home, guest in totals
+                )
             if had_matches and not was_finished and group["finished"]:
                 latest = max(group["matches"].values(), key=lambda item: item.get("lastUpdateNs") or 0)
                 code = next(iter(group.get("meta", {}).get("barverTeams") or []), None)
