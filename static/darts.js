@@ -146,6 +146,11 @@ function dartsPlayerStats(config) {
       average,playerNumber,gamesPlayed:integer(item.gamesPlayed),gamesWon:integer(item.gamesWon),gamesLost:integer(item.gamesLost),
       legsFor:integer(item.legsFor),legsAgainst:integer(item.legsAgainst),singlesPlayed:integer(item.singlesPlayed),
       count180:integer(item.count180),highFinishes:integer(item.highFinishes),highFinish,
+      average9:typeof item.average9==='number'&&Number.isFinite(item.average9)?Math.round(item.average9*10)/10:null,
+      average12:typeof item.average12==='number'&&Number.isFinite(item.average12)?Math.round(item.average12*10)/10:null,
+      average15:typeof item.average15==='number'&&Number.isFinite(item.average15)?Math.round(item.average15*10)/10:null,
+      average18:typeof item.average18==='number'&&Number.isFinite(item.average18)?Math.round(item.average18*10)/10:null,
+      statsSource:item.statsSource==='3k'?'3k':'fallback',
       winRate:Number.isInteger(item.winRate)&&item.winRate>=0&&item.winRate<=100?item.winRate:null,
       statsUpdatedAt:typeof config.updatedAt==='string'?config.updatedAt:'',statsStale:config.stale===true,
     };
@@ -922,7 +927,7 @@ function initDarts() {
     const teamMark=document.createElement('b'); teamMark.className='player-profile-team-mark'; teamMark.textContent=team.code;
     visual.append(teamMark,playerAvatar(member,true)); hero.append(copy,visual);
     const facts=document.createElement('section'); facts.className='player-profile-facts';
-    for (const [label,value] of [['Mannschaft',`Barver ${team.code}`],['Liga',team.league?.short || '–'],['Funktion',displayRole],['3K-Spielernummer',profile.playerNumber || 'Noch offen'],['Aktueller Ø',profile.average===null || profile.average===undefined?'Noch offen':profile.average.toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1})],['Teamspiele',record.played ?? 0],['Teamsiege',record.wins ?? 0]]) {
+    for (const [label,value] of [['Mannschaft',`Barver ${team.code}`],['Liga',team.league?.short || '–'],['Funktion',displayRole],['3K-Spielernummer',profile.playerNumber || 'Noch offen'],[profile.statsSource==='3k'?'3K Liga-Ø':'Aktueller Ø',profile.average===null || profile.average===undefined?'Noch offen':profile.average.toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1})],['Teamspiele',record.played ?? 0],['Teamsiege',record.wins ?? 0]]) {
       const item=document.createElement('div'); const text=document.createElement('span'); text.textContent=label; const strong=document.createElement('strong');
       if (label==='Mannschaft') strong.append(makeTeamJump(team.code,value)); else strong.textContent=value;
       item.append(text,strong); facts.append(item);
@@ -962,7 +967,9 @@ function initDarts() {
       const statsGrid=document.createElement('div'); statsGrid.className='player-personal-grid';
       const values=[['Partien',profile.gamesPlayed],['Siege',profile.gamesWon],['Legs',`${profile.legsFor}:${profile.legsAgainst}`],['180er',profile.count180],['High Finishes',profile.highFinishes],['Bestes Finish',profile.highFinish || '–']];
       for (const [label,value] of values) { const item=document.createElement('div'); const text=document.createElement('span'); text.textContent=label; const strong=document.createElement('strong'); strong.textContent=value; item.append(text,strong); statsGrid.append(item); }
-      const source=document.createElement('small'); source.textContent=`Saisonwerte aus den bisherigen Partien${profile.statsStale?' · letzter gespeicherter Stand':''}.`;
+      const source=document.createElement('small'); source.textContent=profile.statsSource==='3k'
+        ? `Average, Partien, Siege, Legs und 180er aus der offiziellen 3K-Ligastatistik${profile.statsStale?' · letzter gespeicherter Stand':''}.`
+        : `Saisonwerte aus den bisherigen Partien${profile.statsStale?' · letzter gespeicherter Stand':''}.`;
       stats.append(statsGrid,source);
     } else {
       const statsCopy=document.createElement('p'); statsCopy.textContent='Die persönlichen Saisonwerte werden gerade vorbereitet.';
