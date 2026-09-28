@@ -482,8 +482,9 @@ function initDarts() {
       };
       tickerData.items=[item,...(tickerData.items || [])];
     }
-    if (item && latest) {
-      if (Number.isInteger(latest.teamScoreHome)&&Number.isInteger(latest.teamScoreGuest)) item.score=`${latest.teamScoreHome}:${latest.teamScoreGuest}`;
+    if (item) {
+      if (group.finished && group.meta?.score) item.score=group.meta.score;
+      else if (latest && Number.isInteger(latest.teamScoreHome)&&Number.isInteger(latest.teamScoreGuest)) item.score=`${latest.teamScoreHome}:${latest.teamScoreGuest}`;
       item.kind=group.finished?'final':'live'; item.updatedAt=group.lastUpdate || item.updatedAt;
       item.text=`${item.home} ${item.score || '–'} ${item.away}`;
     }

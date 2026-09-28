@@ -109,6 +109,28 @@ class DartsLiveTests(unittest.TestCase):
         hub.apply("1657285", [final], "rest")
         self.assertTrue(hub.group_finished("1657285"))
 
+    def test_final_season_status_finishes_group_and_stops_connector(self):
+        stopped = []
+
+        class FakeConnector:
+            def __init__(self, hub, database, group_key):
+                self.group_key = group_key
+            def start(self):
+                pass
+            def stop(self):
+                stopped.append(self.group_key)
+
+        hub = DartsLiveHub(FakeConnector)
+        live_match = {**META, "kind": "live", "score": "10:1"}
+        hub.reconcile([live_match])
+        hub.reconcile([{**META, "kind": "final", "score": "11:1", "updatedAt": "2026-09-28T22:04:18"}])
+
+        group = hub.get_group("1657285")
+        self.assertTrue(group["finished"])
+        self.assertEqual(group["source"], "season")
+        self.assertEqual(group["meta"]["score"], "11:1")
+        self.assertEqual(stopped, ["1657285"])
+
     def test_reconcile_starts_only_one_connector_per_live_group(self):
         created = []
 
