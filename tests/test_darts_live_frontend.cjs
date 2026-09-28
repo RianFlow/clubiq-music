@@ -16,4 +16,6 @@ assert.match(live, /REST_FALLBACK_SECONDS = 7/);
 assert.match(frontend, /function upsertServerLiveTickerItem\(group\)[\s\S]*tickerData\.items=\[item,\.\.\.\(tickerData\.items \|\| \[\]\)\]/);
 assert.match(frontend, /for \(const group of serverLiveGroups\.values\(\)\) upsertServerLiveTickerItem\(group\)/);
 assert.match(frontend, /value === 0 \? 'CHECK'/);
+assert.match(frontend, /LIVE_FINISH_GRACE_MS = 20_000/);
+assert.match(frontend, /now-updatedMs<=LIVE_FINISH_GRACE_MS/);
 console.log('Darts live frontend architecture checks passed.');
