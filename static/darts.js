@@ -452,16 +452,12 @@ function initDarts() {
       homeRemaining:game.home.remaining,awayRemaining:game.away.remaining,currentSide:game.currentSide,board:game.board,
     }))};
   }
-  function applyServerLiveGroup(group) {
-    if (!group?.groupKey) return;
-    serverLiveGroups.set(String(group.groupKey),group);
-    const serverCenters=[...serverLiveGroups.values()].filter(entry=>!entry.finished).map(liveGroupAsCenter);
-    const ids=new Set(serverCenters.flatMap(center=>center.barverMatches.map(match=>match.id)));
-    liveCenters=[...serverCenters,...liveCenters.filter(center=>!center.liveGroup&&!(center.barverMatches || []).some(match=>ids.has(match.id)))];
+  function upsertServerLiveTickerItem(group) {
+    if (!group?.groupKey) return null;
     const matchId=Number(group.meta?.id || group.groupKey);
     const latest=(group.matches || []).slice().sort((a,b)=>(b.lastUpdateNs||0)-(a.lastUpdateNs||0))[0];
     let item=(tickerData.items || []).find(entry=>entry.id===matchId);
-    if (!item && group.meta) {
+    if (!item && group.meta && !group.finished) {
       item={
         id:matchId,
         home:group.meta.home || 'Heim',
@@ -473,7 +469,7 @@ function initDarts() {
         competitionBadge:group.meta.competitionBadge || null,
         plannedAt:group.meta.plannedAt || null,
         url:group.meta.url || null,
-        kind:group.finished?'final':'live',
+        kind:'live',
         score:null,
         updatedAt:group.lastUpdate || null,
         text:`${group.meta.home || 'Heim'} gegen ${group.meta.away || 'Gast'}`,
@@ -485,6 +481,15 @@ function initDarts() {
       item.kind=group.finished?'final':'live'; item.updatedAt=group.lastUpdate || item.updatedAt;
       item.text=`${item.home} ${item.score || '–'} ${item.away}`;
     }
+    return item;
+  }
+  function applyServerLiveGroup(group) {
+    if (!group?.groupKey) return;
+    serverLiveGroups.set(String(group.groupKey),group);
+    const serverCenters=[...serverLiveGroups.values()].filter(entry=>!entry.finished).map(liveGroupAsCenter);
+    const ids=new Set(serverCenters.flatMap(center=>center.barverMatches.map(match=>match.id)));
+    liveCenters=[...serverCenters,...liveCenters.filter(center=>!center.liveGroup&&!(center.barverMatches || []).some(match=>ids.has(match.id)))];
+    const item=upsertServerLiveTickerItem(group);
     if (activeMatchDetailData && q('#matchDialog')?.open && Number(q('#matchDialog').dataset.matchId)===Number(group.meta?.id || group.groupKey)) {
       activeMatchDetailData={...activeMatchDetailData,liveGames:normalizedLiveGames(group),match:{...activeMatchDetailData.match,kind:group.finished?'final':'live',score:item?.score || activeMatchDetailData.match?.score}};
       renderMatchDetail(activeMatchDetailData);
@@ -631,16 +636,17 @@ function initDarts() {
   }
   function renderTicker(data) {
     const track = q('#tickerTrack');
-    tickerData = data;
+    tickerData = {...data,items:Array.isArray(data.items)?data.items.slice():[]};
+    for (const group of serverLiveGroups.values()) upsertServerLiveTickerItem(group);
     renderCompleteMatchCenter();
-    renderToday(data);
+    renderToday(tickerData);
     renderHomeSchedule();
-    if (!Array.isArray(data.items) || !data.items.length) {
+    if (!Array.isArray(tickerData.items) || !tickerData.items.length) {
       const empty = document.createElement('span'); empty.className='ticker-loading'; empty.textContent='Derzeit keine Barver-Begegnungen im aktuellen Zeitraum.';
       track.replaceChildren(empty); return;
     }
     const group = document.createElement('div'); group.className='ticker-group';
-    for (const item of data.items) {
+    for (const item of tickerData.items) {
       const link = document.createElement('a'); link.className=`ticker-item ${item.kind}`; link.href=`#match-${item.id}`;
       link.addEventListener('click',event=>{ event.preventDefault(); openMatch(item.id); });
       const teamCode = barverTeam(item);
