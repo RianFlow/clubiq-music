@@ -431,6 +431,9 @@ function initDarts() {
   let tickerDelay = 30000, tickerData = {items:[]}, favorite = 'all', liveCenters = [];
   const serverLiveGroups = new Map();
   let serverLiveConnected = false, activeMatchDetailData = null;
+  function liveRemaining(value) {
+    return Number.isInteger(value) ? (value === 0 ? 'CHECK' : String(value)) : '–';
+  }
   function normalizedLiveGames(group) {
     return (group?.matches || []).filter(match=>match.active || !match.finished).map(match=>({
       id:match.id, matchKey:match.matchKey, board:match.board, mode:match.mode,
@@ -449,16 +452,12 @@ function initDarts() {
       homeRemaining:game.home.remaining,awayRemaining:game.away.remaining,currentSide:game.currentSide,board:game.board,
     }))};
   }
-  function applyServerLiveGroup(group) {
-    if (!group?.groupKey) return;
-    serverLiveGroups.set(String(group.groupKey),group);
-    const serverCenters=[...serverLiveGroups.values()].filter(entry=>!entry.finished).map(liveGroupAsCenter);
-    const ids=new Set(serverCenters.flatMap(center=>center.barverMatches.map(match=>match.id)));
-    liveCenters=[...serverCenters,...liveCenters.filter(center=>!center.liveGroup&&!(center.barverMatches || []).some(match=>ids.has(match.id)))];
+  function upsertServerLiveTickerItem(group) {
+    if (!group?.groupKey) return null;
     const matchId=Number(group.meta?.id || group.groupKey);
     const latest=(group.matches || []).slice().sort((a,b)=>(b.lastUpdateNs||0)-(a.lastUpdateNs||0))[0];
     let item=(tickerData.items || []).find(entry=>entry.id===matchId);
-    if (!item && group.meta) {
+    if (!item && group.meta && !group.finished) {
       item={
         id:matchId,
         home:group.meta.home || 'Heim',
@@ -470,7 +469,7 @@ function initDarts() {
         competitionBadge:group.meta.competitionBadge || null,
         plannedAt:group.meta.plannedAt || null,
         url:group.meta.url || null,
-        kind:group.finished?'final':'live',
+        kind:'live',
         score:null,
         updatedAt:group.lastUpdate || null,
         text:`${group.meta.home || 'Heim'} gegen ${group.meta.away || 'Gast'}`,
@@ -482,6 +481,15 @@ function initDarts() {
       item.kind=group.finished?'final':'live'; item.updatedAt=group.lastUpdate || item.updatedAt;
       item.text=`${item.home} ${item.score || '–'} ${item.away}`;
     }
+    return item;
+  }
+  function applyServerLiveGroup(group) {
+    if (!group?.groupKey) return;
+    serverLiveGroups.set(String(group.groupKey),group);
+    const serverCenters=[...serverLiveGroups.values()].filter(entry=>!entry.finished).map(liveGroupAsCenter);
+    const ids=new Set(serverCenters.flatMap(center=>center.barverMatches.map(match=>match.id)));
+    liveCenters=[...serverCenters,...liveCenters.filter(center=>!center.liveGroup&&!(center.barverMatches || []).some(match=>ids.has(match.id)))];
+    const item=upsertServerLiveTickerItem(group);
     if (activeMatchDetailData && q('#matchDialog')?.open && Number(q('#matchDialog').dataset.matchId)===Number(group.meta?.id || group.groupKey)) {
       activeMatchDetailData={...activeMatchDetailData,liveGames:normalizedLiveGames(group),match:{...activeMatchDetailData.match,kind:group.finished?'final':'live',score:item?.score || activeMatchDetailData.match?.score}};
       renderMatchDetail(activeMatchDetailData);
@@ -575,12 +583,12 @@ function initDarts() {
             const scoreline=document.createElement('span'); scoreline.className='today-live-score';
             const homeSide=document.createElement('span'); homeSide.className=game.currentSide==='home'?'throwing':'';
             const homeName=document.createElement('small'); homeName.textContent=game.homeName;
-            const homePoints=document.createElement('strong'); homePoints.textContent=Number.isInteger(game.homeRemaining)?game.homeRemaining:'–';
+            const homePoints=document.createElement('strong'); homePoints.textContent=liveRemaining(game.homeRemaining);
             const middle=document.createElement('span'); middle.className='today-live-middle';
             const legs=document.createElement('small'); legs.textContent=Number.isInteger(game.homeLegs)&&Number.isInteger(game.awayLegs)?`Legs ${game.homeLegs}:${game.awayLegs}`:'Leg läuft';
             const colon=document.createElement('b'); colon.textContent=':';
             const awaySide=document.createElement('span'); awaySide.className=game.currentSide==='away'?'throwing':'';
-            const awayPoints=document.createElement('strong'); awayPoints.textContent=Number.isInteger(game.awayRemaining)?game.awayRemaining:'–';
+            const awayPoints=document.createElement('strong'); awayPoints.textContent=liveRemaining(game.awayRemaining);
             const awayName=document.createElement('small'); awayName.textContent=game.awayName;
             homeSide.append(homeName,homePoints); middle.append(legs,colon); awaySide.append(awayName,awayPoints); scoreline.append(homeSide,middle,awaySide);
             scoreline.setAttribute('aria-label',`${game.homeName} ${homePoints.textContent} zu ${awayPoints.textContent} ${game.awayName}. ${legs.textContent}.`);
@@ -628,16 +636,17 @@ function initDarts() {
   }
   function renderTicker(data) {
     const track = q('#tickerTrack');
-    tickerData = data;
+    tickerData = {...data,items:Array.isArray(data.items)?data.items.slice():[]};
+    for (const group of serverLiveGroups.values()) upsertServerLiveTickerItem(group);
     renderCompleteMatchCenter();
-    renderToday(data);
+    renderToday(tickerData);
     renderHomeSchedule();
-    if (!Array.isArray(data.items) || !data.items.length) {
+    if (!Array.isArray(tickerData.items) || !tickerData.items.length) {
       const empty = document.createElement('span'); empty.className='ticker-loading'; empty.textContent='Derzeit keine Barver-Begegnungen im aktuellen Zeitraum.';
       track.replaceChildren(empty); return;
     }
     const group = document.createElement('div'); group.className='ticker-group';
-    for (const item of data.items) {
+    for (const item of tickerData.items) {
       const link = document.createElement('a'); link.className=`ticker-item ${item.kind}`; link.href=`#match-${item.id}`;
       link.addEventListener('click',event=>{ event.preventDefault(); openMatch(item.id); });
       const teamCode = barverTeam(item);
@@ -1166,8 +1175,8 @@ function initDarts() {
         const scoreline=document.createElement('div');
         const homeLive=document.createElement('span'); homeLive.className=live.currentSide==='home'?'throwing':'';
         const awayLive=document.createElement('span'); awayLive.className=live.currentSide==='away'?'throwing':'';
-        const homePoints=document.createElement('strong'); homePoints.textContent=Number.isInteger(live.home?.remaining)?live.home.remaining:'–';
-        const awayPoints=document.createElement('strong'); awayPoints.textContent=Number.isInteger(live.away?.remaining)?live.away.remaining:'–';
+        const homePoints=document.createElement('strong'); homePoints.textContent=liveRemaining(live.home?.remaining);
+        const awayPoints=document.createElement('strong'); awayPoints.textContent=liveRemaining(live.away?.remaining);
         const homeName=document.createElement('small'); homeName.textContent=live.home?.name || 'Heim';
         const awayName=document.createElement('small'); awayName.textContent=live.away?.name || 'Gast';
         const divider=document.createElement('em'); divider.textContent=':';
@@ -1231,7 +1240,7 @@ function initDarts() {
         const item=document.createElement('div'); item.className='match-timeline-item live';
         const mark=document.createElement('b'); mark.textContent='LIVE';
         const copy=document.createElement('span'); const title=document.createElement('strong'); title.textContent=`${live.home?.name || 'Heim'} gegen ${live.away?.name || 'Gast'}`;
-        const detail=document.createElement('small'); detail.textContent=`${Number.isInteger(live.home?.remaining)?live.home.remaining:'–'} : ${Number.isInteger(live.away?.remaining)?live.away.remaining:'–'} · Legs ${Number.isInteger(live.home?.legs)?live.home.legs:'–'}:${Number.isInteger(live.away?.legs)?live.away.legs:'–'}`;
+        const detail=document.createElement('small'); detail.textContent=`${liveRemaining(live.home?.remaining)} : ${liveRemaining(live.away?.remaining)} · Legs ${Number.isInteger(live.home?.legs)?live.home.legs:'–'}:${Number.isInteger(live.away?.legs)?live.away.legs:'–'}`;
         copy.append(title,detail); item.append(mark,copy); timeline.append(item);
       }
       for (const event of data.performances || []) {
