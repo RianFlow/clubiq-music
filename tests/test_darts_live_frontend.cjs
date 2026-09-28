@@ -13,6 +13,7 @@ assert.match(backend, /@app\.get\("\/api\/v1\/darts\/live\/stream"\)/);
 assert.match(backend, /season = get_darts_season\(\)[\s\S]*darts_live_hub\.reconcile\(season\.get\("matches"\) or \[\]\)/);
 assert.match(live, /destination:\/topic\/\{self\.database\}-\{self\.group_key\}/);
 assert.match(live, /REST_FALLBACK_SECONDS = 7/);
-assert.match(frontend, /if \(!item && group\.meta\)[\s\S]*tickerData\.items=\[item,\.\.\.\(tickerData\.items \|\| \[\]\)\]/);
+assert.match(frontend, /function upsertServerLiveTickerItem\(group\)[\s\S]*tickerData\.items=\[item,\.\.\.\(tickerData\.items \|\| \[\]\)\]/);
+assert.match(frontend, /for \(const group of serverLiveGroups\.values\(\)\) upsertServerLiveTickerItem\(group\)/);
 assert.match(frontend, /value === 0 \? 'CHECK'/);
 console.log('Darts live frontend architecture checks passed.');
