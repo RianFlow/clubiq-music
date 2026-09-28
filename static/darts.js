@@ -550,7 +550,13 @@ function initDarts() {
     const target = q('#todayGrid');
     if (!target) return;
     const items = Array.isArray(data.items) ? data.items.slice() : [];
-    const wanted = items.sort((a,b)=>Number(barverTeam(b)===favorite)-Number(barverTeam(a)===favorite));
+    const teamOrder=item=>({A:0,B:1,C:2,D:3})[barverTeam(item)] ?? 99;
+    const wanted = items.sort((a,b)=>
+      Number(barverTeam(b)===favorite)-Number(barverTeam(a)===favorite)
+      || teamOrder(a)-teamOrder(b)
+      || String(a.plannedAt || '').localeCompare(String(b.plannedAt || ''))
+      || Number(a.id || 0)-Number(b.id || 0)
+    );
     const live = wanted.filter(item=>item.kind==='live');
     const upcoming = wanted.filter(item=>item.kind==='upcoming');
     const finals = wanted.filter(item=>item.kind==='final');
@@ -567,22 +573,27 @@ function initDarts() {
       const code=barverTeam(item); const badge=document.createElement('b'); badge.textContent=item.kind==='live'?'LIVE':item.kind==='final'?'ERGEBNIS':item.isSpecial?competitionLabel(item):'NÄCHSTES SPIEL';
       const team=document.createElement('span'); team.className='today-team';
       if (code) team.append(makeTeamJump(code,`BARVER ${code}`)); else team.textContent='SV BARVER';
+      const matchLabel=document.createElement('span'); matchLabel.className='today-match-label'; matchLabel.textContent='MANNSCHAFTSSPIEL';
       const matchup=document.createElement('div'); matchup.className='today-matchup';
       const home=clubNameNode(item.home || 'Heim');
       const score=document.createElement('b'); score.textContent=item.score || 'VS';
       const away=clubNameNode(item.away || 'Gast');
       matchup.append(home,score,away);
       const when=document.createElement('span'); when.className='today-time'; when.textContent=tickerTime(item);
-      card.append(badge,team,matchup);
+      card.append(badge,team,matchLabel,matchup);
       const center=liveCenters.find(entry=>(entry.barverMatches || []).some(match=>match.id===item.id));
       const events=(center?.pushEvents || []).filter(event=>event.matchId===item.id);
-      const liveGames=events.filter(event=>event.type==='live_game').sort((a,b)=>String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+      const liveGames=events.filter(event=>event.type==='live_game').sort((a,b)=>{
+        const boardA=Number.parseInt(a.board,10), boardB=Number.parseInt(b.board,10);
+        return (Number.isFinite(boardA)?boardA:999)-(Number.isFinite(boardB)?boardB:999)
+          || String(a.liveGameId || '').localeCompare(String(b.liveGameId || ''));
+      });
       const current=liveGames[0]
         || events.filter(event=>event.type==='leg').sort((a,b)=>(b.order || 0)-(a.order || 0))[0]
         || events.filter(event=>event.type==='game').sort((a,b)=>(b.order || 0)-(a.order || 0))[0];
       if (current && item.kind!=='upcoming') {
         const detail=document.createElement('div'); detail.className='today-detail';
-        const label=document.createElement('b'); label.textContent=liveGames.length>1?`Aktuelle Partien (${liveGames.length})`:item.kind==='live'?'Aktuelle Partie':'Letzte Partie';
+        const label=document.createElement('b'); label.className='today-boards-label'; label.textContent=liveGames.length>1?`LAUFENDE BOARDS · ${liveGames.length}`:item.kind==='live'?'LAUFENDES BOARD':'LETZTES BOARD';
         if (liveGames.length && item.kind==='live') {
           const list=document.createElement('span'); list.className='today-live-games';
           for (const game of liveGames) {
@@ -596,7 +607,7 @@ function initDarts() {
             const homeName=document.createElement('small'); homeName.textContent=game.homeName;
             const homePoints=document.createElement('strong'); homePoints.textContent=liveRemaining(game.homeRemaining);
             const middle=document.createElement('span'); middle.className='today-live-middle';
-            const legs=document.createElement('small'); legs.textContent=Number.isInteger(game.homeLegs)&&Number.isInteger(game.awayLegs)?`Legs ${game.homeLegs}:${game.awayLegs}`:'Leg läuft';
+            const legs=document.createElement('small'); legs.className='today-live-legs'; legs.textContent=Number.isInteger(game.homeLegs)&&Number.isInteger(game.awayLegs)?`LEGS ${game.homeLegs} : ${game.awayLegs}`:'LEG LÄUFT';
             const colon=document.createElement('b'); colon.textContent=':';
             const awaySide=document.createElement('span'); awaySide.className=game.currentSide==='away'?'throwing':'';
             const awayPoints=document.createElement('strong'); awayPoints.textContent=liveRemaining(game.awayRemaining);
