@@ -781,15 +781,28 @@ body.tv-live .today-grid.featured-live[data-live-count="1"] { grid-template-colu
 body.tv-live .today-grid.featured-live .today-game { align-content:start; min-height:0; }
 body.tv-live .today-grid.featured-live[data-live-count="1"] .today-live-games { grid-template-columns:repeat(2,minmax(0,1fr)); }
 body.tv-live .today-grid.featured-live:not([data-live-count="1"]) .today-live-games { grid-template-columns:1fr; }
+body.tv-live .today-match-label { grid-column:1/-1; margin-top:4px; color:#60706b; font-size:.72rem; font-weight:900; letter-spacing:.12em; }
+body.tv-live .today-matchup { padding:14px 16px; background:#edf3ef; border:1px solid #cbd9d3; }
+body.tv-live .today-matchup strong { font-size:clamp(1.15rem,1.8vw,1.55rem); }
+body.tv-live .today-matchup b { min-width:96px; font-size:clamp(1.55rem,2.3vw,2.2rem); }
+body.tv-live .today-detail { margin-top:4px; padding:14px; background:transparent; border-top:3px solid #234f46; border-radius:0; }
+body.tv-live .today-boards-label { display:block; margin-bottom:4px; color:#234f46; font-size:.78rem; font-weight:900; letter-spacing:.12em; }
 body.tv-live .today-live-game { padding:14px; background:#f7faf8; border:1px solid #cbd9d3; border-bottom:1px solid #cbd9d3; }
 body.tv-live .today-live-game:last-child { border-bottom:1px solid #cbd9d3; }
 body.tv-live .today-live-board { width:max-content; padding:3px 7px; color:#fff; background:#234f46; font-size:.72rem; font-weight:900; letter-spacing:.08em; }
 body.tv-live .today-live-score { min-height:112px; }
 body.tv-live .today-live-score strong { font-family:var(--sports-display); font-size:clamp(2.6rem,4.6vw,5.2rem); font-weight:900; line-height:.9; }
+body.tv-live .today-live-middle { min-width:120px; gap:6px; }
 body.tv-live .today-live-middle small { font-size:.82rem; font-weight:800; }
+body.tv-live .today-live-legs { padding:8px 12px; color:#fff; background:#234f46; border-radius:4px; font-family:var(--sports-display); font-size:clamp(1rem,1.5vw,1.35rem) !important; font-weight:900 !important; letter-spacing:.06em; white-space:nowrap; }
 body.tv-live #todayPanel > .match-center { display:none; }
 body.tv-live .primary-navigation,body.tv-live .theme-switch { display:none; }
 body.tv-live .darts-header { grid-template-columns:auto 1fr auto; }
+[data-theme="dark"] body.tv-live .today-matchup { background:#13241f; border-color:#355047; }
+[data-theme="dark"] body.tv-live .today-match-label { color:#9fb8b0; }
+[data-theme="dark"] body.tv-live .today-detail { border-top-color:var(--sports-mint); }
+[data-theme="dark"] body.tv-live .today-boards-label { color:var(--sports-mint); }
+[data-theme="dark"] body.tv-live .today-live-legs { color:#071411; background:var(--sports-mint); }
 [data-theme="dark"] body.tv-live .today-live-game { background:#14231f; border-color:#355047; }
 [data-theme="dark"] body.tv-live .today-live-board { color:#071411; background:var(--sports-mint); }
 @media(max-width:650px) {
