@@ -555,6 +555,7 @@ function initDarts() {
     const upcoming = wanted.filter(item=>item.kind==='upcoming');
     const finals = wanted.filter(item=>item.kind==='final');
     const shown = document.body.classList.contains('tv-live') ? live : live.slice(0,1);
+    target.dataset.liveCount=String(shown.length);
     const today = new Date().toLocaleDateString('de-DE');
     const playingToday = shown.some(item=>item.plannedAt && new Date(item.plannedAt).toLocaleDateString('de-DE')===today);
     q('#todayHeading').textContent = live.length ? 'Jetzt am Board' : 'Dein Barver-Spieltag';
@@ -586,6 +587,10 @@ function initDarts() {
           const list=document.createElement('span'); list.className='today-live-games';
           for (const game of liveGames) {
             const liveGame=document.createElement('span'); liveGame.className='today-live-game';
+            if (game.board) {
+              const board=document.createElement('small'); board.className='today-live-board'; board.textContent=`BOARD ${game.board}`;
+              liveGame.append(board);
+            }
             const scoreline=document.createElement('span'); scoreline.className='today-live-score';
             const homeSide=document.createElement('span'); homeSide.className=game.currentSide==='home'?'throwing':'';
             const homeName=document.createElement('small'); homeName.textContent=game.homeName;
