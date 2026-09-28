@@ -1050,6 +1050,63 @@ def _load_player_match_stats(event_id: int, match_id: int) -> tuple[list[dict], 
     return report, performances
 
 
+def _stat_average(item: dict, score_key: str, darts_key: str) -> float | None:
+    score, darts = item.get(score_key), item.get(darts_key)
+    if not isinstance(score, (int, float)) or not isinstance(darts, (int, float)) or darts <= 0:
+        return None
+    return round(score * 3 / darts, 1)
+
+
+def _official_league_player_stats() -> tuple[dict[tuple[str, str], dict], list[str]]:
+    """Load 3K's official league statistics and keep only individual SV Barver players."""
+    rows: dict[tuple[str, str], dict] = {}
+    loaded_leagues: list[str] = []
+    for league in LEAGUES:
+        try:
+            payload = _public_get(f"{API}/{league['event']}/statistics")
+        except (requests.RequestException, ValueError, KeyError, TypeError):
+            continue
+        if not isinstance(payload, list):
+            continue
+        loaded_leagues.append(league["key"])
+        allowed_codes = set(league["teams"].values())
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("displayName") or "").strip()
+            # 3K publishes doubles as separate rows ("A & B"). These are not player profiles.
+            if not name or " & " in name:
+                continue
+            team_name = str((item.get("team") or {}).get("name") or "").strip()
+            code = _barver_code_from_name(team_name)
+            if code not in allowed_codes:
+                continue
+            matches_total = item.get("matchesTotal") if isinstance(item.get("matchesTotal"), int) else 0
+            matches_won = item.get("matchesWon") if isinstance(item.get("matchesWon"), int) else 0
+            matches_draw = item.get("matchesDraw") if isinstance(item.get("matchesDraw"), int) else 0
+            rows[(code, name.casefold())] = {
+                "average": _stat_average(item, "scoreTotal", "dartsTotal"),
+                "average9": _stat_average(item, "scoreFirst9", "dartsFirst9"),
+                "average12": _stat_average(item, "scoreFirst12", "dartsFirst12"),
+                "average15": _stat_average(item, "scoreFirst15", "dartsFirst15"),
+                "average18": _stat_average(item, "scoreFirst18", "dartsFirst18"),
+                "gamesPlayed": matches_total,
+                "gamesWon": matches_won,
+                "gamesLost": max(0, matches_total - matches_won - matches_draw),
+                "singlesPlayed": matches_total,
+                "legsFor": item.get("legCount") if isinstance(item.get("legCount"), int) else 0,
+                "legsAgainst": item.get("legCountOpponent") if isinstance(item.get("legCountOpponent"), int) else 0,
+                "count180": item.get("count180") if isinstance(item.get("count180"), int) else 0,
+                "count140Plus": sum(value for value in (item.get("count140"), item.get("count170")) if isinstance(value, int)),
+                "count100Plus": sum(value for value in (item.get("count100"), item.get("count130")) if isinstance(value, int)),
+                "count80Plus": sum(value for value in (item.get("count80"), item.get("count90")) if isinstance(value, int)),
+                "highFinish": item.get("checkoutMax") if isinstance(item.get("checkoutMax"), int) and 2 <= item.get("checkoutMax") <= 170 else None,
+                "statsSource": "3k",
+                "league": league["key"],
+            }
+    return rows, loaded_leagues
+
+
 def _load_player_stats(now: datetime) -> dict:
     season = get_darts_season(now)
     roster_by_name: dict[str, dict] = {}
@@ -1145,10 +1202,25 @@ def _load_player_stats(now: datetime) -> dict:
         darts = player.pop("_darts")
         score = player.pop("_score")
         player["average"] = round(score * 3 / darts, 1) if darts else None
+        player["statsSource"] = "fallback"
         player["winRate"] = round(player["gamesWon"] * 100 / player["gamesPlayed"]) if player["gamesPlayed"] else None
+
+    official_rows, official_leagues = _official_league_player_stats()
+    for player in stats.values():
+        official = official_rows.get((str(player.get("team") or ""), str(player.get("name") or "").casefold()))
+        if not official:
+            continue
+        fallback_high_finishes = player.get("highFinishes", 0)
+        fallback_player_number = player.get("playerNumber", "")
+        player.update(official)
+        # 3K's league statistics expose the highest checkout but not a reliable high-finish count.
+        player["highFinishes"] = fallback_high_finishes
+        player["playerNumber"] = fallback_player_number
+        player["winRate"] = round(player["gamesWon"] * 100 / player["gamesPlayed"]) if player["gamesPlayed"] else None
+
     return {
         "available": True, "stale": False, "updatedAt": now.isoformat(),
-        "matchesScanned": len(loaded), "players": stats,
+        "matchesScanned": len(loaded), "officialLeagues": official_leagues, "players": stats,
     }
 
 
