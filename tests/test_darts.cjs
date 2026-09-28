@@ -171,7 +171,7 @@ assert.match(script,/Teamvergleich/);
 assert.match(script,/Aufstellung/);
 assert.match(script,/Einzelpartien/);
 assert.match(script,/Gemeldete Spielerinnen und Spieler/);
-assert.match(script,/Aktuelle Partien/);
+assert.match(script,/LAUFENDE BOARDS/);
 assert.match(script,/Punktestand wird noch geladen/);
 assert.doesNotMatch(script,/Restpunkte/);
 assert.match(fs.readFileSync('static/darts.css','utf8'),/body:fullscreen \.today-live-score strong/);
