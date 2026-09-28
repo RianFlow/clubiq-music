@@ -226,18 +226,38 @@ class DartsLiveHub:
 
     def reconcile(self, matches: list[dict]) -> None:
         desired = {}
+        finalized = {}
         now = datetime.now(timezone.utc)
         for item in matches:
             group_key = str(item.get("id") or "")
-            if not group_key.isdigit() or not _watch_live_candidate(item, now):
+            if not group_key.isdigit():
                 continue
-            desired[group_key] = {
+            meta = {
                 key: item.get(key) for key in (
                     "id", "home", "away", "barverTeam", "barverTeams", "barverSides", "league",
-                    "competitionBadge", "plannedAt", "url",
+                    "competitionBadge", "plannedAt", "url", "score", "updatedAt",
                 )
             }
+            if item.get("kind") == "final":
+                finalized[group_key] = meta
+                continue
+            if not _watch_live_candidate(item, now):
+                continue
+            desired[group_key] = meta
         with self._lock:
+            for group_key, meta in finalized.items():
+                group = self._groups.get(group_key)
+                if not group:
+                    continue
+                group["meta"] = {**(group.get("meta") or {}), **meta}
+                group["finished"] = True
+                group["finalizedBySeason"] = True
+                group["connected"] = False
+                group["source"] = "season"
+                group["lastUpdate"] = meta.get("updatedAt") or group.get("lastUpdate")
+                self._revision += 1
+                group["revision"] = self._revision
+                self._broadcast({"type": "live-group-update", "revision": self._revision, "group": self._public_group(group)})
             for group_key, meta in desired.items():
                 group = self._groups.setdefault(group_key, self._empty_group(group_key, meta))
                 group["meta"] = meta
@@ -253,8 +273,8 @@ class DartsLiveHub:
     def _empty_group(self, group_key: str, meta: dict) -> dict:
         return {
             "groupKey": group_key, "database": "10", "meta": meta, "matches": {}, "connected": False,
-            "source": "starting", "stale": False, "finished": False, "lastUpdate": None, "lastSuccess": None,
-            "lastError": None, "revision": 0,
+            "source": "starting", "stale": False, "finished": False, "finalizedBySeason": False,
+            "lastUpdate": None, "lastSuccess": None, "lastError": None, "revision": 0,
         }
 
     def apply(self, group_key: str, matches: list[dict], source: str) -> bool:
@@ -293,7 +313,7 @@ class DartsLiveHub:
                     (item.get("teamScoreHome"), item.get("teamScoreGuest"))
                     for item in group["matches"].values()
                 ]
-                group["finished"] = any(
+                group["finished"] = bool(group.get("finalizedBySeason")) or any(
                     isinstance(home, int) and isinstance(guest, int) and home + guest >= TEAM_MATCH_GAMES
                     for home, guest in totals
                 )
