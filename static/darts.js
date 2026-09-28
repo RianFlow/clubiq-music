@@ -455,8 +455,28 @@ function initDarts() {
     const serverCenters=[...serverLiveGroups.values()].filter(entry=>!entry.finished).map(liveGroupAsCenter);
     const ids=new Set(serverCenters.flatMap(center=>center.barverMatches.map(match=>match.id)));
     liveCenters=[...serverCenters,...liveCenters.filter(center=>!center.liveGroup&&!(center.barverMatches || []).some(match=>ids.has(match.id)))];
-    const item=(tickerData.items || []).find(entry=>entry.id===Number(group.meta?.id || group.groupKey));
+    const matchId=Number(group.meta?.id || group.groupKey);
     const latest=(group.matches || []).slice().sort((a,b)=>(b.lastUpdateNs||0)-(a.lastUpdateNs||0))[0];
+    let item=(tickerData.items || []).find(entry=>entry.id===matchId);
+    if (!item && group.meta) {
+      item={
+        id:matchId,
+        home:group.meta.home || 'Heim',
+        away:group.meta.away || 'Gast',
+        barverTeam:group.meta.barverTeam || null,
+        barverTeams:Array.isArray(group.meta.barverTeams)?group.meta.barverTeams:[],
+        barverSides:group.meta.barverSides || {},
+        league:group.meta.league || null,
+        competitionBadge:group.meta.competitionBadge || null,
+        plannedAt:group.meta.plannedAt || null,
+        url:group.meta.url || null,
+        kind:group.finished?'final':'live',
+        score:null,
+        updatedAt:group.lastUpdate || null,
+        text:`${group.meta.home || 'Heim'} gegen ${group.meta.away || 'Gast'}`,
+      };
+      tickerData.items=[item,...(tickerData.items || [])];
+    }
     if (item && latest) {
       if (Number.isInteger(latest.teamScoreHome)&&Number.isInteger(latest.teamScoreGuest)) item.score=`${latest.teamScoreHome}:${latest.teamScoreGuest}`;
       item.kind=group.finished?'final':'live'; item.updatedAt=group.lastUpdate || item.updatedAt;
