@@ -431,6 +431,9 @@ function initDarts() {
   let tickerDelay = 30000, tickerData = {items:[]}, favorite = 'all', liveCenters = [];
   const serverLiveGroups = new Map();
   let serverLiveConnected = false, activeMatchDetailData = null;
+  function liveRemaining(value) {
+    return Number.isInteger(value) ? (value === 0 ? 'CHECK' : String(value)) : '–';
+  }
   function normalizedLiveGames(group) {
     return (group?.matches || []).filter(match=>match.active || !match.finished).map(match=>({
       id:match.id, matchKey:match.matchKey, board:match.board, mode:match.mode,
@@ -575,12 +578,12 @@ function initDarts() {
             const scoreline=document.createElement('span'); scoreline.className='today-live-score';
             const homeSide=document.createElement('span'); homeSide.className=game.currentSide==='home'?'throwing':'';
             const homeName=document.createElement('small'); homeName.textContent=game.homeName;
-            const homePoints=document.createElement('strong'); homePoints.textContent=Number.isInteger(game.homeRemaining)?game.homeRemaining:'–';
+            const homePoints=document.createElement('strong'); homePoints.textContent=liveRemaining(game.homeRemaining);
             const middle=document.createElement('span'); middle.className='today-live-middle';
             const legs=document.createElement('small'); legs.textContent=Number.isInteger(game.homeLegs)&&Number.isInteger(game.awayLegs)?`Legs ${game.homeLegs}:${game.awayLegs}`:'Leg läuft';
             const colon=document.createElement('b'); colon.textContent=':';
             const awaySide=document.createElement('span'); awaySide.className=game.currentSide==='away'?'throwing':'';
-            const awayPoints=document.createElement('strong'); awayPoints.textContent=Number.isInteger(game.awayRemaining)?game.awayRemaining:'–';
+            const awayPoints=document.createElement('strong'); awayPoints.textContent=liveRemaining(game.awayRemaining);
             const awayName=document.createElement('small'); awayName.textContent=game.awayName;
             homeSide.append(homeName,homePoints); middle.append(legs,colon); awaySide.append(awayName,awayPoints); scoreline.append(homeSide,middle,awaySide);
             scoreline.setAttribute('aria-label',`${game.homeName} ${homePoints.textContent} zu ${awayPoints.textContent} ${game.awayName}. ${legs.textContent}.`);
@@ -1166,8 +1169,8 @@ function initDarts() {
         const scoreline=document.createElement('div');
         const homeLive=document.createElement('span'); homeLive.className=live.currentSide==='home'?'throwing':'';
         const awayLive=document.createElement('span'); awayLive.className=live.currentSide==='away'?'throwing':'';
-        const homePoints=document.createElement('strong'); homePoints.textContent=Number.isInteger(live.home?.remaining)?live.home.remaining:'–';
-        const awayPoints=document.createElement('strong'); awayPoints.textContent=Number.isInteger(live.away?.remaining)?live.away.remaining:'–';
+        const homePoints=document.createElement('strong'); homePoints.textContent=liveRemaining(live.home?.remaining);
+        const awayPoints=document.createElement('strong'); awayPoints.textContent=liveRemaining(live.away?.remaining);
         const homeName=document.createElement('small'); homeName.textContent=live.home?.name || 'Heim';
         const awayName=document.createElement('small'); awayName.textContent=live.away?.name || 'Gast';
         const divider=document.createElement('em'); divider.textContent=':';
@@ -1231,7 +1234,7 @@ function initDarts() {
         const item=document.createElement('div'); item.className='match-timeline-item live';
         const mark=document.createElement('b'); mark.textContent='LIVE';
         const copy=document.createElement('span'); const title=document.createElement('strong'); title.textContent=`${live.home?.name || 'Heim'} gegen ${live.away?.name || 'Gast'}`;
-        const detail=document.createElement('small'); detail.textContent=`${Number.isInteger(live.home?.remaining)?live.home.remaining:'–'} : ${Number.isInteger(live.away?.remaining)?live.away.remaining:'–'} · Legs ${Number.isInteger(live.home?.legs)?live.home.legs:'–'}:${Number.isInteger(live.away?.legs)?live.away.legs:'–'}`;
+        const detail=document.createElement('small'); detail.textContent=`${liveRemaining(live.home?.remaining)} : ${liveRemaining(live.away?.remaining)} · Legs ${Number.isInteger(live.home?.legs)?live.home.legs:'–'}:${Number.isInteger(live.away?.legs)?live.away.legs:'–'}`;
         copy.append(title,detail); item.append(mark,copy); timeline.append(item);
       }
       for (const event of data.performances || []) {
