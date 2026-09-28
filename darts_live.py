@@ -22,6 +22,8 @@ SOCKJS_URL = "wss://live.3k-darts.com/dartsscorer-liveticker/api/v1/websocket"
 USER_AGENT = "ClubIQ-Darts/1.0 (+https://barverdarts.clubiq.party/)"
 REST_FALLBACK_SECONDS = 7
 RECONNECT_SECONDS = 5
+LIVE_WATCH_EARLY_SECONDS = 30 * 60
+LIVE_WATCH_LATE_SECONDS = 8 * 60 * 60
 _STAMP = re.compile(r"^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?(Z|[+-]\d\d:\d\d)?$")
 
 
@@ -51,6 +53,25 @@ def timestamp_ns(value: str | None) -> int:
     seconds = int(parsed.astimezone(timezone.utc).timestamp())
     nanos = int(((fraction or "") + "000000000")[:9])
     return seconds * 1_000_000_000 + nanos
+
+
+def _watch_live_candidate(item: dict, now: datetime | None = None) -> bool:
+    """Watch imminent/recent matches directly on 3K live even if the league feed still says upcoming."""
+    if item.get("kind") == "live":
+        return True
+    if item.get("kind") != "upcoming":
+        return False
+    try:
+        planned = datetime.fromisoformat(str(item.get("plannedAt") or "").replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if planned.tzinfo is None:
+        planned = planned.replace(tzinfo=timezone.utc)
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    seconds_since_start = (current.astimezone(timezone.utc) - planned.astimezone(timezone.utc)).total_seconds()
+    return -LIVE_WATCH_EARLY_SECONDS <= seconds_since_start <= LIVE_WATCH_LATE_SECONDS
 
 
 def _player(items: list[dict]) -> dict:
@@ -204,9 +225,10 @@ class DartsLiveHub:
 
     def reconcile(self, matches: list[dict]) -> None:
         desired = {}
+        now = datetime.now(timezone.utc)
         for item in matches:
             group_key = str(item.get("id") or "")
-            if not group_key.isdigit() or item.get("kind") != "live":
+            if not group_key.isdigit() or not _watch_live_candidate(item, now):
                 continue
             desired[group_key] = {
                 key: item.get(key) for key in (
