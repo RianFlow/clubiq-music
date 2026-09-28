@@ -1,6 +1,7 @@
 import unittest
+from datetime import datetime, timezone
 
-from darts_live import DartsLiveHub, detect_events, normalize_match, normalize_rest, timestamp_ns
+from darts_live import DartsLiveHub, _watch_live_candidate, detect_events, normalize_match, normalize_rest, timestamp_ns
 
 
 def raw_match(match_key="1657291", board="2", stamp="2026-09-27T13:35:52.718986398", **changes):
@@ -55,6 +56,34 @@ class DartsLiveTests(unittest.TestCase):
         self.assertTrue(hub.apply("1657285", [newer], "rest"))
         self.assertFalse(hub.apply("1657285", [older], "stomp"))
         self.assertEqual(hub.get_group("1657285")["matches"][0]["board"], "2")
+
+    def test_upcoming_match_is_watched_around_planned_start(self):
+        now = datetime(2026, 9, 28, 18, 0, tzinfo=timezone.utc)
+        match = {**META, "kind": "upcoming", "plannedAt": "2026-09-28T17:30:00+00:00"}
+        self.assertTrue(_watch_live_candidate(match, now))
+
+    def test_distant_upcoming_match_is_not_watched(self):
+        now = datetime(2026, 9, 28, 18, 0, tzinfo=timezone.utc)
+        future = {**META, "kind": "upcoming", "plannedAt": "2026-10-02T17:30:00+00:00"}
+        old = {**META, "kind": "upcoming", "plannedAt": "2026-09-28T08:00:00+00:00"}
+        self.assertFalse(_watch_live_candidate(future, now))
+        self.assertFalse(_watch_live_candidate(old, now))
+
+    def test_reconcile_starts_connector_for_upcoming_match_in_live_window(self):
+        created = []
+
+        class FakeConnector:
+            def __init__(self, hub, database, group_key):
+                created.append(group_key)
+            def start(self):
+                pass
+            def stop(self):
+                pass
+
+        hub = DartsLiveHub(FakeConnector)
+        match = {**META, "kind": "upcoming", "plannedAt": datetime.now(timezone.utc).isoformat()}
+        hub.reconcile([match])
+        self.assertEqual(created, ["1657285"])
 
     def test_reconcile_starts_only_one_connector_per_live_group(self):
         created = []
