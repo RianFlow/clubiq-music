@@ -356,9 +356,12 @@ def poll_darts_push_events() -> None:
 
 def sync_darts_live_groups() -> None:
     try:
-        feed = get_darts_feed()
-        if not feed.get("stale"):
-            darts_live_hub.reconcile(feed.get("items") or [])
+        season = get_darts_season()
+        if not season.get("stale"):
+            # Use the complete season schedule here. The compact ticker intentionally
+            # looks only at nearby matchdays and can omit fixtures moved far away
+            # from their published round window.
+            darts_live_hub.reconcile(season.get("matches") or [])
     except (DartsFeedUnavailable, ValueError, requests.RequestException) as exc:
         print(f"[DARTS LIVE] {type(exc).__name__}: Begegnungen werden später erneut geprüft.")
 
