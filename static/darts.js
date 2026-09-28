@@ -142,18 +142,21 @@ function dartsPlayerStats(config) {
     const average=typeof item.average==='number'&&Number.isFinite(item.average)&&item.average>=0&&item.average<=180?Math.round(item.average*10)/10:null;
     const highFinish=Number.isInteger(item.highFinish)&&item.highFinish>=2&&item.highFinish<=170?item.highFinish:null;
     const playerNumber=typeof item.playerNumber==='string'&&/^[A-Z0-9]{3,12}$/i.test(item.playerNumber.trim())?item.playerNumber.trim().toLocaleUpperCase('de-DE'):'';
-    result[id]={
+    const parsed={
       average,playerNumber,gamesPlayed:integer(item.gamesPlayed),gamesWon:integer(item.gamesWon),gamesLost:integer(item.gamesLost),
       legsFor:integer(item.legsFor),legsAgainst:integer(item.legsAgainst),singlesPlayed:integer(item.singlesPlayed),
       count180:integer(item.count180),highFinishes:integer(item.highFinishes),highFinish,
-      average9:typeof item.average9==='number'&&Number.isFinite(item.average9)?Math.round(item.average9*10)/10:null,
-      average12:typeof item.average12==='number'&&Number.isFinite(item.average12)?Math.round(item.average12*10)/10:null,
-      average15:typeof item.average15==='number'&&Number.isFinite(item.average15)?Math.round(item.average15*10)/10:null,
-      average18:typeof item.average18==='number'&&Number.isFinite(item.average18)?Math.round(item.average18*10)/10:null,
-      statsSource:item.statsSource==='3k'?'3k':'fallback',
       winRate:Number.isInteger(item.winRate)&&item.winRate>=0&&item.winRate<=100?item.winRate:null,
       statsUpdatedAt:typeof config.updatedAt==='string'?config.updatedAt:'',statsStale:config.stale===true,
     };
+    if (item.statsSource==='3k') {
+      parsed.statsSource='3k';
+      parsed.average9=typeof item.average9==='number'&&Number.isFinite(item.average9)?Math.round(item.average9*10)/10:null;
+      parsed.average12=typeof item.average12==='number'&&Number.isFinite(item.average12)?Math.round(item.average12*10)/10:null;
+      parsed.average15=typeof item.average15==='number'&&Number.isFinite(item.average15)?Math.round(item.average15*10)/10:null;
+      parsed.average18=typeof item.average18==='number'&&Number.isFinite(item.average18)?Math.round(item.average18*10)/10:null;
+    }
+    result[id]=parsed;
   }
   return result;
 }
