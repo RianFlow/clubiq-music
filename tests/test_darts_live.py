@@ -85,6 +85,30 @@ class DartsLiveTests(unittest.TestCase):
         hub.reconcile([match])
         self.assertEqual(created, ["1657285"])
 
+    def test_group_stays_open_between_finished_board_blocks(self):
+        hub = DartsLiveHub()
+        hub._groups["1657285"] = hub._empty_group("1657285", META)
+        first = normalize_match(raw_match(
+            "block-1-board-1", "1", "2026-09-27T13:35:53.000000001",
+            setsHome=5, setsGuest=1, status=2, statusActive=False, statusFinished=True,
+        ))
+        second = normalize_match(raw_match(
+            "block-1-board-2", "2", "2026-09-27T13:35:53.000000002",
+            setsHome=5, setsGuest=1, status=2, statusActive=False, statusFinished=True,
+        ))
+        hub.apply("1657285", [first, second], "rest")
+        self.assertFalse(hub.group_finished("1657285"))
+
+    def test_group_finishes_at_twelve_team_games(self):
+        hub = DartsLiveHub()
+        hub._groups["1657285"] = hub._empty_group("1657285", META)
+        final = normalize_match(raw_match(
+            "final-board", "1", "2026-09-27T13:35:53.000000003",
+            setsHome=8, setsGuest=4, status=2, statusActive=False, statusFinished=True,
+        ))
+        hub.apply("1657285", [final], "rest")
+        self.assertTrue(hub.group_finished("1657285"))
+
     def test_reconcile_starts_only_one_connector_per_live_group(self):
         created = []
 
