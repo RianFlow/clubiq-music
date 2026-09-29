@@ -1,5 +1,5 @@
 const $ = selector => document.querySelector(selector);
-const state = { password: sessionStorage.getItem('clubiq_darts_admin') || '', players: [], selected: null, pendingPhoto: null, previewUrl: '' };
+const state = { password: sessionStorage.getItem('clubiq_darts_admin') || '', players: [], selected: null, pendingPhoto: null, previewUrl: '', sponsors: [], selectedSponsor: null, pendingSponsorLogo: null };
 
 async function api(path, options = {}) {
   const headers = new Headers(options.headers || {});
@@ -157,13 +157,151 @@ async function deletePhoto() {
   catch(error){status.textContent=error.message;}
 }
 
+const sponsorTypeLabels={main:'Hauptpartner',club:'Vereinspartner',team:'Teampartner',event:'Veranstaltungspartner'};
+
+function localDateTimeValue(value) {
+  if (!value) return '';
+  const date=new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const local=new Date(date.getTime()-date.getTimezoneOffset()*60000);
+  return local.toISOString().slice(0,16);
+}
+function checkedValues(selector) { return [...document.querySelectorAll(selector)].filter(node=>node.checked).map(node=>node.value); }
+function setCheckedValues(selector, values) {
+  const selected=new Set(Array.isArray(values)?values:[]);
+  document.querySelectorAll(selector).forEach(node=>{node.checked=selected.has(node.value);});
+}
+function sponsorPreview(sponsor, source='') {
+  const root=$('#sponsorLogoPreview'); root.replaceChildren();
+  const imageSource=source || sponsor?.image || '';
+  if (imageSource) {
+    const image=document.createElement('img'); image.src=imageSource; image.alt=`Logo ${sponsor?.name || ''}`;
+    image.addEventListener('error',()=>root.replaceChildren(Object.assign(document.createElement('span'),{textContent:'Logo'})),{once:true});
+    root.append(image);
+  } else root.append(Object.assign(document.createElement('span'),{textContent:'Logo'}));
+}
+function renderSponsorList() {
+  const query=clean($('#sponsorSearch').value).toLocaleLowerCase('de-DE');
+  const type=$('#sponsorTypeFilter').value;
+  const visible=state.sponsors.filter(item=>(type==='all'||item.type===type)&&(!query||`${item.name||''} ${item.eventName||''}`.toLocaleLowerCase('de-DE').includes(query)));
+  const fragment=document.createDocumentFragment();
+  for (const sponsor of visible) {
+    const button=document.createElement('button'); button.type='button';
+    if (state.selectedSponsor?.id===sponsor.id) button.classList.add('active');
+    const name=document.createElement('strong'); name.textContent=sponsor.name;
+    const meta=document.createElement('span');
+    const teamText=(sponsor.teams||[]).length?` · ${sponsor.teams.map(code=>`Barver ${code}`).join(', ')}`:'';
+    meta.textContent=`${sponsorTypeLabels[sponsor.type]||'Sponsor'}${teamText} · ${sponsor.active?'aktiv':'inaktiv'}`;
+    button.append(name,meta); button.addEventListener('click',()=>selectSponsor(sponsor)); fragment.append(button);
+  }
+  if (!visible.length) fragment.append(Object.assign(document.createElement('p'),{textContent:'Keine passenden Sponsoren.'}));
+  $('#sponsorList').replaceChildren(fragment);
+}
+function selectSponsor(sponsor) {
+  state.selectedSponsor=sponsor; state.pendingSponsorLogo=null;
+  $('#sponsorEditorEmpty').hidden=true; $('#sponsorForm').hidden=false;
+  $('#sponsorId').value=sponsor.id||'';
+  $('#sponsorName').value=sponsor.name||''; $('#sponsorType').value=sponsor.type||'club';
+  $('#sponsorWebsite').value=sponsor.href||''; $('#sponsorPriority').value=sponsor.priority??0;
+  $('#sponsorEventName').value=sponsor.eventName||''; $('#sponsorMatchIds').value=(sponsor.eventMatchIds||[]).join(', ');
+  $('#sponsorStartsAt').value=localDateTimeValue(sponsor.startsAt); $('#sponsorEndsAt').value=localDateTimeValue(sponsor.endsAt);
+  $('#sponsorActive').checked=sponsor.active!==false;
+  setCheckedValues('[data-sponsor-team]',sponsor.teams||[]);
+  setCheckedValues('[data-sponsor-placement]',sponsor.placements?.length?sponsor.placements:['footer']);
+  $('#sponsorLogo').value=''; $('#deleteSponsorLogo').disabled=!sponsor.hasLogo;
+  $('#deleteSponsor').disabled=!sponsor.id;
+  $('#sponsorNameHeading').textContent=sponsor.name||'Neuer Sponsor';
+  $('#sponsorTypeLabel').textContent=sponsorTypeLabels[sponsor.type]||'Sponsor';
+  $('#sponsorMeta').textContent=sponsor.id?`Sponsor #${sponsor.id}`:'Noch nicht gespeichert';
+  $('#sponsorFormStatus').hidden=true; sponsorPreview(sponsor); renderSponsorList();
+}
+function newSponsor() {
+  selectSponsor({id:null,name:'',type:'club',href:'',teams:[],placements:['footer'],eventName:'',eventMatchIds:[],startsAt:null,endsAt:null,priority:0,active:true,hasLogo:false});
+  $('#sponsorName').focus();
+}
+async function loadSponsors() {
+  $('#sponsorDataStatus').textContent='Sponsoren werden geladen …';
+  const selectedId=state.selectedSponsor?.id;
+  const result=await api('/api/v1/darts/admin/sponsors');
+  state.sponsors=Array.isArray(result.sponsors)?result.sponsors:[];
+  $('#sponsorDataStatus').textContent=`${state.sponsors.length} Sponsor${state.sponsors.length===1?'':'en'}`;
+  const selected=state.sponsors.find(item=>item.id===selectedId);
+  if (selected) selectSponsor(selected); else { state.selectedSponsor=null; $('#sponsorForm').hidden=true; $('#sponsorEditorEmpty').hidden=false; renderSponsorList(); }
+}
+async function saveSponsor(event) {
+  event.preventDefault();
+  const status=$('#sponsorFormStatus'); status.hidden=false; status.textContent='Sponsor wird gespeichert …';
+  const ids=clean($('#sponsorMatchIds').value).split(/[\s,;]+/).filter(Boolean).map(value=>Number(value));
+  if (ids.some(value=>!Number.isInteger(value)||value<=0)) { status.textContent='Bitte nur gültige 3K Match-IDs eintragen.'; return; }
+  const dateValue=id=>$('#'+id).value ? new Date($('#'+id).value).toISOString() : null;
+  const payload={
+    name:clean($('#sponsorName').value),sponsor_type:$('#sponsorType').value,website:clean($('#sponsorWebsite').value)||null,
+    teams:checkedValues('[data-sponsor-team]'),placements:checkedValues('[data-sponsor-placement]'),
+    event_name:clean($('#sponsorEventName').value)||null,event_match_ids:[...new Set(ids)],
+    starts_at:dateValue('sponsorStartsAt'),ends_at:dateValue('sponsorEndsAt'),
+    priority:Number($('#sponsorPriority').value||0),active:$('#sponsorActive').checked,
+  };
+  try {
+    const existingId=Number($('#sponsorId').value)||null;
+    const saved=await api(existingId?`/api/v1/darts/admin/sponsors/${existingId}`:'/api/v1/darts/admin/sponsors',{method:existingId?'PUT':'POST',body:JSON.stringify(payload)});
+    const sponsorId=existingId||saved.id;
+    if (state.pendingSponsorLogo) {
+      const form=new FormData(); form.set('logo',state.pendingSponsorLogo);
+      await api(`/api/v1/darts/admin/sponsors/${sponsorId}/logo`,{method:'POST',body:form});
+    }
+    state.selectedSponsor={id:sponsorId}; state.pendingSponsorLogo=null;
+    await loadSponsors(); const updated=state.sponsors.find(item=>item.id===sponsorId); if(updated) selectSponsor(updated);
+    status.hidden=false; status.textContent='Sponsor gespeichert.';
+  } catch(error) { status.textContent=error.message; }
+}
+async function deleteSponsor() {
+  const id=Number($('#sponsorId').value); if(!id) return;
+  if(!confirm('Diesen Sponsor wirklich vollständig löschen?')) return;
+  const status=$('#sponsorFormStatus'); status.hidden=false; status.textContent='Sponsor wird gelöscht …';
+  try {
+    await api(`/api/v1/darts/admin/sponsors/${id}`,{method:'DELETE'});
+    state.selectedSponsor=null; await loadSponsors(); status.hidden=true;
+  } catch(error){status.textContent=error.message;}
+}
+async function deleteSponsorLogo() {
+  const id=Number($('#sponsorId').value); if(!id||!state.selectedSponsor?.hasLogo) return;
+  if(!confirm('Sponsorlogo wirklich entfernen?')) return;
+  const status=$('#sponsorFormStatus'); status.hidden=false; status.textContent='Logo wird entfernt …';
+  try { await api(`/api/v1/darts/admin/sponsors/${id}/logo`,{method:'DELETE'}); await loadSponsors(); const updated=state.sponsors.find(item=>item.id===id); if(updated) selectSponsor(updated); status.hidden=false; status.textContent='Logo entfernt.'; }
+  catch(error){status.textContent=error.message;}
+}
+function showAdminView(view) {
+  const sponsors=view==='sponsors';
+  $('#playersAdminView').hidden=sponsors; $('#sponsorsAdminView').hidden=!sponsors;
+  $('#playersAdminTab').classList.toggle('active',!sponsors); $('#sponsorsAdminTab').classList.toggle('active',sponsors);
+}
+
 async function openAdmin(password) {
   state.password=password;
   await api('/api/v1/music/admin/verify');
   sessionStorage.setItem('clubiq_darts_admin',password);
   $('#loginPanel').hidden=true; $('#adminPanel').hidden=false; $('#logout').hidden=false;
-  await loadData();
+  await Promise.all([loadData(),loadSponsors()]);
 }
+
+$('#playersAdminTab').addEventListener('click',()=>showAdminView('players'));
+$('#sponsorsAdminTab').addEventListener('click',()=>showAdminView('sponsors'));
+$('#sponsorSearch').addEventListener('input',renderSponsorList);
+$('#sponsorTypeFilter').addEventListener('change',renderSponsorList);
+$('#newSponsor').addEventListener('click',newSponsor);
+$('#sponsorForm').addEventListener('submit',saveSponsor);
+$('#deleteSponsor').addEventListener('click',deleteSponsor);
+$('#deleteSponsorLogo').addEventListener('click',deleteSponsorLogo);
+$('#sponsorLogo').addEventListener('change',async event=>{
+  const file=event.target.files?.[0]; if(!file||!state.selectedSponsor)return;
+  const status=$('#sponsorFormStatus'); status.hidden=false; status.textContent='Logo wird optimiert …';
+  try {
+    state.pendingSponsorLogo=await compressPhoto(file);
+    const preview=await photoDataUrl(state.pendingSponsorLogo); sponsorPreview(state.selectedSponsor,preview);
+    status.textContent=`Logo vorbereitet (${Math.max(1,Math.round(state.pendingSponsorLogo.size/1024))} KB). Zum Übernehmen noch speichern.`;
+  } catch(error){state.pendingSponsorLogo=null;status.textContent=error.message;}
+});
+$('#sponsorType').addEventListener('change',()=>{$('#sponsorTypeLabel').textContent=sponsorTypeLabels[$('#sponsorType').value]||'Sponsor';});
 
 $('#loginForm').addEventListener('submit',async event=>{event.preventDefault();const error=$('#loginError');error.hidden=true;try{await openAdmin($('#adminPassword').value);}catch(problem){state.password='';sessionStorage.removeItem('clubiq_darts_admin');error.textContent=problem.message;error.hidden=false;}});
 $('#logout').addEventListener('click',()=>{state.password='';sessionStorage.removeItem('clubiq_darts_admin');location.reload();});
