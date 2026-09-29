@@ -169,7 +169,10 @@ function dartsSponsors(config, now=Date.now()) {
   const displaySeconds = Number.isFinite(config?.displaySeconds) ? Math.min(60,Math.max(6,Math.round(config.displaySeconds))) : 12;
   const sponsors = Array.isArray(config?.sponsors) ? config.sponsors.flatMap((item,index)=>{
     if (!item || typeof item.name !== 'string' || !item.name.trim() || item.name.length > 80) return [];
-    const image = typeof item.image === 'string' && /^\/pics\/sponsors\/[a-z0-9][a-z0-9._-]*\.(?:avif|jpe?g|png|svg|webp)$/i.test(item.image) ? item.image : '';
+    const image = typeof item.image === 'string' && (
+      /^\/pics\/sponsors\/[a-z0-9][a-z0-9._-]*\.(?:avif|jpe?g|png|svg|webp)$/i.test(item.image)
+      || /^\/api\/v1\/darts\/sponsors\/\d+\/logo(?:\?v=\d+)?$/i.test(item.image)
+    ) ? item.image : '';
     let href = '';
     if (typeof item.href === 'string' && item.href) {
       try { const url=new URL(item.href); if (url.protocol==='https:' && !url.username && !url.password) href=url.href; } catch (_) {}
@@ -177,10 +180,16 @@ function dartsSponsors(config, now=Date.now()) {
     const starts = item.startsAt ? Date.parse(item.startsAt) : -Infinity;
     const ends = item.endsAt ? Date.parse(item.endsAt) : Infinity;
     if (Number.isNaN(starts) || Number.isNaN(ends) || starts > ends || now < starts || now > ends) return [];
-    const placements = Array.isArray(item.placements) ? [...new Set(item.placements.filter(value=>value==='top'||value==='inline'))] : ['top','inline'];
+    const placements = Array.isArray(item.placements)
+      ? [...new Set(item.placements.filter(value=>['top','inline','footer','tv','match'].includes(value)))]
+      : ['footer'];
     if (!placements.length) return [];
-    return [{id:String(item.id || index),name:item.name.trim(),image,href,placements}];
-  }) : [];
+    const type=['main','club','team','event'].includes(item.type)?item.type:'club';
+    const teams=Array.isArray(item.teams)?[...new Set(item.teams.filter(value=>['A','B','C','D'].includes(value)))]:[];
+    const eventMatchIds=Array.isArray(item.eventMatchIds)?[...new Set(item.eventMatchIds.map(Number).filter(value=>Number.isInteger(value)&&value>0))]:[];
+    const priority=Number.isInteger(item.priority)?Math.max(-1000,Math.min(1000,item.priority)):0;
+    return [{id:String(item.id || index),name:item.name.trim(),image,href,placements,type,teams,eventName:typeof item.eventName==='string'?item.eventName.trim():'',eventMatchIds,priority}];
+  }).sort((a,b)=>b.priority-a.priority||a.name.localeCompare(b.name,'de')) : [];
   return {displaySeconds,sponsors};
 }
 function dartsLayout(raw) {
