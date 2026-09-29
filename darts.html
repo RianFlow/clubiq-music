@@ -8,8 +8,8 @@
   <meta name="description" content="SV Barver Darts A, B, C und D: Spielpläne, Spielberichte und Live-Ansichten gemeinsam verfolgen.">
   <link rel="icon" href="/pics/logo.png">
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
-  <link rel="stylesheet" href="/static/darts.css?v=20260928-final1">
-  <script defer src="/static/darts.js?v=20260928-stats1"></script>
+  <link rel="stylesheet" href="/static/darts.css?v=20260929-sponsor1">
+  <script defer src="/static/darts.js?v=20260929-sponsor1"></script>
 </head>
 <body>
   <header class="darts-header">
@@ -65,7 +65,19 @@
     <p id="pageStatus" class="message" role="status" hidden></p>
     <section id="todayPanel" class="sports-panel" aria-labelledby="todayHeading" hidden>
       <div class="sports-panel-head"><div><p class="eyebrow">Live-Matchcenter</p><h2 id="todayHeading">Heute spielen</h2><p id="todaySubtitle">Live-Spiele und die nächsten Begegnungen.</p></div><div class="today-actions"><span id="liveDataStatus" class="live-data-status">3K wird geladen</span><label for="favoriteTeam">Mein Team<select id="favoriteTeam"><option value="all">Alle Teams</option><option value="A">Barver A</option><option value="B">Barver B</option><option value="C">Barver C</option><option value="D">Barver D</option></select></label></div></div>
+      <div id="tvTeamControls" class="tv-team-controls" aria-label="Mannschaften im TV-Modus auswählen">
+        <span>TV-Mannschaften</span>
+        <div role="group" aria-label="Mannschaftsauswahl">
+          <button type="button" data-tv-team="all">Alle</button>
+          <button type="button" data-tv-team="A">A</button>
+          <button type="button" data-tv-team="B">B</button>
+          <button type="button" data-tv-team="C">C</button>
+          <button type="button" data-tv-team="D">D</button>
+        </div>
+        <strong id="tvTeamCount">4 Teams</strong>
+      </div>
       <div id="todayGrid" class="today-grid"><p class="panel-loading">Spielstände werden geladen …</p></div>
+      <aside id="sponsorTv" class="sponsor-slot sponsor-slot-tv" data-placement="tv" aria-label="TV-Partner" hidden></aside>
       <div class="season-toolbar" aria-label="Startseite filtern">
         <label>Mannschaft<select id="homeTeam"><option value="all">Alle Teams</option><option>A</option><option>B</option><option>C</option><option>D</option></select></label>
         <label>Liga / Wettbewerb<select id="homeLeague"><option value="all">Alle Wettbewerbe</option><option value="1445">Kreisligen 04 · A–C</option><option value="1460">Kreisklasse 11 · D</option><option value="special">Pokal & Sondertermine</option></select></label>
@@ -136,11 +148,13 @@
       <div id="trainingFrame" class="frame-wrap"><div class="placeholder"><strong>Euer Trainingsabend</strong><p>Teilnehmer, Spiele und Bestleistungen in der offiziellen 3K-Ansicht. Erst „Training anzeigen“ stellt die Verbindung her.</p></div></div>
       <p id="trainingNote" class="frame-note">Keine automatische 180-Animation oder Sieger-Meldung. Platzierungen sind erst verfügbar, wenn das Event in 3K abgeschlossen wurde.</p>
     </section>
-    <footer><span>ClubIQ zeigt öffentliche 3K-Ergebnisse in einer eigenen Ansicht. 3K bleibt die offizielle Quelle.</span><nav aria-label="Rechtliches und Verwaltung"><a href="/darts-admin">Spielerverwaltung</a><a href="/impressum">Impressum</a><a href="/datenschutz">Datenschutz</a><a href="https://portal.3k-darts.com/frontend/events" target="_blank" rel="noopener noreferrer">3K Darts öffnen ↗</a></nav></footer>
+    <aside id="sponsorFooter" class="sponsor-slot sponsor-slot-footer" data-placement="footer" aria-label="Unsere Partner" hidden></aside>
+    <footer><span>ClubIQ zeigt öffentliche 3K-Ergebnisse in einer eigenen Ansicht. 3K bleibt die offizielle Quelle.</span><nav aria-label="Rechtliches und Verwaltung"><a href="/darts-admin">Dartsverwaltung</a><a href="/impressum">Impressum</a><a href="/datenschutz">Datenschutz</a><a href="https://portal.3k-darts.com/frontend/events" target="_blank" rel="noopener noreferrer">3K Darts öffnen ↗</a></nav></footer>
   </main>
   <dialog id="matchDialog" class="native-match-dialog" aria-labelledby="matchHeading">
     <div class="dialog-head"><div><p class="eyebrow">ClubIQ Spielbericht</p><h2 id="matchHeading">Begegnung</h2></div><button id="closeMatch" type="button" aria-label="Schließen">×</button></div>
     <div id="matchDetail"><p class="panel-loading">Spielbericht wird geladen …</p></div>
+    <aside id="sponsorMatch" class="sponsor-slot sponsor-slot-match" data-placement="match" aria-label="Spielpartner" hidden></aside>
   </dialog>
   <dialog id="teamDialog" class="team-profile-dialog" aria-labelledby="teamProfileHeading">
     <div class="dialog-head"><div><p class="eyebrow">SV Barver Darts · Mannschaft</p><h2 id="teamProfileHeading">Mannschaft</h2></div><button id="closeTeamProfile" type="button" aria-label="Schließen">×</button></div>
