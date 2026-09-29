@@ -913,7 +913,27 @@ def _load_league_season(league: dict, now: datetime) -> dict:
 
 
 def _load_season(now: datetime) -> dict:
-    leagues = [_load_league_season(league, now) for league in LEAGUES]
+    leagues_by_key: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=len(LEAGUES)) as executor:
+        jobs = {executor.submit(_load_league_season, league, now): league for league in LEAGUES}
+        for job in as_completed(jobs):
+            league = jobs[job]
+            try:
+                leagues_by_key[league["key"]] = job.result()
+            except (requests.RequestException, ValueError, KeyError, TypeError, DartsFeedUnavailable):
+                leagues_by_key[league["key"]] = {
+                    "league": _league_public(league),
+                    "rounds": [],
+                    "selectedRound": None,
+                    "standings": [],
+                    "matches": [],
+                    "degraded": True,
+                    "missingRoundIds": [],
+                    "loadedRoundCount": 0,
+                    "totalRoundCount": 0,
+                    "warning": "Diese Liga konnte gerade nicht vollständig von 3K geladen werden.",
+                }
+    leagues = [leagues_by_key[league["key"]] for league in LEAGUES]
     special = _get_special_events(now)
     all_matches = [match for league in leagues for match in league["matches"]]
     all_matches.extend(special.get("matches") or [])
@@ -985,13 +1005,17 @@ def get_darts_season(now: datetime | None = None) -> dict:
     now = now or datetime.now(timezone.utc)
     with _lock:
         cached = _season_cache
-        if cached and now.timestamp() - cached[0] < SEASON_CACHE_SECONDS:
-            return cached[1]
+        if cached:
+            ttl = CACHE_SECONDS if cached[1].get("degraded") else SEASON_CACHE_SECONDS
+            if now.timestamp() - cached[0] < ttl:
+                return cached[1]
     with _season_load_lock:
         with _lock:
             cached = _season_cache
-            if cached and now.timestamp() - cached[0] < SEASON_CACHE_SECONDS:
-                return cached[1]
+            if cached:
+                ttl = CACHE_SECONDS if cached[1].get("degraded") else SEASON_CACHE_SECONDS
+                if now.timestamp() - cached[0] < ttl:
+                    return cached[1]
         try:
             result = _load_season(now)
             with _lock:
