@@ -514,6 +514,20 @@ class DartsRosterCacheUpdate(BaseModel):
     players: list[DartsRosterMember] = Field(max_length=100)
 
 
+class DartsSponsorUpdate(BaseModel):
+    name: str = Field(min_length=2, max_length=80)
+    sponsor_type: str = Field(default="club", pattern=r"^(main|club|team|event)$")
+    website: str | None = Field(default=None, max_length=500)
+    teams: list[str] = Field(default_factory=list, max_length=4)
+    placements: list[str] = Field(default_factory=lambda: ["footer"], max_length=5)
+    event_name: str | None = Field(default=None, max_length=120)
+    event_match_ids: list[int] = Field(default_factory=list, max_length=100)
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    priority: int = Field(default=0, ge=-1000, le=1000)
+    active: bool = True
+
+
 class SuggestionCreate(BaseModel):
     provider: str = Field(default="youtube", pattern=r"^[a-z0-9_-]{2,30}$")
     external_id: str = Field(min_length=1, max_length=100)
@@ -737,6 +751,94 @@ def _clean_profile_text(value: str | None) -> str | None:
     return cleaned or None
 
 
+DARTS_SPONSOR_PLACEMENTS = {"top", "inline", "footer", "tv", "match"}
+
+
+def _validated_sponsor_payload(update: DartsSponsorUpdate) -> dict:
+    teams = sorted(set(update.teams))
+    if any(team not in {"A", "B", "C", "D"} for team in teams):
+        raise HTTPException(status_code=422, detail="Ungültige Mannschaftsauswahl.")
+    placements = list(dict.fromkeys(update.placements))
+    if not placements or any(place not in DARTS_SPONSOR_PLACEMENTS for place in placements):
+        raise HTTPException(status_code=422, detail="Ungültige Sponsor-Platzierung.")
+    if update.sponsor_type == "team" and not teams:
+        raise HTTPException(status_code=422, detail="Ein Teampartner braucht mindestens eine Mannschaft.")
+    match_ids = sorted(set(update.event_match_ids))
+    if any(match_id <= 0 for match_id in match_ids):
+        raise HTTPException(status_code=422, detail="Ungültige 3K-Match-ID.")
+    starts_at = utc_datetime(update.starts_at, "Startzeit") if update.starts_at else None
+    ends_at = utc_datetime(update.ends_at, "Endzeit") if update.ends_at else None
+    if starts_at and ends_at and ends_at < starts_at:
+        raise HTTPException(status_code=422, detail="Sponsor-Ende muss nach dem Start liegen.")
+    event_name = _clean_profile_text(update.event_name)
+    if update.sponsor_type == "event" and not (match_ids or (starts_at and ends_at)):
+        raise HTTPException(status_code=422, detail="Ein Veranstaltungspartner braucht 3K Match-IDs oder einen vollständigen Zeitraum.")
+    website = (update.website or "").strip()
+    if website:
+        parsed = urlparse(website)
+        if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
+            raise HTTPException(status_code=422, detail="Sponsor-Webseite muss eine vollständige HTTPS-Adresse sein.")
+        website = parsed.geturl()
+    else:
+        website = None
+    return {
+        "name": _clean_profile_text(update.name),
+        "sponsor_type": update.sponsor_type,
+        "website": website,
+        "teams": teams,
+        "placements": placements,
+        "event_name": event_name,
+        "event_match_ids": match_ids,
+        "starts_at": starts_at,
+        "ends_at": ends_at,
+        "priority": update.priority,
+        "active": update.active,
+    }
+
+
+def _sponsor_from_row(row) -> dict:
+    sponsor_id = int(row[0])
+    item = {
+        "id": sponsor_id,
+        "name": row[1],
+        "type": row[2],
+        "href": row[3] or "",
+        "teams": list(row[4] or []),
+        "placements": list(row[5] or []),
+        "eventName": row[6] or "",
+        "eventMatchIds": [int(value) for value in (row[7] or []) if isinstance(value, int) or str(value).isdigit()],
+        "startsAt": row[8],
+        "endsAt": row[9],
+        "priority": int(row[10] or 0),
+        "active": bool(row[11]),
+        "hasLogo": row[12] is not None,
+        "updatedAt": row[15],
+    }
+    if row[12] is not None:
+        item["image"] = f"/api/v1/darts/sponsors/{sponsor_id}/logo?v={int(row[14] or 0)}"
+    return item
+
+
+def _query_darts_sponsors(public_only: bool) -> list[dict]:
+    where = """
+        WHERE active = TRUE
+          AND (starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP)
+          AND (ends_at IS NULL OR ends_at >= CURRENT_TIMESTAMP)
+    """ if public_only else ""
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            f"""
+            SELECT id, name, sponsor_type, website, team_codes, placements, event_name,
+                   event_match_ids, starts_at, ends_at, priority, active, logo_data,
+                   logo_media_type, logo_version, updated_at
+            FROM darts_sponsors
+            {where}
+            ORDER BY priority DESC, lower(name), id;
+            """
+        )
+        return [_sponsor_from_row(row) for row in cur.fetchall()]
+
+
 def _base_darts_player_profiles() -> dict[str, dict]:
     try:
         payload = json.loads(Path("static/darts-players.json").read_text(encoding="utf-8"))
@@ -831,6 +933,152 @@ def darts_player_profiles():
         content=json.dumps({"players": _public_darts_profiles()}, ensure_ascii=False, default=str),
         media_type="application/json",
         headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=300"},
+    )
+
+
+@app.get("/api/v1/darts/sponsors")
+def darts_sponsors():
+    return Response(
+        content=json.dumps({"displaySeconds": 12, "sponsors": _query_darts_sponsors(True)}, ensure_ascii=False, default=str),
+        media_type="application/json",
+        headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=300"},
+    )
+
+
+@app.get("/api/v1/darts/admin/sponsors", dependencies=[Depends(require_admin)])
+def darts_admin_sponsors():
+    return Response(
+        content=json.dumps({"sponsors": _query_darts_sponsors(False)}, ensure_ascii=False, default=str),
+        media_type="application/json",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/api/v1/darts/admin/sponsors", dependencies=[Depends(require_admin)], status_code=201)
+def darts_admin_create_sponsor(update: DartsSponsorUpdate):
+    values = _validated_sponsor_payload(update)
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO darts_sponsors (
+                name, sponsor_type, website, team_codes, placements, event_name,
+                event_match_ids, starts_at, ends_at, priority, active
+            ) VALUES (%s,%s,%s,%s::jsonb,%s::jsonb,%s,%s::jsonb,%s,%s,%s,%s)
+            RETURNING id;
+            """,
+            (
+                values["name"], values["sponsor_type"], values["website"],
+                json.dumps(values["teams"]), json.dumps(values["placements"]), values["event_name"],
+                json.dumps(values["event_match_ids"]), values["starts_at"], values["ends_at"],
+                values["priority"], values["active"],
+            ),
+        )
+        sponsor_id = int(cur.fetchone()[0])
+        cur.execute(
+            "INSERT INTO darts_sponsor_audit (sponsor_id, action, detail_json) VALUES (%s, 'created', %s::jsonb);",
+            (sponsor_id, json.dumps({"type": values["sponsor_type"]}, separators=(",", ":"))),
+        )
+        conn.commit()
+    return {"status": "success", "id": sponsor_id}
+
+
+@app.put("/api/v1/darts/admin/sponsors/{sponsor_id}", dependencies=[Depends(require_admin)])
+def darts_admin_update_sponsor(sponsor_id: int, update: DartsSponsorUpdate):
+    values = _validated_sponsor_payload(update)
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE darts_sponsors SET
+                name=%s, sponsor_type=%s, website=%s, team_codes=%s::jsonb,
+                placements=%s::jsonb, event_name=%s, event_match_ids=%s::jsonb,
+                starts_at=%s, ends_at=%s, priority=%s, active=%s,
+                updated_at=CURRENT_TIMESTAMP
+            WHERE id=%s;
+            """,
+            (
+                values["name"], values["sponsor_type"], values["website"],
+                json.dumps(values["teams"]), json.dumps(values["placements"]), values["event_name"],
+                json.dumps(values["event_match_ids"]), values["starts_at"], values["ends_at"],
+                values["priority"], values["active"], sponsor_id,
+            ),
+        )
+        if cur.rowcount != 1:
+            raise HTTPException(status_code=404, detail="Sponsor nicht gefunden.")
+        cur.execute(
+            "INSERT INTO darts_sponsor_audit (sponsor_id, action, detail_json) VALUES (%s, 'saved', %s::jsonb);",
+            (sponsor_id, json.dumps({"active": values["active"], "type": values["sponsor_type"]}, separators=(",", ":"))),
+        )
+        conn.commit()
+    return {"status": "success", "id": sponsor_id}
+
+
+@app.delete("/api/v1/darts/admin/sponsors/{sponsor_id}", dependencies=[Depends(require_admin)])
+def darts_admin_delete_sponsor(sponsor_id: int):
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM darts_sponsors WHERE id=%s;", (sponsor_id,))
+        if cur.rowcount != 1:
+            raise HTTPException(status_code=404, detail="Sponsor nicht gefunden.")
+        cur.execute(
+            "INSERT INTO darts_sponsor_audit (sponsor_id, action) VALUES (%s, 'deleted');",
+            (sponsor_id,),
+        )
+        conn.commit()
+    return {"status": "success"}
+
+
+@app.post("/api/v1/darts/admin/sponsors/{sponsor_id}/logo", dependencies=[Depends(require_admin)])
+async def darts_admin_upload_sponsor_logo(sponsor_id: int, logo: UploadFile = File(...)):
+    media_type, data = _validated_player_image(await logo.read(3 * 1024 * 1024 + 1))
+    version = int(datetime.now(timezone.utc).timestamp())
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE darts_sponsors SET logo_data=%s, logo_media_type=%s, logo_version=%s,
+                updated_at=CURRENT_TIMESTAMP WHERE id=%s;
+            """,
+            (data, media_type, version, sponsor_id),
+        )
+        if cur.rowcount != 1:
+            raise HTTPException(status_code=404, detail="Sponsor nicht gefunden.")
+        cur.execute(
+            "INSERT INTO darts_sponsor_audit (sponsor_id, action) VALUES (%s, 'logo_uploaded');",
+            (sponsor_id,),
+        )
+        conn.commit()
+    return {"status": "success", "image": f"/api/v1/darts/sponsors/{sponsor_id}/logo?v={version}"}
+
+
+@app.delete("/api/v1/darts/admin/sponsors/{sponsor_id}/logo", dependencies=[Depends(require_admin)])
+def darts_admin_delete_sponsor_logo(sponsor_id: int):
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """UPDATE darts_sponsors SET logo_data=NULL, logo_media_type=NULL,
+               logo_version=logo_version+1, updated_at=CURRENT_TIMESTAMP WHERE id=%s;""",
+            (sponsor_id,),
+        )
+        if cur.rowcount != 1:
+            raise HTTPException(status_code=404, detail="Sponsor nicht gefunden.")
+        cur.execute(
+            "INSERT INTO darts_sponsor_audit (sponsor_id, action) VALUES (%s, 'logo_deleted');",
+            (sponsor_id,),
+        )
+        conn.commit()
+    return {"status": "success"}
+
+
+@app.get("/api/v1/darts/sponsors/{sponsor_id}/logo")
+def darts_sponsor_logo(sponsor_id: int):
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT logo_data, logo_media_type, logo_version FROM darts_sponsors WHERE id=%s;",
+            (sponsor_id,),
+        )
+        row = cur.fetchone()
+    if not row or row[0] is None:
+        raise HTTPException(status_code=404, detail="Kein Sponsorlogo vorhanden.")
+    return Response(
+        content=bytes(row[0]), media_type=row[1] or "image/webp",
+        headers={"Cache-Control": "public, max-age=31536000, immutable", "ETag": f'"sponsor-{sponsor_id}-{row[2]}"'},
     )
 
 

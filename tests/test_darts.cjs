@@ -56,16 +56,20 @@ assert.deepEqual(JSON.parse(JSON.stringify(dartsPlayerStats({updatedAt:'2026-09-
 });
 const dartsSponsors = vm.runInContext('dartsSponsors',context);
 const sponsorConfig = {displaySeconds:2,sponsors:[
-  {id:'active',name:'Lokaler Betrieb',image:'/pics/sponsors/betrieb.png',href:'https://example.com',placements:['top','inline'],startsAt:'2026-01-01',endsAt:'2026-12-31'},
+  {id:'active',name:'Hauptpartner',type:'main',image:'/api/v1/darts/sponsors/12/logo?v=4',href:'https://example.com',placements:['top','footer','tv'],priority:100,startsAt:'2026-01-01',endsAt:'2026-12-31'},
+  {id:'team',name:'Team B Partner',type:'team',teams:['B'],placements:['tv','match'],priority:20},
   {id:'old',name:'Abgelaufen',startsAt:'2025-01-01',endsAt:'2025-12-31'},
   {id:'unsafe',name:'Unsicher',image:'https://tracker.test/logo.png',href:'javascript:alert(1)',placements:['inline']},
 ]};
 const sponsorResult = dartsSponsors(sponsorConfig,Date.parse('2026-09-21T12:00:00Z'));
 assert.equal(sponsorResult.displaySeconds,6);
-assert.equal(sponsorResult.sponsors.length,2);
+assert.equal(sponsorResult.sponsors.length,3);
 assert.equal(sponsorResult.sponsors[0].href,'https://example.com/');
-assert.equal(sponsorResult.sponsors[1].image,'');
-assert.equal(sponsorResult.sponsors[1].href,'');
+assert.equal(sponsorResult.sponsors[0].image,'/api/v1/darts/sponsors/12/logo?v=4');
+assert.deepEqual(JSON.parse(JSON.stringify(sponsorResult.sponsors[1].teams)),['B']);
+assert.deepEqual(JSON.parse(JSON.stringify(sponsorResult.sponsors[1].placements)),['tv','match']);
+assert.equal(sponsorResult.sponsors[2].image,'');
+assert.equal(sponsorResult.sponsors[2].href,'');
 const team = DARTS_TEAMS[3];
 const dartsLayout = vm.runInContext('dartsLayout',context);
 for (const count of [1,2,3,4]) {
@@ -135,6 +139,11 @@ assert.match(html,/id="closeLivePushAlert"/);
 assert.match(html,/role="switch"/);
 assert.match(html,/id="sponsorTop"/);
 assert.match(html,/id="sponsorInline"/);
+assert.match(html,/id="sponsorFooter"/);
+assert.match(html,/id="sponsorTv"/);
+assert.match(html,/id="sponsorMatch"/);
+assert.match(html,/id="tvTeamControls"/);
+assert.match(html,/data-tv-team="A"/);
 assert.match(html,/href="\/impressum"/);
 assert.match(html,/href="\/datenschutz"/);
 assert.match(html,/href="\/darts-admin"/);
@@ -145,7 +154,10 @@ assert.match(fs.readFileSync('static/darts.css','utf8'),/data-theme="dark"/);
 assert.match(script,/function renderMatchCenter\(data\)/);
 assert.match(script,/function makeTeamJump\(code/);
 assert.match(script,/Mannschaftsseite öffnen/);
+assert.match(script,/fetch\('\/api\/v1\/darts\/sponsors'/);
 assert.match(script,/fetch\('\/static\/darts-sponsors\.json'/);
+assert.match(script,/clubiq_darts_tv_teams/);
+assert.match(script,/data-tv-team/);
 assert.match(script,/Notification\.requestPermission\(\)/);
 assert.match(script,/\/api\/v1\/darts\/push\/subscribe/);
 assert.match(script,/clubiq-darts-push/);

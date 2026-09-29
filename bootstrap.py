@@ -253,6 +253,40 @@ CREATE TABLE IF NOT EXISTS darts_player_profile_audit (
 );
 CREATE INDEX IF NOT EXISTS idx_darts_player_profile_audit_time
 ON darts_player_profile_audit(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS darts_sponsors (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(80) NOT NULL,
+    sponsor_type VARCHAR(20) NOT NULL DEFAULT 'club',
+    website TEXT,
+    team_codes JSONB NOT NULL DEFAULT '[]'::jsonb,
+    placements JSONB NOT NULL DEFAULT '["footer"]'::jsonb,
+    event_name VARCHAR(120),
+    event_match_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+    starts_at TIMESTAMPTZ,
+    ends_at TIMESTAMPTZ,
+    priority INTEGER NOT NULL DEFAULT 0,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    logo_data BYTEA,
+    logo_media_type VARCHAR(30),
+    logo_version BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK (sponsor_type IN ('main','club','team','event')),
+    CHECK (starts_at IS NULL OR ends_at IS NULL OR starts_at <= ends_at)
+);
+CREATE INDEX IF NOT EXISTS idx_darts_sponsors_active_priority
+ON darts_sponsors(active, priority DESC, id);
+
+CREATE TABLE IF NOT EXISTS darts_sponsor_audit (
+    id BIGSERIAL PRIMARY KEY,
+    sponsor_id BIGINT,
+    action VARCHAR(40) NOT NULL,
+    detail_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_darts_sponsor_audit_time
+ON darts_sponsor_audit(created_at DESC);
 """
 
 DEFAULTS_SQL = """

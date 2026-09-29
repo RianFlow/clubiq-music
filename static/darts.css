@@ -88,6 +88,22 @@ button.primary { color:white; background:var(--green); border-color:var(--green)
 @media(prefers-reduced-motion:reduce) { .live-push-alert.show { animation:none; opacity:1; transform:translate(-50%,0); } .live-push-alert.show .live-push-alert-progress { animation:none; } }
 .sponsor-slot { max-width:1500px; margin:12px auto; padding:0 24px; }
 .sponsor-slot-inline { margin-top:8px; margin-bottom:14px; padding:0; }
+.sponsor-slot-footer { margin-top:22px; margin-bottom:8px; }
+.sponsor-slot-match { margin:0 auto 16px; padding:0 18px; }
+.sponsor-main { border-color:#d9bd58; box-shadow:inset 0 3px #e3c85f,0 5px 18px #173a340d; }
+.tv-team-controls { display:none; }
+body.tv-live .tv-team-controls { display:flex; align-items:center; gap:12px; padding:9px 18px; color:#d9e9e4; background:#0c1c18; border-bottom:1px solid #355047; }
+body.tv-live .tv-team-controls > span { color:#91b4aa; font-size:.72rem; font-weight:900; letter-spacing:.1em; text-transform:uppercase; }
+body.tv-live .tv-team-controls > div { display:flex; gap:7px; }
+body.tv-live .tv-team-controls button { min-width:42px; min-height:34px; padding:5px 10px; color:#d9e9e4; background:#142923; border:1px solid #426158; border-radius:8px; font-weight:900; }
+body.tv-live .tv-team-controls button[aria-pressed="true"] { color:#071411; background:#72dfc2; border-color:#72dfc2; }
+body.tv-live .tv-team-controls > strong { margin-left:auto; color:#f0d991; font-size:.82rem; }
+body.tv-live .today-actions label { display:none; }
+body.tv-live .sponsor-slot-tv { position:fixed; z-index:80; left:18px; right:18px; bottom:12px; max-width:none; margin:0; padding:0; }
+body.tv-live .sponsor-slot-tv .sponsor-banner { min-height:82px; color:#17332d; background:#fff; border:1px solid #d7ddd9; box-shadow:0 10px 34px #0008; }
+body.tv-live .sponsor-slot-tv .sponsor-caption { color:#66746f; }
+body.tv-live .sponsor-slot-tv .sponsor-identity img { height:58px; max-width:min(320px,42vw); }
+body.tv-live main { padding-bottom:108px; }
 .sponsor-banner { position:relative; display:flex; align-items:center; justify-content:center; gap:16px; min-height:74px; padding:10px 18px; overflow:hidden; color:#17332d; text-decoration:none; background:linear-gradient(120deg,#fffef9,#f0f3ed); border:1px solid var(--line); border-radius:14px; box-shadow:0 5px 18px #173a340d; animation:sponsor-in .35s ease-out; }
 a.sponsor-banner:hover { background:#fff; border-color:#acc2ba; box-shadow:0 7px 22px #173a3419; }
 .sponsor-caption { position:absolute; top:7px; left:10px; color:#72807b; font-size:.58rem; font-weight:750; letter-spacing:.1em; text-transform:uppercase; }
@@ -507,7 +523,7 @@ body:fullscreen .brand img { width:40px; height:40px; }
 body:fullscreen .header-club-logo { width:92px; height:48px; margin-left:14px; margin-right:auto; }
 body:fullscreen .score-ticker { min-height:58px; }
 body:fullscreen .ticker-item,body:fullscreen .ticker-loading { min-height:58px; font-size:1rem; }
-body:fullscreen .sponsor-slot,body:fullscreen #pageStatus { display:none !important; }
+body:fullscreen .sponsor-slot:not(.sponsor-slot-tv),body:fullscreen #pageStatus { display:none !important; }
 body:fullscreen main { padding:10px 18px 14px; }
 body:fullscreen #todayPanel .sports-panel-head { min-height:86px; padding:12px 20px; }
 body:fullscreen #todayPanel .sports-panel-head h2 { font-size:clamp(1.8rem,3vw,2.7rem); }
@@ -667,6 +683,10 @@ body:fullscreen .today-time { font-size:.9rem; }
   .sponsor-banner { min-height:64px; padding:15px 10px 8px; border-radius:11px; }
   .sponsor-caption { top:5px; left:8px; }
   .sponsor-identity img { max-width:45vw; height:38px; }
+  body.tv-live .tv-team-controls { align-items:flex-start; flex-wrap:wrap; padding:8px 10px; }
+  body.tv-live .tv-team-controls > div { order:3; width:100%; display:grid; grid-template-columns:repeat(5,1fr); }
+  body.tv-live .tv-team-controls button { min-width:0; }
+  body.tv-live .sponsor-slot-tv { left:8px; right:8px; bottom:8px; }
   .score-ticker > strong { padding:0 9px; font-size:.68rem; }
   .ticker-updated { display:none; }
   .ticker-item,.ticker-loading { padding:0 14px; }

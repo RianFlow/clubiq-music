@@ -5,21 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#123b34">
   <meta name="robots" content="noindex,nofollow,noarchive">
-  <title>ClubIQ · Spielerverwaltung</title>
+  <title>ClubIQ · Dartsverwaltung</title>
   <link rel="icon" href="/pics/logo.png">
-  <link rel="stylesheet" href="/static/darts-admin.css?v=20260927-admin2">
-  <script defer src="/static/darts-admin.js?v=20260927-admin3"></script>
+  <link rel="stylesheet" href="/static/darts-admin.css?v=20260929-sponsor1">
+  <script defer src="/static/darts-admin.js?v=20260929-sponsor1"></script>
 </head>
 <body>
   <header class="admin-header">
-    <a href="/darts" class="brand"><img src="/pics/logo.png" alt=""><span>ClubIQ <b>Spielerverwaltung</b></span></a>
+    <a href="/darts" class="brand"><img src="/pics/logo.png" alt=""><span>ClubIQ <b>Dartsverwaltung</b></span></a>
     <button id="logout" type="button" hidden>Abmelden</button>
   </header>
   <main>
     <section id="loginPanel" class="login-card">
       <p class="eyebrow">Geschützter Bereich</p>
-      <h1>Spielerprofile verwalten</h1>
-      <p>Hier bearbeitest du Bilder und freiwillige Profilangaben. Änderungen erscheinen erst, wenn „Profil veröffentlichen“ aktiviert und gespeichert wurde.</p>
+      <h1>Dartsbereich verwalten</h1>
+      <p>Hier verwaltest du Spielerprofile und die Sponsoren des öffentlichen Matchcenters.</p>
       <form id="loginForm">
         <label>Verwaltungskennwort<input id="adminPassword" type="password" autocomplete="current-password" required></label>
         <button type="submit">Verwaltung öffnen</button>
@@ -28,11 +28,16 @@
     </section>
 
     <section id="adminPanel" hidden>
-      <div class="admin-intro">
-        <div><p class="eyebrow">SV Barver Darts</p><h1>Spielerprofile</h1><p>Profil auswählen, bearbeiten und bewusst veröffentlichen.</p></div>
-        <span id="dataStatus" role="status">Kader werden geladen …</span>
-      </div>
-      <div class="admin-layout">
+      <nav class="admin-tabs" aria-label="Dartsverwaltung">
+        <button id="playersAdminTab" type="button" class="active">Spielerprofile</button>
+        <button id="sponsorsAdminTab" type="button">Sponsoren</button>
+      </nav>
+      <section id="playersAdminView">
+        <div class="admin-intro">
+          <div><p class="eyebrow">SV Barver Darts</p><h1>Spielerprofile</h1><p>Profil auswählen, bearbeiten und bewusst veröffentlichen.</p></div>
+          <span id="dataStatus" role="status">Kader werden geladen …</span>
+        </div>
+        <div class="admin-layout">
         <aside class="player-browser">
           <button id="newPlayer" type="button">+ Neuen Spieler anlegen</button>
           <label>Spieler suchen<input id="playerSearch" type="search" placeholder="Name oder Alias" autocomplete="off"></label>
@@ -70,7 +75,67 @@
           <div class="form-actions"><button type="submit">Änderungen speichern</button><a id="publicPreview" href="/darts" target="_blank" rel="noopener">Öffentliche Seite ansehen</a></div>
           <p id="formStatus" role="status" hidden></p>
         </form>
-      </div>
+        </div>
+      </section>
+
+      <section id="sponsorsAdminView" hidden>
+        <div class="admin-intro">
+          <div><p class="eyebrow">Partner & Werbung</p><h1>Sponsoren</h1><p>Hauptpartner, Vereinspartner, Teampartner und Veranstaltungspartner zentral verwalten.</p></div>
+          <span id="sponsorDataStatus" role="status">Sponsoren werden geladen …</span>
+        </div>
+        <div class="admin-layout">
+          <aside class="player-browser sponsor-browser">
+            <button id="newSponsor" type="button">+ Neuen Sponsor anlegen</button>
+            <label>Sponsor suchen<input id="sponsorSearch" type="search" placeholder="Name oder Veranstaltung" autocomplete="off"></label>
+            <label>Typ<select id="sponsorTypeFilter"><option value="all">Alle Typen</option><option value="main">Hauptpartner</option><option value="club">Vereinspartner</option><option value="team">Teampartner</option><option value="event">Veranstaltungspartner</option></select></label>
+            <div id="sponsorList" class="player-list"></div>
+          </aside>
+
+          <section id="sponsorEditorEmpty" class="editor-card empty-state"><strong>Wähle links einen Sponsor aus.</strong><span>Oder lege einen neuen Partner an.</span></section>
+          <form id="sponsorForm" class="editor-card" hidden>
+            <div class="profile-heading">
+              <div id="sponsorLogoPreview" class="photo-preview sponsor-logo-preview"><span>Logo</span></div>
+              <div><p id="sponsorTypeLabel" class="eyebrow">Sponsor</p><h2 id="sponsorNameHeading">Neuer Sponsor</h2><span id="sponsorMeta">Noch nicht gespeichert</span></div>
+            </div>
+            <input id="sponsorId" type="hidden">
+            <div class="image-actions">
+              <label class="file-button">Logo auswählen<input id="sponsorLogo" type="file" accept="image/jpeg,image/png,image/webp"></label>
+              <button id="deleteSponsorLogo" class="secondary danger" type="button">Logo entfernen</button>
+              <small>Am besten ein freigestelltes PNG oder WebP mit transparentem Hintergrund verwenden.</small>
+            </div>
+            <div class="form-grid">
+              <label>Name<input id="sponsorName" minlength="2" maxlength="80" required></label>
+              <label>Typ<select id="sponsorType" required><option value="main">Hauptpartner</option><option value="club">Vereinspartner</option><option value="team">Teampartner</option><option value="event">Veranstaltungspartner</option></select></label>
+              <label class="wide">Webseite<input id="sponsorWebsite" type="url" maxlength="500" placeholder="Webseite des Sponsors"></label>
+              <label>Priorität<input id="sponsorPriority" type="number" min="-1000" max="1000" value="0"></label>
+              <label>Veranstaltung<input id="sponsorEventName" maxlength="120" placeholder="z. B. Sommerturnier 2027"></label>
+              <label class="wide">3K Match-IDs für Veranstaltung<input id="sponsorMatchIds" inputmode="numeric" placeholder="z. B. 1280553, 1296302"></label>
+              <label>Gültig von<input id="sponsorStartsAt" type="datetime-local"></label>
+              <label>Gültig bis<input id="sponsorEndsAt" type="datetime-local"></label>
+            </div>
+            <fieldset class="sponsor-options"><legend>Mannschaften</legend>
+              <label><input type="checkbox" data-sponsor-team value="A"> Barver A</label>
+              <label><input type="checkbox" data-sponsor-team value="B"> Barver B</label>
+              <label><input type="checkbox" data-sponsor-team value="C"> Barver C</label>
+              <label><input type="checkbox" data-sponsor-team value="D"> Barver D</label>
+            </fieldset>
+            <fieldset class="sponsor-options"><legend>Wo anzeigen?</legend>
+              <label><input type="checkbox" data-sponsor-placement value="top"> Startseite oben</label>
+              <label><input type="checkbox" data-sponsor-placement value="inline"> Im Inhalt</label>
+              <label><input type="checkbox" data-sponsor-placement value="footer" checked> Partnerleiste unten</label>
+              <label><input type="checkbox" data-sponsor-placement value="tv"> TV-Modus</label>
+              <label><input type="checkbox" data-sponsor-placement value="match"> Spielbericht</label>
+            </fieldset>
+            <label class="publish-switch"><input id="sponsorActive" type="checkbox" checked><span><strong>Sponsor aktiv</strong><small>Zeiträume und Event-Zuordnungen werden zusätzlich berücksichtigt.</small></span></label>
+            <div class="form-actions">
+              <button type="submit">Sponsor speichern</button>
+              <button id="deleteSponsor" type="button" class="secondary danger">Sponsor löschen</button>
+              <a href="/darts" target="_blank" rel="noopener">Öffentliche Seite ansehen</a>
+            </div>
+            <p id="sponsorFormStatus" role="status" hidden></p>
+          </form>
+        </div>
+      </section>
     </section>
   </main>
   <dialog id="newPlayerDialog">

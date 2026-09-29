@@ -169,7 +169,10 @@ function dartsSponsors(config, now=Date.now()) {
   const displaySeconds = Number.isFinite(config?.displaySeconds) ? Math.min(60,Math.max(6,Math.round(config.displaySeconds))) : 12;
   const sponsors = Array.isArray(config?.sponsors) ? config.sponsors.flatMap((item,index)=>{
     if (!item || typeof item.name !== 'string' || !item.name.trim() || item.name.length > 80) return [];
-    const image = typeof item.image === 'string' && /^\/pics\/sponsors\/[a-z0-9][a-z0-9._-]*\.(?:avif|jpe?g|png|svg|webp)$/i.test(item.image) ? item.image : '';
+    const image = typeof item.image === 'string' && (
+      /^\/pics\/sponsors\/[a-z0-9][a-z0-9._-]*\.(?:avif|jpe?g|png|svg|webp)$/i.test(item.image)
+      || /^\/api\/v1\/darts\/sponsors\/\d+\/logo(?:\?v=\d+)?$/i.test(item.image)
+    ) ? item.image : '';
     let href = '';
     if (typeof item.href === 'string' && item.href) {
       try { const url=new URL(item.href); if (url.protocol==='https:' && !url.username && !url.password) href=url.href; } catch (_) {}
@@ -177,10 +180,16 @@ function dartsSponsors(config, now=Date.now()) {
     const starts = item.startsAt ? Date.parse(item.startsAt) : -Infinity;
     const ends = item.endsAt ? Date.parse(item.endsAt) : Infinity;
     if (Number.isNaN(starts) || Number.isNaN(ends) || starts > ends || now < starts || now > ends) return [];
-    const placements = Array.isArray(item.placements) ? [...new Set(item.placements.filter(value=>value==='top'||value==='inline'))] : ['top','inline'];
+    const placements = Array.isArray(item.placements)
+      ? [...new Set(item.placements.filter(value=>['top','inline','footer','tv','match'].includes(value)))]
+      : ['footer'];
     if (!placements.length) return [];
-    return [{id:String(item.id || index),name:item.name.trim(),image,href,placements}];
-  }) : [];
+    const type=['main','club','team','event'].includes(item.type)?item.type:'club';
+    const teams=Array.isArray(item.teams)?[...new Set(item.teams.filter(value=>['A','B','C','D'].includes(value)))]:[];
+    const eventMatchIds=Array.isArray(item.eventMatchIds)?[...new Set(item.eventMatchIds.map(Number).filter(value=>Number.isInteger(value)&&value>0))]:[];
+    const priority=Number.isInteger(item.priority)?Math.max(-1000,Math.min(1000,item.priority)):0;
+    return [{id:String(item.id || index),name:item.name.trim(),image,href,placements,type,teams,eventName:typeof item.eventName==='string'?item.eventName.trim():'',eventMatchIds,priority}];
+  }).sort((a,b)=>b.priority-a.priority||a.name.localeCompare(b.name,'de')) : [];
   return {displaySeconds,sponsors};
 }
 function dartsLayout(raw) {
@@ -243,29 +252,87 @@ function initDarts() {
   try { savedTheme=localStorage.getItem(themeKey); } catch (_) {}
   applyTheme(dartsTheme(savedTheme,window.matchMedia?.('(prefers-color-scheme: dark)').matches));
   q('#themeToggle').addEventListener('click',()=>applyTheme(document.documentElement.dataset.theme==='dark'?'light':'dark',true));
+  const tvTeamKey='clubiq_darts_tv_teams', allTvTeams=['A','B','C','D'];
+  let tvTeams=new Set(allTvTeams);
+  try {
+    const queryTeams=new URLSearchParams(location.search).get('teams');
+    const stored=queryTeams ? queryTeams.split(',') : JSON.parse(localStorage.getItem(tvTeamKey) || '[]');
+    const valid=[...new Set((Array.isArray(stored)?stored:[]).filter(code=>allTvTeams.includes(code)))];
+    if (valid.length) tvTeams=new Set(valid);
+  } catch (_) {}
+  function updateTvTeamControls() {
+    const count=q('#tvTeamCount'); if(count) count.textContent=`${tvTeams.size} ${tvTeams.size===1?'Team':'Teams'}`;
+    q('#tvTeamControls')?.querySelectorAll('[data-tv-team]').forEach(button=>{
+      const code=button.dataset.tvTeam;
+      button.setAttribute('aria-pressed',String(code==='all'?tvTeams.size===allTvTeams.length:tvTeams.has(code)));
+    });
+  }
+  function rememberTvTeams() {
+    try { localStorage.setItem(tvTeamKey,JSON.stringify([...tvTeams])); } catch (_) {}
+  }
+  function sponsorContext(slot) {
+    const placement=slot.dataset.placement || '';
+    if (placement==='tv') {
+      const live=(tickerData?.items || []).filter(item=>item.kind==='live' && (item.barverTeams || [barverTeam(item)]).filter(Boolean).some(code=>tvTeams.has(code)));
+      return {teams:new Set([...tvTeams]),matchIds:new Set(live.map(item=>Number(item.id)).filter(Number.isInteger))};
+    }
+    if (placement==='match') {
+      return {
+        teams:new Set(String(slot.dataset.teams || '').split(',').filter(code=>allTvTeams.includes(code))),
+        matchIds:new Set(String(slot.dataset.matchId || '').split(',').map(Number).filter(Number.isInteger)),
+      };
+    }
+    return {teams:new Set(),matchIds:new Set()};
+  }
+  function sponsorEligible(sponsor, slot) {
+    if (!sponsor.placements.includes(slot.dataset.placement)) return false;
+    const context=sponsorContext(slot);
+    if (sponsor.type==='team') return sponsor.teams.some(code=>context.teams.has(code));
+    if (sponsor.type==='event') {
+      if (sponsor.eventMatchIds.length) return sponsor.eventMatchIds.some(id=>context.matchIds.has(id));
+      if (sponsor.teams.length && context.teams.size) return sponsor.teams.some(code=>context.teams.has(code));
+      return true;
+    }
+    return true;
+  }
+  function sponsorCaption(sponsor) {
+    if (sponsor.type==='main') return 'Hauptpartner';
+    if (sponsor.type==='event') return sponsor.eventName || 'Veranstaltungspartner';
+    if (sponsor.type==='team') return sponsor.teams.length===1?`Partner Barver ${sponsor.teams[0]}`:'Teampartner';
+    return 'Unterstützt von';
+  }
   function renderSponsor(slot, sponsor) {
-    const content=document.createElement(sponsor.href?'a':'div'); content.className='sponsor-banner';
+    const content=document.createElement(sponsor.href?'a':'div'); content.className=`sponsor-banner sponsor-${sponsor.type}`;
     if (sponsor.href) { content.href=sponsor.href; content.target='_blank'; content.rel='noopener noreferrer sponsored'; }
-    const caption=document.createElement('span'); caption.className='sponsor-caption'; caption.textContent='Unterstützt von';
+    const caption=document.createElement('span'); caption.className='sponsor-caption'; caption.textContent=sponsorCaption(sponsor);
     const identity=document.createElement('span'); identity.className='sponsor-identity';
     if (sponsor.image) { const logo=document.createElement('img'); logo.src=sponsor.image; logo.alt=''; logo.loading='lazy'; logo.decoding='async'; identity.append(logo); }
     const name=document.createElement('strong'); name.textContent=sponsor.name; identity.append(name);
     content.append(caption,identity); slot.replaceChildren(content); slot.hidden=false;
   }
-  function startSponsorRotation(config) {
-    const slots=[...document.querySelectorAll('.sponsor-slot')];
-    const states=slots.map((slot,offset)=>({slot,items:config.sponsors.filter(item=>item.placements.includes(slot.dataset.placement)),index:offset}));
-    const show=state=>{
-      if (!state.items.length) { state.slot.hidden=true; state.slot.replaceChildren(); return; }
-      renderSponsor(state.slot,state.items[state.index % state.items.length]); state.index+=1;
-    };
-    states.forEach(show);
-    if (states.some(state=>state.items.length>1)) window.setInterval(()=>states.forEach(show),config.displaySeconds*1000);
+  let sponsorConfig={displaySeconds:12,sponsors:[]}, sponsorTimer=null;
+  const sponsorIndexes=new Map();
+  function refreshSponsorSlots(advance=false) {
+    for (const slot of document.querySelectorAll('.sponsor-slot')) {
+      const items=sponsorConfig.sponsors.filter(item=>sponsorEligible(item,slot));
+      if (!items.length) { slot.hidden=true; slot.replaceChildren(); continue; }
+      const current=sponsorIndexes.get(slot.id)||0;
+      const index=advance?(current+1)%items.length:current%items.length;
+      sponsorIndexes.set(slot.id,index);
+      renderSponsor(slot,items[index]);
+    }
   }
-  fetch('/static/darts-sponsors.json',{headers:{Accept:'application/json'}})
-    .then(response=>response.ok?response.json():Promise.reject(new Error('sponsors unavailable')))
+  function startSponsorRotation(config) {
+    sponsorConfig=config; sponsorIndexes.clear(); refreshSponsorSlots(false);
+    if (sponsorTimer) window.clearInterval(sponsorTimer);
+    if (config.sponsors.length>1) sponsorTimer=window.setInterval(()=>refreshSponsorSlots(true),config.displaySeconds*1000);
+  }
+  fetch('/api/v1/darts/sponsors',{headers:{Accept:'application/json'},cache:'no-store'})
+    .then(response=>response.ok?response.json():Promise.reject(new Error('sponsor api unavailable')))
+    .catch(()=>fetch('/static/darts-sponsors.json',{headers:{Accept:'application/json'}}).then(response=>response.ok?response.json():Promise.reject(new Error('sponsors unavailable'))))
     .then(config=>startSponsorRotation(dartsSponsors(config)))
     .catch(()=>document.querySelectorAll('.sponsor-slot').forEach(slot=>{ slot.hidden=true; slot.replaceChildren(); }));
+  updateTvTeamControls();
   let playerProfiles={}, playerProfileBase={}, playerStatCache={};
   const mergePlayerProfiles=()=>{
     const ids=new Set([...Object.keys(playerProfileBase),...Object.keys(playerStatCache)]);
@@ -566,15 +633,19 @@ function initDarts() {
       || String(a.plannedAt || '').localeCompare(String(b.plannedAt || ''))
       || Number(a.id || 0)-Number(b.id || 0)
     );
-    const live = wanted.filter(item=>item.kind==='live');
+    const liveAll = wanted.filter(item=>item.kind==='live');
+    const tvActive=document.body.classList.contains('tv-live');
+    const live = tvActive ? liveAll.filter(item=>(item.barverTeams || [barverTeam(item)]).filter(Boolean).some(code=>tvTeams.has(code))) : liveAll;
     const upcoming = wanted.filter(item=>item.kind==='upcoming');
     const finals = wanted.filter(item=>item.kind==='final');
-    const shown = document.body.classList.contains('tv-live') ? live : live.slice(0,1);
+    const shown = tvActive ? live : live.slice(0,1);
     target.dataset.liveCount=String(shown.length);
     const today = new Date().toLocaleDateString('de-DE');
     const playingToday = shown.some(item=>item.plannedAt && new Date(item.plannedAt).toLocaleDateString('de-DE')===today);
     q('#todayHeading').textContent = live.length ? 'Jetzt am Board' : 'Dein Barver-Spieltag';
-    q('#todaySubtitle').textContent = live.length ? `${live.length} Begegnung${live.length===1?'':'en'} ${live.length===1?'läuft':'laufen'} gerade. Weitere Spiele findest du unter „Heute“.` : 'Heute, nächste Termine und Ergebnisse – alle Teams im Blick.';
+    q('#todaySubtitle').textContent = tvActive && liveAll.length && !live.length
+      ? 'Für deine TV-Auswahl läuft gerade keine Begegnung.'
+      : live.length ? `${live.length} Begegnung${live.length===1?'':'en'} ${live.length===1?'läuft':'laufen'} gerade. Weitere Spiele findest du unter „Heute“.` : 'Heute, nächste Termine und Ergebnisse – alle Teams im Blick.';
     if (!shown.length) { const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent='Gerade kein Live-Spiel gemeldet.'; target.replaceChildren(empty); return; }
     const fragment=document.createDocumentFragment();
     for (const item of shown) {
@@ -672,6 +743,7 @@ function initDarts() {
     renderCompleteMatchCenter();
     renderToday(tickerData);
     renderHomeSchedule();
+    refreshSponsorSlots(false);
     if (!Array.isArray(tickerData.items) || !tickerData.items.length) {
       const empty = document.createElement('span'); empty.className='ticker-loading'; empty.textContent='Derzeit keine Barver-Begegnungen im aktuellen Zeitraum.';
       track.replaceChildren(empty); return;
@@ -1397,6 +1469,11 @@ function initDarts() {
   async function openMatch(matchId) {
     if (!Number.isInteger(Number(matchId)) || Number(matchId)<=0) return;
     q('#matchDialog').dataset.matchId=String(matchId); activeMatchDetailData=null;
+    const sponsorSlot=q('#sponsorMatch');
+    const knownMatch=(seasonData?.matches || []).find(item=>item.id===Number(matchId)) || (tickerData.items || []).find(item=>item.id===Number(matchId));
+    sponsorSlot.dataset.matchId=String(matchId);
+    sponsorSlot.dataset.teams=(knownMatch?.barverTeams || [barverTeam(knownMatch)]).filter(Boolean).join(',');
+    refreshSponsorSlots(false);
     q('#matchHeading').textContent='Begegnung wird geladen'; q('#matchDetail').innerHTML='<p class="panel-loading">Spielbericht wird geladen …</p>';
     if (!q('#matchDialog').open) q('#matchDialog').showModal();
     try {
@@ -1572,6 +1649,15 @@ function initDarts() {
   q('#reloadSeason').addEventListener('click',()=>loadSeason(true));
   q('#favoriteTeam').value=favorite;
   q('#favoriteTeam').addEventListener('change',()=>{ favorite=q('#favoriteTeam').value; try { localStorage.setItem(favoriteKey,favorite); } catch (_) {} renderTicker(tickerData); });
+  q('#tvTeamControls').addEventListener('click',event=>{
+    const button=event.target.closest('button[data-tv-team]'); if(!button) return;
+    const code=button.dataset.tvTeam;
+    if (code==='all') tvTeams=new Set(allTvTeams);
+    else if (allTvTeams.includes(code)) {
+      if (tvTeams.has(code) && tvTeams.size>1) tvTeams.delete(code); else tvTeams.add(code);
+    }
+    rememberTvTeams(); updateTvTeamControls(); renderToday(tickerData); refreshSponsorSlots(false);
+  });
   for (const block of q('#leagueOverview').querySelectorAll('.league-block')) {
     const select=block.querySelector('[data-role="round"]');
     select.addEventListener('change',()=>loadLeague(block.dataset.league,select.value));
@@ -1700,7 +1786,7 @@ function initDarts() {
   document.addEventListener('fullscreenchange',()=>{
     const active=Boolean(document.fullscreenElement);
     document.body.classList.toggle('tv-live',active);
-    renderToday(tickerData);
+    updateTvTeamControls(); renderToday(tickerData); refreshSponsorSlots(false);
     q('#fullscreen').textContent=active ? 'TV-Modus beenden' : 'TV-Modus';
   });
 }
