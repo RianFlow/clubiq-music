@@ -2,7 +2,9 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-from darts_feed import _barver_code_from_name, _game_events, _is_special_event, _leg_events, _live_game_events, _load_team_profile, _performance_events, _preferred_round, _preferred_round_by_matches, _public_game, _public_live_games, _relevant_rounds, _round_status, _season_match, _special_match, _standings, _team_record, _ticker_item
+import requests
+import darts_feed
+from darts_feed import _barver_code_from_name, _game_events, _is_special_event, _leg_events, _live_game_events, _load_league_season, _load_season, _load_team_profile, _performance_events, _preferred_round, _preferred_round_by_matches, _public_game, _public_live_games, _relevant_rounds, _round_status, _season_match, _special_match, _standings, _team_record, _ticker_item
 
 
 class DartsFeedTests(unittest.TestCase):
@@ -181,6 +183,68 @@ class DartsFeedTests(unittest.TestCase):
         record = _team_record(matches, "A")
         self.assertEqual((record["played"], record["wins"], record["draws"], record["losses"]), (3, 1, 1, 1))
         self.assertEqual(record["form"], ["S", "N", "U"])
+
+    def test_single_round_timeout_keeps_league_season_available(self):
+        league = {
+            "key": "test", "name": "Testliga", "short": "TL",
+            "event": 999, "phase": 888, "teams": {10: "A"},
+        }
+        rounds = [
+            {"id": 1, "name": "Spieltag 1", "dateFrom": "2026-09-01T00:00:00+00:00", "dateTo": "2026-09-02T00:00:00+00:00"},
+            {"id": 2, "name": "Spieltag 2", "dateFrom": "2026-10-01T00:00:00+00:00", "dateTo": "2026-10-02T00:00:00+00:00"},
+        ]
+        good_match = {
+            "id": 77, "eventId": 999, "statusCd": "OPEN",
+            "participantHome": {"id": 10, "displayName": "SV Barver Darts A", "rankingPos": 1},
+            "participantGuest": {"id": 20, "displayName": "Gast", "rankingPos": 2},
+            "datePlanned": "2026-10-01T18:00:00+00:00",
+        }
+
+        def fake_get(url):
+            if url.endswith("/phase/888"):
+                return {"rounds": rounds}
+            if url.endswith("/round/1"):
+                raise requests.Timeout("3K zu langsam")
+            if url.endswith("/round/2"):
+                return {"matches": [good_match]}
+            raise AssertionError(url)
+
+        with patch("darts_feed._public_get", side_effect=fake_get):
+            result = _load_league_season(league, datetime(2026, 9, 29, tzinfo=timezone.utc))
+
+        self.assertTrue(result["degraded"])
+        self.assertEqual(result["missingRoundIds"], [1])
+        self.assertEqual(result["loadedRoundCount"], 1)
+        self.assertEqual(result["totalRoundCount"], 2)
+        self.assertEqual([item["id"] for item in result["matches"]], [77])
+        self.assertEqual(result["selectedRound"]["id"], 2)
+
+    def test_one_failed_league_does_not_abort_whole_season(self):
+        leagues = (
+            {"key": "one", "name": "Liga Eins", "short": "L1", "event": 1, "phase": 11, "teams": {101: "A"}},
+            {"key": "two", "name": "Liga Zwei", "short": "L2", "event": 2, "phase": 22, "teams": {202: "D"}},
+        )
+        loaded = {
+            "league": {"key": "one", "name": "Liga Eins", "short": "L1"},
+            "rounds": [], "selectedRound": None, "standings": [], "matches": [],
+            "degraded": False, "missingRoundIds": [], "loadedRoundCount": 0, "totalRoundCount": 0, "warning": None,
+        }
+
+        def fake_league(league, now):
+            if league["key"] == "two":
+                raise requests.Timeout("3K zu langsam")
+            return loaded
+
+        with patch.object(darts_feed, "LEAGUES", leagues), \
+             patch.object(darts_feed, "_load_league_season", side_effect=fake_league), \
+             patch.object(darts_feed, "_get_special_events", return_value={"available": False, "events": [], "matches": []}), \
+             patch.object(darts_feed, "_load_team_profile", return_value={"name": "", "roster": [], "venue": {}, "weekday": None, "throwoffTime": None}):
+            result = _load_season(datetime(2026, 9, 29, tzinfo=timezone.utc))
+
+        self.assertTrue(result["degraded"])
+        self.assertEqual(len(result["warnings"]), 1)
+        self.assertEqual(result["warnings"][0]["league"], "two")
+        self.assertEqual([item["league"]["key"] for item in result["leagues"]], ["one", "two"])
 
     def test_team_profile_exposes_player_id_but_no_private_registration_data(self):
         payload = {"participant": {"displayName": "SV Barver Darts B", "teamSeason": {"teamMembers": [
