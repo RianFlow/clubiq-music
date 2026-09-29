@@ -771,8 +771,8 @@ def _validated_sponsor_payload(update: DartsSponsorUpdate) -> dict:
     if starts_at and ends_at and ends_at < starts_at:
         raise HTTPException(status_code=422, detail="Sponsor-Ende muss nach dem Start liegen.")
     event_name = _clean_profile_text(update.event_name)
-    if update.sponsor_type == "event" and not (event_name or match_ids or starts_at or ends_at):
-        raise HTTPException(status_code=422, detail="Ein Veranstaltungspartner braucht Event, Match-ID oder Zeitraum.")
+    if update.sponsor_type == "event" and not (match_ids or (starts_at and ends_at)):
+        raise HTTPException(status_code=422, detail="Ein Veranstaltungspartner braucht 3K Match-IDs oder einen vollständigen Zeitraum.")
     website = (update.website or "").strip()
     if website:
         parsed = urlparse(website)
