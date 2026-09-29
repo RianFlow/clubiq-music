@@ -142,6 +142,9 @@ class SecurityContractTests(unittest.TestCase):
             "/api/v1/darts/admin/roster-cache",
             "/api/v1/darts/admin/players/{player_id}",
             "/api/v1/darts/admin/players/{player_id}/photo",
+            "/api/v1/darts/admin/sponsors",
+            "/api/v1/darts/admin/sponsors/{sponsor_id}",
+            "/api/v1/darts/admin/sponsors/{sponsor_id}/logo",
         ):
             routes = [route for route in main.app.routes if getattr(route, "path", None) == path]
             self.assertTrue(routes, path)
@@ -159,6 +162,24 @@ class SecurityContractTests(unittest.TestCase):
         self.assertEqual(created.team, "C")
         with self.assertRaises(ValidationError):
             main.DartsPlayerCreate(name="X", team="E")
+
+        sponsor = main.DartsSponsorUpdate(
+            name="Hauptpartner", sponsor_type="main", placements=["footer", "tv"], priority=100
+        )
+        parsed = main._validated_sponsor_payload(sponsor)
+        self.assertEqual(parsed["placements"], ["footer", "tv"])
+        with self.assertRaises(HTTPException):
+            main._validated_sponsor_payload(main.DartsSponsorUpdate(
+                name="Teampartner", sponsor_type="team", teams=[], placements=["tv"]
+            ))
+        with self.assertRaises(HTTPException):
+            main._validated_sponsor_payload(main.DartsSponsorUpdate(
+                name="Eventpartner", sponsor_type="event", placements=["match"]
+            ))
+        with self.assertRaises(HTTPException):
+            main._validated_sponsor_payload(main.DartsSponsorUpdate(
+                name="Unsicher", website="http://example.test", placements=["footer"]
+            ))
 
     def test_darts_profile_images_validate_content_not_filename(self):
         media_type, data = main._validated_player_image(b"RIFF\x00\x00\x00\x00WEBPpayload")
@@ -289,6 +310,8 @@ class OfflineFrontendContractTests(unittest.TestCase):
         self.assertIn("reuse_previous_playlist", schema)
         self.assertIn("darts_player_profiles", schema)
         self.assertIn("darts_player_profile_audit", schema)
+        self.assertIn("darts_sponsors", schema)
+        self.assertIn("darts_sponsor_audit", schema)
 
     def test_darts_admin_ui_is_local_and_consent_aware(self):
         html_source = (ROOT / "darts-admin.html").read_text(encoding="utf-8")
@@ -298,6 +321,10 @@ class OfflineFrontendContractTests(unittest.TestCase):
         self.assertIn("/api/v1/darts/admin/players", script_source)
         self.assertIn("Neuen Spieler anlegen", html_source)
         self.assertIn("/api/v1/darts/admin/roster-cache", script_source)
+        self.assertIn("/api/v1/darts/admin/sponsors", script_source)
+        self.assertIn("Hauptpartner", html_source)
+        self.assertIn("Veranstaltungspartner", html_source)
+        self.assertIn("data-sponsor-placement", html_source)
         self.assertIn("image/webp", script_source)
         self.assertNotRegex(html_source, r'https?://')
 
