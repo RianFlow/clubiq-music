@@ -252,29 +252,87 @@ function initDarts() {
   try { savedTheme=localStorage.getItem(themeKey); } catch (_) {}
   applyTheme(dartsTheme(savedTheme,window.matchMedia?.('(prefers-color-scheme: dark)').matches));
   q('#themeToggle').addEventListener('click',()=>applyTheme(document.documentElement.dataset.theme==='dark'?'light':'dark',true));
+  const tvTeamKey='clubiq_darts_tv_teams', allTvTeams=['A','B','C','D'];
+  let tvTeams=new Set(allTvTeams);
+  try {
+    const queryTeams=new URLSearchParams(location.search).get('teams');
+    const stored=queryTeams ? queryTeams.split(',') : JSON.parse(localStorage.getItem(tvTeamKey) || '[]');
+    const valid=[...new Set((Array.isArray(stored)?stored:[]).filter(code=>allTvTeams.includes(code)))];
+    if (valid.length) tvTeams=new Set(valid);
+  } catch (_) {}
+  function updateTvTeamControls() {
+    const count=q('#tvTeamCount'); if(count) count.textContent=`${tvTeams.size} ${tvTeams.size===1?'Team':'Teams'}`;
+    q('#tvTeamControls')?.querySelectorAll('[data-tv-team]').forEach(button=>{
+      const code=button.dataset.tvTeam;
+      button.setAttribute('aria-pressed',String(code==='all'?tvTeams.size===allTvTeams.length:tvTeams.has(code)));
+    });
+  }
+  function rememberTvTeams() {
+    try { localStorage.setItem(tvTeamKey,JSON.stringify([...tvTeams])); } catch (_) {}
+  }
+  function sponsorContext(slot) {
+    const placement=slot.dataset.placement || '';
+    if (placement==='tv') {
+      const live=(tickerData?.items || []).filter(item=>item.kind==='live' && (item.barverTeams || [barverTeam(item)]).filter(Boolean).some(code=>tvTeams.has(code)));
+      return {teams:new Set([...tvTeams]),matchIds:new Set(live.map(item=>Number(item.id)).filter(Number.isInteger))};
+    }
+    if (placement==='match') {
+      return {
+        teams:new Set(String(slot.dataset.teams || '').split(',').filter(code=>allTvTeams.includes(code))),
+        matchIds:new Set(String(slot.dataset.matchId || '').split(',').map(Number).filter(Number.isInteger)),
+      };
+    }
+    return {teams:new Set(),matchIds:new Set()};
+  }
+  function sponsorEligible(sponsor, slot) {
+    if (!sponsor.placements.includes(slot.dataset.placement)) return false;
+    const context=sponsorContext(slot);
+    if (sponsor.type==='team') return sponsor.teams.some(code=>context.teams.has(code));
+    if (sponsor.type==='event') {
+      if (sponsor.eventMatchIds.length) return sponsor.eventMatchIds.some(id=>context.matchIds.has(id));
+      if (sponsor.teams.length && context.teams.size) return sponsor.teams.some(code=>context.teams.has(code));
+      return true;
+    }
+    return true;
+  }
+  function sponsorCaption(sponsor) {
+    if (sponsor.type==='main') return 'Hauptpartner';
+    if (sponsor.type==='event') return sponsor.eventName || 'Veranstaltungspartner';
+    if (sponsor.type==='team') return sponsor.teams.length===1?`Partner Barver ${sponsor.teams[0]}`:'Teampartner';
+    return 'Unterstützt von';
+  }
   function renderSponsor(slot, sponsor) {
-    const content=document.createElement(sponsor.href?'a':'div'); content.className='sponsor-banner';
+    const content=document.createElement(sponsor.href?'a':'div'); content.className=`sponsor-banner sponsor-${sponsor.type}`;
     if (sponsor.href) { content.href=sponsor.href; content.target='_blank'; content.rel='noopener noreferrer sponsored'; }
-    const caption=document.createElement('span'); caption.className='sponsor-caption'; caption.textContent='Unterstützt von';
+    const caption=document.createElement('span'); caption.className='sponsor-caption'; caption.textContent=sponsorCaption(sponsor);
     const identity=document.createElement('span'); identity.className='sponsor-identity';
     if (sponsor.image) { const logo=document.createElement('img'); logo.src=sponsor.image; logo.alt=''; logo.loading='lazy'; logo.decoding='async'; identity.append(logo); }
     const name=document.createElement('strong'); name.textContent=sponsor.name; identity.append(name);
     content.append(caption,identity); slot.replaceChildren(content); slot.hidden=false;
   }
-  function startSponsorRotation(config) {
-    const slots=[...document.querySelectorAll('.sponsor-slot')];
-    const states=slots.map((slot,offset)=>({slot,items:config.sponsors.filter(item=>item.placements.includes(slot.dataset.placement)),index:offset}));
-    const show=state=>{
-      if (!state.items.length) { state.slot.hidden=true; state.slot.replaceChildren(); return; }
-      renderSponsor(state.slot,state.items[state.index % state.items.length]); state.index+=1;
-    };
-    states.forEach(show);
-    if (states.some(state=>state.items.length>1)) window.setInterval(()=>states.forEach(show),config.displaySeconds*1000);
+  let sponsorConfig={displaySeconds:12,sponsors:[]}, sponsorTimer=null;
+  const sponsorIndexes=new Map();
+  function refreshSponsorSlots(advance=false) {
+    for (const slot of document.querySelectorAll('.sponsor-slot')) {
+      const items=sponsorConfig.sponsors.filter(item=>sponsorEligible(item,slot));
+      if (!items.length) { slot.hidden=true; slot.replaceChildren(); continue; }
+      const current=sponsorIndexes.get(slot.id)||0;
+      const index=advance?(current+1)%items.length:current%items.length;
+      sponsorIndexes.set(slot.id,index);
+      renderSponsor(slot,items[index]);
+    }
   }
-  fetch('/static/darts-sponsors.json',{headers:{Accept:'application/json'}})
-    .then(response=>response.ok?response.json():Promise.reject(new Error('sponsors unavailable')))
+  function startSponsorRotation(config) {
+    sponsorConfig=config; sponsorIndexes.clear(); refreshSponsorSlots(false);
+    if (sponsorTimer) window.clearInterval(sponsorTimer);
+    if (config.sponsors.length>1) sponsorTimer=window.setInterval(()=>refreshSponsorSlots(true),config.displaySeconds*1000);
+  }
+  fetch('/api/v1/darts/sponsors',{headers:{Accept:'application/json'},cache:'no-store'})
+    .then(response=>response.ok?response.json():Promise.reject(new Error('sponsor api unavailable')))
+    .catch(()=>fetch('/static/darts-sponsors.json',{headers:{Accept:'application/json'}}).then(response=>response.ok?response.json():Promise.reject(new Error('sponsors unavailable'))))
     .then(config=>startSponsorRotation(dartsSponsors(config)))
     .catch(()=>document.querySelectorAll('.sponsor-slot').forEach(slot=>{ slot.hidden=true; slot.replaceChildren(); }));
+  updateTvTeamControls();
   let playerProfiles={}, playerProfileBase={}, playerStatCache={};
   const mergePlayerProfiles=()=>{
     const ids=new Set([...Object.keys(playerProfileBase),...Object.keys(playerStatCache)]);
