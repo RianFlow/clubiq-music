@@ -1,9 +1,9 @@
 "use strict";
 
-const CACHE = "clubiq-music-shell-20260928-stats1";
+const CACHE = "clubiq-music-shell-20260929-sponsor1";
 const SHELL = [
   "/", "/remote", "/party", "/darts", "/impressum", "/datenschutz", "/manifest.webmanifest",
-  "/static/darts.css?v=20260928-final1", "/static/darts.js?v=20260928-stats1", "/static/darts-sponsors.json", "/static/darts-players.json", "/pics/sv-barver-darts-tight.png", "/pics/teams/barver-b-team-cutout.webp?v=20260927-2",
+  "/static/darts.css?v=20260929-sponsor1", "/static/darts.js?v=20260929-sponsor1", "/static/darts-sponsors.json", "/static/darts-players.json", "/pics/sv-barver-darts-tight.png", "/pics/teams/barver-b-team-cutout.webp?v=20260927-2",
   "/static/app.css?v=20260915-1", "/static/app.js?v=20260919-1",
   "/static/song-info.js?v=20260917-1", "/static/comfort.js?v=20260919-1", "/static/comfort.css?v=20260917-1",
   "/static/reliability.js?v=20260919-1",
