@@ -327,6 +327,21 @@ h1 { font:500 clamp(1.7rem,3vw,2.7rem)/1.15 Georgia,serif; margin:0; }
 .player-profile-facts > div { display:grid; gap:4px; min-height:72px; align-content:center; padding:10px 12px; text-align:center; background:#f5f7f2; border:1px solid var(--line); border-radius:11px; }
 .player-profile-facts span { color:#60706b; font-size:.72rem; text-transform:uppercase; }
 .player-profile-facts strong { color:#173b35; font:700 1.08rem Georgia,serif; }
+.player-performance-section { gap:14px; margin-bottom:12px; padding:18px; }
+.player-performance-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.player-performance-header h3 { margin:0; }
+.player-performance-source { padding:5px 8px; color:#245c51; background:#e4efe9; border:1px solid #c7dad2; border-radius:999px; font-size:.68rem; font-weight:900; letter-spacing:.08em; }
+.player-performance-body { display:grid; grid-template-columns:minmax(190px,.7fr) minmax(0,2fr); gap:12px; align-items:stretch; }
+.player-performance-average { display:grid; place-items:center; align-content:center; min-height:178px; padding:18px; color:white; text-align:center; background:linear-gradient(145deg,#173b35,#235e51); border-radius:14px; }
+.player-performance-average > span { color:#d5e8e1; font-size:.72rem; font-weight:850; letter-spacing:.08em; text-transform:uppercase; }
+.player-performance-average > strong { margin:8px 0 5px; color:#f0d991; font:900 clamp(3.2rem,7vw,5.4rem)/.9 Arial,sans-serif; letter-spacing:-.06em; }
+.player-performance-first9 { color:#dcebe6; font-size:.8rem; font-weight:750; }
+.player-performance-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.player-performance-metric { display:grid; gap:5px; min-height:82px; align-content:center; padding:12px; text-align:center; background:#f5f7f2; border:1px solid var(--line); border-radius:11px; }
+.player-performance-metric span { color:#60706b; font-size:.7rem; letter-spacing:.05em; text-transform:uppercase; }
+.player-performance-metric strong { color:#173b35; font:800 1.25rem Georgia,serif; }
+.player-performance-note { color:#60706b; line-height:1.45; }
+.player-profile-actions { display:flex; justify-content:flex-end; margin-top:12px; }
 .team-group-photo { position:relative; min-height:360px; margin:0 0 12px; overflow:hidden; background:radial-gradient(circle at 58% 38%,#2d806e 0,#153f36 44%,#071512 100%); border:1px solid #347366; border-radius:14px; isolation:isolate; }
 .team-group-photo::before { position:absolute; z-index:0; inset:0; content:""; background:repeating-linear-gradient(60deg,transparent 0 38px,#ffffff08 39px 41px); }
 .team-group-wordmark { position:absolute; z-index:1; left:clamp(18px,4vw,54px); top:clamp(24px,7vw,66px); display:grid; max-width:48%; color:white; line-height:.83; text-transform:uppercase; }
@@ -342,7 +357,7 @@ h1 { font:500 clamp(1.7rem,3vw,2.7rem)/1.15 Georgia,serif; margin:0; }
 .player-personal-item span { color:#60706b; font-size:.7rem; letter-spacing:.05em; text-transform:uppercase; }
 .player-personal-item strong { color:#173b35; font:700 1rem/1.25 Georgia,serif; overflow-wrap:anywhere; }
 .player-personal-item.is-empty strong { color:#82908b; font-style:italic; font-weight:600; }
-.player-profile-grid { display:grid; grid-template-columns:1.05fr 1fr .9fr; gap:12px; align-items:start; }
+.player-profile-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; align-items:start; }
 .player-profile-copy,.player-stats-note p { margin:0; color:#52645e; line-height:1.55; }
 .player-stats-note small { color:#60706b; line-height:1.45; }
 .player-stats-note .primary { margin-top:8px; }
@@ -601,7 +616,11 @@ body:fullscreen .today-time { font-size:.9rem; }
 [data-theme="dark"] .player-avatar { color:#173b35; }
 [data-theme="dark"] .player-profile-hero { background-color:#07110f; background-image:linear-gradient(125deg,rgba(12,58,48,.96),rgba(3,10,9,.99) 60%),repeating-linear-gradient(60deg,transparent 0 24px,rgba(75,177,150,.15) 25px 27px); }
 [data-theme="dark"] .player-profile-facts>div { background:#111f1b; border-color:#30443e; }
-[data-theme="dark"] .player-profile-facts span,[data-theme="dark"] .player-profile-copy,[data-theme="dark"] .player-stats-note p,[data-theme="dark"] .player-stats-note small,[data-theme="dark"] .player-personal-item span { color:#aebdb8; }
+[data-theme="dark"] .player-performance-source { color:#c7e9df; background:#17372f; border-color:#355047; }
+[data-theme="dark"] .player-performance-average { background:linear-gradient(145deg,#102c26,#1b5145); }
+[data-theme="dark"] .player-performance-metric { background:#111f1b; border-color:#30443e; }
+[data-theme="dark"] .player-performance-metric span,[data-theme="dark"] .player-performance-note,[data-theme="dark"] .player-profile-facts span,[data-theme="dark"] .player-profile-copy,[data-theme="dark"] .player-personal-item span { color:#aebdb8; }
+[data-theme="dark"] .player-performance-metric strong { color:#e8f0ec; }
 .members-toolbar { display:flex; align-items:end; gap:12px; padding:16px 20px; border-bottom:1px solid var(--line); }
 .members-toolbar label { display:grid; gap:5px; min-width:220px; color:#52635e; font-size:.78rem; font-weight:750; }
 .members-toolbar input,.members-toolbar select { min-height:44px; padding:9px 11px; color:inherit; background:#fffef9; border:1px solid var(--line); border-radius:9px; }
@@ -715,6 +734,10 @@ body:fullscreen .today-time { font-size:.9rem; }
   .player-profile-hero .player-avatar.large { flex-basis:158px; width:158px; min-width:158px; max-width:158px; height:158px; min-height:158px; max-height:158px; font-size:3rem; }
   .player-profile-hero .player-avatar.large:not(.avatar-fallback) { width:180px; min-width:180px; max-width:180px; height:205px; min-height:205px; max-height:205px; }
   .player-profile-facts { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .player-performance-header { align-items:flex-start; flex-direction:column; }
+  .player-performance-body { grid-template-columns:1fr; }
+  .player-performance-average { min-height:145px; }
+  .player-performance-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .player-personal-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .player-profile-grid { grid-template-columns:1fr; }
   .native-match-row { grid-template-columns:1fr auto; gap:8px; }
