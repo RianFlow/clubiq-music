@@ -743,6 +743,7 @@ function initDarts() {
     renderCompleteMatchCenter();
     renderToday(tickerData);
     renderHomeSchedule();
+    refreshSponsorSlots(false);
     if (!Array.isArray(tickerData.items) || !tickerData.items.length) {
       const empty = document.createElement('span'); empty.className='ticker-loading'; empty.textContent='Derzeit keine Barver-Begegnungen im aktuellen Zeitraum.';
       track.replaceChildren(empty); return;
@@ -1440,6 +1441,11 @@ function initDarts() {
   async function openMatch(matchId) {
     if (!Number.isInteger(Number(matchId)) || Number(matchId)<=0) return;
     q('#matchDialog').dataset.matchId=String(matchId); activeMatchDetailData=null;
+    const sponsorSlot=q('#sponsorMatch');
+    const knownMatch=(seasonData?.matches || []).find(item=>item.id===Number(matchId)) || (tickerData.items || []).find(item=>item.id===Number(matchId));
+    sponsorSlot.dataset.matchId=String(matchId);
+    sponsorSlot.dataset.teams=(knownMatch?.barverTeams || [barverTeam(knownMatch)]).filter(Boolean).join(',');
+    refreshSponsorSlots(false);
     q('#matchHeading').textContent='Begegnung wird geladen'; q('#matchDetail').innerHTML='<p class="panel-loading">Spielbericht wird geladen …</p>';
     if (!q('#matchDialog').open) q('#matchDialog').showModal();
     try {
@@ -1615,6 +1621,15 @@ function initDarts() {
   q('#reloadSeason').addEventListener('click',()=>loadSeason(true));
   q('#favoriteTeam').value=favorite;
   q('#favoriteTeam').addEventListener('change',()=>{ favorite=q('#favoriteTeam').value; try { localStorage.setItem(favoriteKey,favorite); } catch (_) {} renderTicker(tickerData); });
+  q('#tvTeamControls').addEventListener('click',event=>{
+    const button=event.target.closest('button[data-tv-team]'); if(!button) return;
+    const code=button.dataset.tvTeam;
+    if (code==='all') tvTeams=new Set(allTvTeams);
+    else if (allTvTeams.includes(code)) {
+      if (tvTeams.has(code) && tvTeams.size>1) tvTeams.delete(code); else tvTeams.add(code);
+    }
+    rememberTvTeams(); updateTvTeamControls(); renderToday(tickerData); refreshSponsorSlots(false);
+  });
   for (const block of q('#leagueOverview').querySelectorAll('.league-block')) {
     const select=block.querySelector('[data-role="round"]');
     select.addEventListener('change',()=>loadLeague(block.dataset.league,select.value));
@@ -1743,7 +1758,7 @@ function initDarts() {
   document.addEventListener('fullscreenchange',()=>{
     const active=Boolean(document.fullscreenElement);
     document.body.classList.toggle('tv-live',active);
-    renderToday(tickerData);
+    updateTvTeamControls(); renderToday(tickerData); refreshSponsorSlots(false);
     q('#fullscreen').textContent=active ? 'TV-Modus beenden' : 'TV-Modus';
   });
 }
