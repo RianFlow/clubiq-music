@@ -157,6 +157,7 @@ assert.match(script,/Mannschaftsseite öffnen/);
 assert.match(script,/fetch\('\/api\/v1\/darts\/sponsors'/);
 assert.match(script,/fetch\('\/static\/darts-sponsors\.json'/);
 assert.match(script,/clubiq_darts_tv_teams/);
+assert.match(script,/3K teilweise erreichbar/);
 assert.match(script,/data-tv-team/);
 assert.match(script,/Notification\.requestPermission\(\)/);
 assert.match(script,/\/api\/v1\/darts\/push\/subscribe/);

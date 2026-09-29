@@ -1265,8 +1265,11 @@ function initDarts() {
       }
       renderSeason(); renderHomeSchedule(); renderCompleteMatchCenter();
       if (q('#personalSettings').open) renderPlayerOptions();
-      q('#seasonFreshness').textContent=seasonData.stale?'Letzter verfügbarer Stand':'Mit 3K abgeglichen'; q('#seasonFreshness').dataset.state=seasonData.stale?'warn':'ok';
-      q('#cupFreshness').textContent=seasonData.stale?'Letzter verfügbarer Stand':'Mit 3K abgeglichen'; q('#cupFreshness').dataset.state=seasonData.stale?'warn':'ok';
+      const seasonPartial=seasonData.degraded===true;
+      const freshnessText=seasonData.stale?'Letzter verfügbarer Stand':seasonPartial?'3K teilweise erreichbar':'Mit 3K abgeglichen';
+      const freshnessState=seasonData.stale||seasonPartial?'warn':'ok';
+      q('#seasonFreshness').textContent=freshnessText; q('#seasonFreshness').dataset.state=freshnessState;
+      q('#cupFreshness').textContent=freshnessText; q('#cupFreshness').dataset.state=freshnessState;
     } catch (_) {
       q('#seasonFreshness').textContent='3K gerade nicht erreichbar'; q('#seasonFreshness').dataset.state='warn';
       q('#cupFreshness').textContent='3K gerade nicht erreichbar'; q('#cupFreshness').dataset.state='warn';

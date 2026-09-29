@@ -862,12 +862,21 @@ def _load_league_season(league: dict, now: datetime) -> dict:
         return round_id, matches
 
     # A season currently has 18 rounds. A small bounded pool keeps the first
-    # ClubIQ load responsive without flooding 3K's public service.
+    # ClubIQ load responsive without flooding 3K's public service. A single
+    # slow/broken 3K matchday must not take the whole ClubIQ season feed down.
+    failed_round_ids: list[int] = []
     with ThreadPoolExecutor(max_workers=4) as executor:
         jobs = {executor.submit(load_round, item): item for item in rounds}
         for job in as_completed(jobs):
-            round_id, matches = job.result()
-            round_matches[round_id] = matches
+            round_info = jobs[job]
+            round_id = int(round_info.get("id") or 0)
+            try:
+                loaded_round_id, matches = job.result()
+            except (requests.RequestException, ValueError, KeyError, TypeError):
+                if round_id:
+                    failed_round_ids.append(round_id)
+                continue
+            round_matches[loaded_round_id] = matches
 
     public_matches: list[dict] = []
     for round_info in rounds:
@@ -878,19 +887,53 @@ def _load_league_season(league: dict, now: datetime) -> dict:
                 public_matches.append(_season_match(raw_match, league, round_info))
 
     public_matches.sort(key=lambda item: (item.get("plannedAt") or item.get("updatedAt") or "", item["id"]))
-    selected = _preferred_round_by_matches(rounds, round_matches, now)
+    loaded_rounds = [
+        item for item in rounds
+        if int(item.get("id") or 0) in round_matches
+    ]
+    selected = _preferred_round_by_matches(loaded_rounds or rounds, round_matches, now)
     selected_matches = round_matches.get(int((selected or {}).get("id") or 0), [])
+    failed_round_ids.sort()
+    degraded = bool(failed_round_ids)
     return {
         "league": _league_public(league),
         "rounds": [_safe_round(item) for item in rounds],
         "selectedRound": _safe_round(selected) if selected else None,
         "standings": _standings(selected_matches, set(league["teams"])),
         "matches": public_matches,
+        "degraded": degraded,
+        "missingRoundIds": failed_round_ids,
+        "loadedRoundCount": len(round_matches),
+        "totalRoundCount": len(rounds),
+        "warning": (
+            f"{len(failed_round_ids)} Spieltag(e) konnten gerade nicht von 3K geladen werden."
+            if degraded else None
+        ),
     }
 
 
 def _load_season(now: datetime) -> dict:
-    leagues = [_load_league_season(league, now) for league in LEAGUES]
+    leagues_by_key: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=len(LEAGUES)) as executor:
+        jobs = {executor.submit(_load_league_season, league, now): league for league in LEAGUES}
+        for job in as_completed(jobs):
+            league = jobs[job]
+            try:
+                leagues_by_key[league["key"]] = job.result()
+            except (requests.RequestException, ValueError, KeyError, TypeError, DartsFeedUnavailable):
+                leagues_by_key[league["key"]] = {
+                    "league": _league_public(league),
+                    "rounds": [],
+                    "selectedRound": None,
+                    "standings": [],
+                    "matches": [],
+                    "degraded": True,
+                    "missingRoundIds": [],
+                    "loadedRoundCount": 0,
+                    "totalRoundCount": 0,
+                    "warning": "Diese Liga konnte gerade nicht vollständig von 3K geladen werden.",
+                }
+    leagues = [leagues_by_key[league["key"]] for league in LEAGUES]
     special = _get_special_events(now)
     all_matches = [match for league in leagues for match in league["matches"]]
     all_matches.extend(special.get("matches") or [])
@@ -935,9 +978,19 @@ def _load_season(now: datetime) -> dict:
                 "weekday": profile.get("weekday"),
                 "throwoffTime": profile.get("throwoffTime"),
             })
+    warnings = [
+        {
+            "league": item["league"]["key"],
+            "missingRoundIds": item.get("missingRoundIds") or [],
+            "message": item.get("warning"),
+        }
+        for item in leagues if item.get("degraded")
+    ]
     return {
         "available": True,
         "stale": False,
+        "degraded": bool(warnings),
+        "warnings": warnings,
         "updatedAt": now.isoformat(),
         "leagues": leagues,
         "specialEvents": special.get("events") or [],
@@ -952,13 +1005,17 @@ def get_darts_season(now: datetime | None = None) -> dict:
     now = now or datetime.now(timezone.utc)
     with _lock:
         cached = _season_cache
-        if cached and now.timestamp() - cached[0] < SEASON_CACHE_SECONDS:
-            return cached[1]
+        if cached:
+            ttl = CACHE_SECONDS if cached[1].get("degraded") else SEASON_CACHE_SECONDS
+            if now.timestamp() - cached[0] < ttl:
+                return cached[1]
     with _season_load_lock:
         with _lock:
             cached = _season_cache
-            if cached and now.timestamp() - cached[0] < SEASON_CACHE_SECONDS:
-                return cached[1]
+            if cached:
+                ttl = CACHE_SECONDS if cached[1].get("degraded") else SEASON_CACHE_SECONDS
+                if now.timestamp() - cached[0] < ttl:
+                    return cached[1]
         try:
             result = _load_season(now)
             with _lock:
