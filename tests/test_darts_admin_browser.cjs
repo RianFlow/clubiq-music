@@ -42,7 +42,7 @@ const server=http.createServer((req,res)=>{
     await page.fill('#playerNumber','Q8V4');await page.fill('#walkOnSong','Don\'t Stop Believin\' – Journey');await page.check('#published');await page.click('#profileForm button[type="submit"]');
     await page.getByText('Gespeichert und veröffentlicht.').waitFor();assert.equal(saved.player_number,'Q8V4');assert.equal(saved.published,true);
     await page.click('#sponsorsAdminTab');await page.locator('#sponsorList').getByText('Muster Hauptpartner',{exact:true}).waitFor();await page.locator('#sponsorList').getByText('Muster Hauptpartner',{exact:true}).click();
-    assert.equal(await page.inputValue('#sponsorPriority'),'100');assert.equal(await page.isChecked('[data-sponsor-placement="tv"]'),true);
+    assert.equal(await page.inputValue('#sponsorPriority'),'100');assert.equal(await page.isChecked('[data-sponsor-placement][value="tv"]'),true);
     await page.fill('#sponsorPriority','120');await page.click('#sponsorForm button[type="submit"]');await page.getByText('Sponsor gespeichert.').waitFor();assert.equal(savedSponsor.priority,120);assert.equal(savedSponsor.sponsor_type,'main');
     await page.screenshot({path:path.join(root,'outputs/darts-admin-desktop.png'),fullPage:true});
     await page.setViewportSize({width:390,height:844});const mobile=await page.evaluate(()=>({fits:document.documentElement.scrollWidth<=innerWidth,width:document.documentElement.scrollWidth,viewport:innerWidth,wide:[...document.querySelectorAll('*')].filter(node=>node.getBoundingClientRect().right>innerWidth+1).slice(0,5).map(node=>`${node.tagName}.${node.className}`)}));assert.equal(mobile.fits,true,JSON.stringify(mobile));await page.screenshot({path:path.join(root,'outputs/darts-admin-mobile.png'),fullPage:true});
