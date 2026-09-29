@@ -633,15 +633,19 @@ function initDarts() {
       || String(a.plannedAt || '').localeCompare(String(b.plannedAt || ''))
       || Number(a.id || 0)-Number(b.id || 0)
     );
-    const live = wanted.filter(item=>item.kind==='live');
+    const liveAll = wanted.filter(item=>item.kind==='live');
+    const tvActive=document.body.classList.contains('tv-live');
+    const live = tvActive ? liveAll.filter(item=>(item.barverTeams || [barverTeam(item)]).filter(Boolean).some(code=>tvTeams.has(code))) : liveAll;
     const upcoming = wanted.filter(item=>item.kind==='upcoming');
     const finals = wanted.filter(item=>item.kind==='final');
-    const shown = document.body.classList.contains('tv-live') ? live : live.slice(0,1);
+    const shown = tvActive ? live : live.slice(0,1);
     target.dataset.liveCount=String(shown.length);
     const today = new Date().toLocaleDateString('de-DE');
     const playingToday = shown.some(item=>item.plannedAt && new Date(item.plannedAt).toLocaleDateString('de-DE')===today);
     q('#todayHeading').textContent = live.length ? 'Jetzt am Board' : 'Dein Barver-Spieltag';
-    q('#todaySubtitle').textContent = live.length ? `${live.length} Begegnung${live.length===1?'':'en'} ${live.length===1?'läuft':'laufen'} gerade. Weitere Spiele findest du unter „Heute“.` : 'Heute, nächste Termine und Ergebnisse – alle Teams im Blick.';
+    q('#todaySubtitle').textContent = tvActive && liveAll.length && !live.length
+      ? 'Für deine TV-Auswahl läuft gerade keine Begegnung.'
+      : live.length ? `${live.length} Begegnung${live.length===1?'':'en'} ${live.length===1?'läuft':'laufen'} gerade. Weitere Spiele findest du unter „Heute“.` : 'Heute, nächste Termine und Ergebnisse – alle Teams im Blick.';
     if (!shown.length) { const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent='Gerade kein Live-Spiel gemeldet.'; target.replaceChildren(empty); return; }
     const fragment=document.createDocumentFragment();
     for (const item of shown) {
