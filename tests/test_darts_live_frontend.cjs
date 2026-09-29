@@ -26,8 +26,15 @@ assert.match(css, /body\.tv-live #todayPanel > \.match-center \{ display:none; \
 assert.match(frontend, /MANNSCHAFTSSPIEL/);
 assert.match(frontend, /LAUFENDE BOARDS/);
 assert.match(frontend, /today-live-legs/);
-assert.match(frontend, /3K Liga-Ø/);
+assert.match(frontend, /3K Liga-Average/);
+assert.match(frontend, /Saisonleistung/);
+assert.match(frontend, /Siegquote/);
+assert.match(frontend, /First 9 Ø/);
+assert.match(frontend, /OFFIZIELLE 3K-STATISTIK/);
 assert.match(frontend, /offiziellen 3K-Ligastatistik/);
+assert.match(frontend, /player-performance-section/);
+assert.doesNotMatch(frontend, /\['Teamspiele'/);
+assert.doesNotMatch(frontend, /\['Teamsiege'/);
 assert.match(frontend, /group\.finished && group\.meta\?\.score/);
 assert.match(css, /body\.tv-live \.today-live-legs/);
 assert.match(frontend, /Number\.parseInt\(a\.board,10\)[\s\S]*Number\.parseInt\(b\.board,10\)/);

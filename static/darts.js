@@ -916,7 +916,7 @@ function initDarts() {
   function openPlayerProfile(member, team) {
     if (!member || !team) return;
     q('#playerProfileHeading').textContent=member.name;
-    const target=q('#playerProfile'), record=team.record || {};
+    const target=q('#playerProfile');
     const profile=playerProfiles[String(member.id || '')] || {};
     const hero=document.createElement('section'); hero.className='player-profile-hero';
     const copy=document.createElement('div'); copy.className='player-profile-identity';
@@ -930,10 +930,52 @@ function initDarts() {
     const teamMark=document.createElement('b'); teamMark.className='player-profile-team-mark'; teamMark.textContent=team.code;
     visual.append(teamMark,playerAvatar(member,true)); hero.append(copy,visual);
     const facts=document.createElement('section'); facts.className='player-profile-facts';
-    for (const [label,value] of [['Mannschaft',`Barver ${team.code}`],['Liga',team.league?.short || '–'],['Funktion',displayRole],['3K-Spielernummer',profile.playerNumber || 'Noch offen'],[profile.statsSource==='3k'?'3K Liga-Ø':'Aktueller Ø',profile.average===null || profile.average===undefined?'Noch offen':profile.average.toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1})],['Teamspiele',record.played ?? 0],['Teamsiege',record.wins ?? 0]]) {
+    for (const [label,value] of [['Mannschaft',`Barver ${team.code}`],['Liga',team.league?.short || '–'],['Funktion',displayRole],['3K-Spielernummer',profile.playerNumber || 'Noch offen']]) {
       const item=document.createElement('div'); const text=document.createElement('span'); text.textContent=label; const strong=document.createElement('strong');
       if (label==='Mannschaft') strong.append(makeTeamJump(team.code,value)); else strong.textContent=value;
       item.append(text,strong); facts.append(item);
+    }
+    const performance=document.createElement('section'); performance.className='team-profile-section player-performance-section';
+    const performanceHeader=document.createElement('div'); performanceHeader.className='player-performance-header';
+    const performanceTitle=document.createElement('h3'); performanceTitle.textContent='Saisonleistung';
+    const performanceSource=document.createElement('span'); performanceSource.className='player-performance-source';
+    performanceSource.textContent=profile.statsSource==='3k'?'OFFIZIELLE 3K-STATISTIK':'SAISONWERTE';
+    performanceHeader.append(performanceTitle,performanceSource); performance.append(performanceHeader);
+    if (profile.statsUpdatedAt) {
+      const performanceBody=document.createElement('div'); performanceBody.className='player-performance-body';
+      const averageCard=document.createElement('div'); averageCard.className='player-performance-average';
+      const averageLabel=document.createElement('span'); averageLabel.textContent=profile.statsSource==='3k'?'3K Liga-Average':'Aktueller Average';
+      const averageValue=document.createElement('strong'); averageValue.textContent=profile.average===null || profile.average===undefined?'–':profile.average.toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1});
+      averageCard.append(averageLabel,averageValue);
+      if (profile.statsSource==='3k' && profile.average9!==null && profile.average9!==undefined) {
+        const firstNine=document.createElement('small'); firstNine.className='player-performance-first9';
+        firstNine.textContent=`First 9 Ø ${profile.average9.toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1})}`;
+        averageCard.append(firstNine);
+      }
+      const metrics=document.createElement('div'); metrics.className='player-performance-metrics';
+      const metricValues=[
+        ['Partien',profile.gamesPlayed],
+        ['Siege',profile.gamesWon],
+        ['Siegquote',profile.winRate===null || profile.winRate===undefined?'–':`${profile.winRate} %`],
+        ['Legs',`${profile.legsFor} : ${profile.legsAgainst}`],
+        ['180er',profile.count180],
+        ['Bestes Finish',profile.highFinish || '–'],
+      ];
+      for (const [label,value] of metricValues) {
+        const item=document.createElement('div'); item.className='player-performance-metric';
+        const text=document.createElement('span'); text.textContent=label;
+        const strong=document.createElement('strong'); strong.textContent=value;
+        item.append(text,strong); metrics.append(item);
+      }
+      performanceBody.append(averageCard,metrics);
+      const source=document.createElement('small'); source.className='player-performance-note';
+      source.textContent=profile.statsSource==='3k'
+        ? `Werte aus der offiziellen 3K-Ligastatistik${profile.statsStale?' · letzter gespeicherter Stand':''}.`
+        : `Aus den bisherigen Einzelpartien berechnet${profile.statsStale?' · letzter gespeicherter Stand':''}.`;
+      performance.append(performanceBody,source);
+    } else {
+      const loading=document.createElement('p'); loading.className='player-profile-copy'; loading.textContent='Die Saisonwerte werden gerade geladen.';
+      performance.append(loading);
     }
     const personal=profile.personal || {};
     const personalSection=document.createElement('section'); personalSection.className='team-profile-section player-personal-section';
@@ -964,23 +1006,9 @@ function initDarts() {
     const recent=(team.matches || []).filter(item=>item.kind==='final').slice(-3).reverse();
     for (const item of recent) results.append(makeProfileMatch(item,team.code));
     if (!recent.length) { const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent='Noch keine Ergebnisse vorhanden.'; results.append(empty); }
-    const stats=document.createElement('section'); stats.className='team-profile-section player-stats-note'; const statsTitle=document.createElement('h3'); statsTitle.textContent='Persönliche Statistiken';
-    stats.append(statsTitle);
-    if (profile.statsUpdatedAt) {
-      const statsGrid=document.createElement('div'); statsGrid.className='player-personal-grid';
-      const values=[['Partien',profile.gamesPlayed],['Siege',profile.gamesWon],['Legs',`${profile.legsFor}:${profile.legsAgainst}`],['180er',profile.count180],['High Finishes',profile.highFinishes],['Bestes Finish',profile.highFinish || '–']];
-      for (const [label,value] of values) { const item=document.createElement('div'); const text=document.createElement('span'); text.textContent=label; const strong=document.createElement('strong'); strong.textContent=value; item.append(text,strong); statsGrid.append(item); }
-      const source=document.createElement('small'); source.textContent=profile.statsSource==='3k'
-        ? `Average, Partien, Siege, Legs und 180er aus der offiziellen 3K-Ligastatistik${profile.statsStale?' · letzter gespeicherter Stand':''}.`
-        : `Saisonwerte aus den bisherigen Partien${profile.statsStale?' · letzter gespeicherter Stand':''}.`;
-      stats.append(statsGrid,source);
-    } else {
-      const statsCopy=document.createElement('p'); statsCopy.textContent='Die persönlichen Saisonwerte werden gerade vorbereitet.';
-      const loading=document.createElement('small'); loading.textContent='Beim ersten Abruf kann das Zusammenführen einige Sekunden dauern; danach kommt der Wert aus dem schnellen Zwischenspeicher.';
-      stats.append(statsCopy,loading);
-    }
-    const back=document.createElement('button'); back.type='button'; back.className='primary'; back.textContent=`Zurück zu Barver ${team.code}`; back.addEventListener('click',()=>{ q('#playerDialog').close(); openTeamProfile(team); }); stats.append(back);
-    grid.append(sport,results,stats); target.replaceChildren(hero,facts,personalSection,grid);
+    const back=document.createElement('button'); back.type='button'; back.className='primary'; back.textContent=`Zurück zu Barver ${team.code}`; back.addEventListener('click',()=>{ q('#playerDialog').close(); openTeamProfile(team); });
+    const actions=document.createElement('div'); actions.className='player-profile-actions'; actions.append(back);
+    grid.append(sport,results); target.replaceChildren(hero,facts,performance,personalSection,grid,actions);
     if (!q('#playerDialog').open) q('#playerDialog').showModal();
   }
   function openTeamProfile(team) {
