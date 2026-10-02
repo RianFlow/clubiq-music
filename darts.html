@@ -9,13 +9,23 @@
   <link rel="icon" href="/pics/logo.png">
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
   <link rel="preload" href="/pics/sv-barver-darts-tight-512.webp" as="image" type="image/webp">
-  <link rel="stylesheet" href="/static/darts.css?v=20261002-performance1">
-  <script defer src="/static/darts.js?v=20261002-performance1"></script>
+  <link rel="stylesheet" href="/static/darts.css?v=20261002-layout3">
+  <script defer src="/static/darts.js?v=20261002-layout3"></script>
 </head>
 <body>
   <header class="darts-header">
     <a class="brand" href="/darts" aria-label="Zur Darts-Startseite"><img src="/pics/sv-barver-darts-tight-512.webp" alt="" width="58" height="58" fetchpriority="high" decoding="async"><span><small>SV BARVER</small><b>DARTS</b><em>ClubIQ Matchcenter</em></span></a>
-    <nav class="primary-navigation" aria-label="Anzeige"><button id="todayView" type="button">Live</button><button id="leagueView" type="button">Tabellen</button><button id="cupView" type="button">Pokal</button><button id="gridView" type="button">Spiele & Teams</button><button id="membersView" type="button">Mitglieder</button><button id="trainingView" type="button">Training</button></nav>
+    <nav class="primary-navigation" aria-label="Hauptmenü">
+      <button id="todayView" type="button">Startseite</button><button id="leagueView" type="button">Tabellen</button><button id="cupView" type="button">Pokal</button><button id="gridView" type="button">Spiele & Teams</button>
+      <details id="moreNavigation" class="more-navigation">
+        <summary>Mehr</summary>
+        <div class="more-navigation-menu">
+          <button id="membersView" type="button">Mitglieder</button>
+          <button id="trainingView" type="button">Training</button>
+          <button id="personalSettingsToggle" type="button">Mein Darts</button>
+        </div>
+      </details>
+    </nav>
     <div class="header-tools"><button id="themeToggle" class="theme-switch" type="button" role="switch" aria-checked="false" aria-label="Dunkelmodus"><span class="theme-option theme-light">Hell</span><span class="theme-track" aria-hidden="true"><span></span></span><span class="theme-option theme-dark">Dunkel</span></button><button id="fullscreen" type="button">TV-Modus</button></div>
   </header>
   <details id="personalSettings" class="personal-settings">
@@ -51,6 +61,11 @@
       <div class="intro-copy"><p class="eyebrow">Das Matchcenter des SV Barver</p><h1>BARVER<br><span>DARTS</span></h1><p><strong>Saison 2026 / 2027</strong> · Vier Mannschaften, alle Spiele und Highlights.</p></div>
       <div class="intro-visual" aria-hidden="true"><span class="intro-watermark">BARVER</span><span class="club-logo intro-club-logo"></span><span class="intro-badge">A · B · C · D</span></div>
     </section>
+    <aside id="clubEventBanner" class="club-event-banner" aria-labelledby="clubEventTitle" hidden>
+      <div class="club-event-copy"><p id="clubEventKicker" class="eyebrow">Aus dem Verein</p><h2 id="clubEventTitle"></h2><p id="clubEventDescription"></p><div id="clubEventMeta" class="club-event-meta"></div></div>
+      <div class="club-event-art"><img id="clubEventImage" alt="" loading="eager" fetchpriority="high" decoding="async" hidden><span class="club-logo" aria-hidden="true"></span><strong aria-hidden="true">BARVER<br>DARTS</strong></div>
+      <a id="clubEventLink" class="club-event-link" hidden>Mehr erfahren</a>
+    </aside>
     <section id="layoutControls" class="layout-controls" aria-label="Spiele anordnen" hidden>
       <label class="count-control" for="gameCount"><span>Ansicht</span><select id="gameCount"><option value="1">1 Team</option><option value="2">2 Teams</option><option value="3">3 Teams</option><option value="4" selected>4 Teams</option></select></label>
       <div id="teamChoices" class="team-choices" role="group" aria-label="Mannschaften auswählen"></div>
@@ -62,7 +77,6 @@
       <div id="matchCenterGrid" class="match-center-grid"><p class="match-center-loading">3K-Spielplan wird geladen …</p></div>
     </section>
     <aside id="sponsorInline" class="sponsor-slot sponsor-slot-inline" data-placement="inline" aria-label="Werbepartner" hidden></aside>
-    <details class="source-note"><summary>Woher kommen die Daten?</summary><p>ClubIQ bereitet die öffentlichen Ergebnisdaten von 3K Darts in einer eigenen, übersichtlichen Ansicht auf. 3K bleibt die offizielle Quelle; dorthin führt nur noch ein optionaler Quellenlink.</p></details>
     <p id="pageStatus" class="message" role="status" hidden></p>
     <section id="todayPanel" class="sports-panel" aria-labelledby="todayHeading" hidden>
       <div class="sports-panel-head"><div><p class="eyebrow">Live-Matchcenter</p><h2 id="todayHeading">Heute spielen</h2><p id="todaySubtitle">Live-Spiele und die nächsten Begegnungen.</p></div><div class="today-actions"><span id="liveDataStatus" class="live-data-status">3K wird geladen</span><label for="favoriteTeam">Mein Team<select id="favoriteTeam"><option value="all">Alle Teams</option><option value="A">Barver A</option><option value="B">Barver B</option><option value="C">Barver C</option><option value="D">Barver D</option></select></label></div></div>
@@ -79,12 +93,15 @@
       </div>
       <div id="todayGrid" class="today-grid"><p class="panel-loading">Spielstände werden geladen …</p></div>
       <aside id="sponsorTv" class="sponsor-slot sponsor-slot-tv" data-placement="tv" aria-label="TV-Partner" hidden></aside>
-      <div class="season-toolbar" aria-label="Startseite filtern">
-        <label>Mannschaft<select id="homeTeam"><option value="all">Alle Teams</option><option>A</option><option>B</option><option>C</option><option>D</option></select></label>
-        <label>Liga / Wettbewerb<select id="homeLeague"><option value="all">Alle Wettbewerbe</option><option value="1445">Kreisligen 04 · A–C</option><option value="1460">Kreisklasse 11 · D</option><option value="special">Pokal & Sondertermine</option></select></label>
-        <label>Datum<input id="homeDate" type="date"></label><button id="resetHomeFilters" type="button">Filter zurücksetzen</button>
-      </div>
-      <div id="homeSchedule" class="home-schedule"></div>
+      <section class="home-schedule-panel" aria-labelledby="homeScheduleHeading">
+        <div class="home-schedule-panel-head"><div><p class="eyebrow">Spielplan</p><h3 id="homeScheduleHeading">Heute, demnächst & zuletzt</h3></div><span>Nach Team, Wettbewerb oder Datum filtern</span></div>
+        <div class="season-toolbar" aria-label="Startseite filtern">
+          <label>Mannschaft<select id="homeTeam"><option value="all">Alle Teams</option><option>A</option><option>B</option><option>C</option><option>D</option></select></label>
+          <label>Liga / Wettbewerb<select id="homeLeague"><option value="all">Alle Wettbewerbe</option><option value="1445">Kreisligen 04 · A–C</option><option value="1460">Kreisklasse 11 · D</option><option value="special">Pokal & Sondertermine</option></select></label>
+          <label>Datum<input id="homeDate" type="date"></label><button id="resetHomeFilters" type="button">Filter zurücksetzen</button>
+        </div>
+        <div id="homeSchedule" class="home-schedule"></div>
+      </section>
     </section>
     <section id="leaguePanel" class="sports-panel" aria-labelledby="leagueHeading" hidden>
       <div class="sports-panel-head"><div><p class="eyebrow">Saison 2026 / 2027</p><h2 id="leagueHeading">Liga & Spieltage</h2><p>Spielplan, offizielle Rangfolge und Meldungen aus 3K auf einen Blick.</p></div><span class="club-logo panel-club-logo" aria-hidden="true"></span></div>
@@ -149,6 +166,7 @@
       <div id="trainingFrame" class="frame-wrap"><div class="placeholder"><strong>Euer Trainingsabend</strong><p>Teilnehmer, Spiele und Bestleistungen in der offiziellen 3K-Ansicht. Erst „Training anzeigen“ stellt die Verbindung her.</p></div></div>
       <p id="trainingNote" class="frame-note">Keine automatische 180-Animation oder Sieger-Meldung. Platzierungen sind erst verfügbar, wenn das Event in 3K abgeschlossen wurde.</p>
     </section>
+    <details class="source-note"><summary>Woher kommen die Daten?</summary><p>ClubIQ bereitet die öffentlichen Ergebnisdaten von 3K Darts in einer eigenen, übersichtlichen Ansicht auf. 3K bleibt die offizielle Quelle; dorthin führt nur noch ein optionaler Quellenlink.</p></details>
     <aside id="sponsorFooter" class="sponsor-slot sponsor-slot-footer" data-placement="footer" aria-label="Unsere Partner" hidden></aside>
     <footer><span>ClubIQ zeigt öffentliche 3K-Ergebnisse in einer eigenen Ansicht. 3K bleibt die offizielle Quelle.</span><nav aria-label="Rechtliches und Verwaltung"><a href="/darts-admin">Dartsverwaltung</a><a href="/impressum">Impressum</a><a href="/datenschutz">Datenschutz</a><a href="https://portal.3k-darts.com/frontend/events" target="_blank" rel="noopener noreferrer">3K Darts öffnen ↗</a></nav></footer>
   </main>

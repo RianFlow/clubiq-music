@@ -14,6 +14,14 @@ assert.equal(dartsTheme('dark'), 'dark');
 assert.equal(dartsTheme('light', true), 'light');
 assert.equal(dartsTheme(null, true), 'dark');
 assert.equal(dartsTheme('invalid', false), 'light');
+const dartsClubEvents = vm.runInContext('dartsClubEvents',context);
+const clubEvents = dartsClubEvents({events:[
+  {title:'11. Barver Dart Open',image:'/pics/events/barver-dart-open-2026.webp',startsAt:'2026-10-01T00:00:00Z',endsAt:'2026-10-05T00:00:00Z',priority:5},
+  {title:'Abgelaufen',endsAt:'2026-09-01T00:00:00Z'},
+]},Date.parse('2026-10-02T12:00:00Z'));
+assert.equal(clubEvents.length,1);
+assert.equal(clubEvents[0].title,'11. Barver Dart Open');
+assert.equal(clubEvents[0].image,'/pics/events/barver-dart-open-2026.webp');
 const dartsRoster = vm.runInContext('dartsRoster',context);
 const orderedRoster = dartsRoster([
   {name:'Zeno Spieler',role:'Spieler'},
@@ -129,6 +137,9 @@ assert.match(html,/id="pushHealth"/);
 assert.match(html,/id="cupView"/);
 assert.match(html,/id="cupPanel"/);
 assert.match(html,/id="membersView"/);
+assert.match(html,/id="moreNavigation"/);
+assert.match(html,/id="personalSettingsToggle"/);
+assert.match(html,/id="clubEventBanner"/);
 assert.match(html,/id="membersPanel"/);
 assert.match(html,/id="membersGrid"/);
 assert.match(html,/id="liveDataStatus"/);
@@ -156,6 +167,7 @@ assert.match(script,/function makeTeamJump\(code/);
 assert.match(script,/Mannschaftsseite öffnen/);
 assert.match(script,/fetch\('\/api\/v1\/darts\/sponsors'/);
 assert.match(script,/fetch\('\/static\/darts-sponsors\.json'/);
+assert.match(script,/fetch\('\/static\/darts-events\.json'/);
 assert.match(script,/clubiq_darts_tv_teams/);
 assert.match(script,/3K teilweise erreichbar/);
 assert.match(script,/data-tv-team/);

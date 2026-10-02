@@ -1,0 +1,17 @@
+{
+  "events": [
+    {
+      "id": "barver-dart-open-2026",
+      "kicker": "Turnier in Barver",
+      "title": "11. Barver Dart Open",
+      "description": "Einzel am Samstag, Doppel am Sonntag – Gruppenphase und anschließende K.-o.-Runde.",
+      "date": "3. und 4. Oktober 2026",
+      "image": "/pics/events/barver-dart-open-2026.webp",
+      "href": "https://whatsapp.com/channel/0029Vb1TkYQ5K3zONLbu0C0l",
+      "buttonLabel": "WhatsApp-Kanal folgen",
+      "startsAt": "2026-09-15T00:00:00+02:00",
+      "endsAt": "2026-10-04T23:59:59+02:00",
+      "priority": 100
+    }
+  ]
+}

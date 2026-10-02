@@ -1065,3 +1065,171 @@ footer a { color:#d8e9e3; }
   .season-status button { font-size:.84rem; }
   .data-load-note,.season-list-head,.native-team-grid,.native-match-list { overflow-wrap:anywhere; }
 }
+
+/* Aufgeraeumte Seitengliederung mit kompaktem Mehr-Menue. */
+.more-navigation { position:relative; align-self:stretch; }
+.more-navigation > summary {
+  position:relative;
+  display:flex;
+  align-items:center;
+  min-height:69px;
+  padding:0 34px 0 15px;
+  color:#dbe9e5;
+  cursor:pointer;
+  list-style:none;
+  font-family:var(--sports-display);
+  font-size:.95rem;
+  font-weight:800;
+  letter-spacing:.055em;
+  text-transform:uppercase;
+}
+.more-navigation > summary::-webkit-details-marker { display:none; }
+.more-navigation > summary::before { content:""; position:absolute; left:15px; right:15px; bottom:0; height:4px; background:var(--sports-mint); transform:scaleX(0); transition:transform .18s ease; }
+.more-navigation > summary::after { content:"⌄"; position:absolute; right:14px; top:50%; color:var(--sports-mint); font-family:Arial,sans-serif; font-size:1rem; transform:translateY(-58%); transition:transform .18s ease; }
+.more-navigation[open] > summary,.more-navigation:has(button[aria-pressed="true"]) > summary { color:#fff; background:#ffffff10; }
+.more-navigation[open] > summary::before,.more-navigation:has(button[aria-pressed="true"]) > summary::before { transform:scaleX(1); }
+.more-navigation[open] > summary::after { transform:translateY(-35%) rotate(180deg); }
+.more-navigation-menu {
+  position:absolute;
+  z-index:140;
+  top:calc(100% + 8px);
+  right:0;
+  display:grid;
+  gap:4px;
+  min-width:230px;
+  padding:8px;
+  background:#fff;
+  border:1px solid #cbd7d2;
+  border-radius:12px;
+  box-shadow:0 18px 44px #02090759;
+}
+.primary-navigation .more-navigation-menu button {
+  justify-content:flex-start;
+  min-height:46px;
+  padding:10px 12px;
+  color:#143c34;
+  background:transparent;
+  border:0;
+  border-radius:8px;
+  font-family:Inter,system-ui,sans-serif;
+  font-size:.9rem;
+  letter-spacing:0;
+  text-transform:none;
+}
+.primary-navigation .more-navigation-menu button::after { display:none; }
+.primary-navigation .more-navigation-menu button:hover,.primary-navigation .more-navigation-menu button[aria-pressed="true"] { color:#0a3028; background:#e5f2ed; }
+
+.personal-settings:not([open]) { display:none; }
+.personal-settings[open] { max-width:1500px; margin:24px auto 0; padding:22px clamp(18px,3vw,34px); border:1px solid #bdd0c8; border-left:5px solid var(--sports-mint); border-radius:16px; box-shadow:0 14px 38px #08251f18; }
+.personal-settings[open] > summary { margin:-6px 0 18px; font-family:var(--sports-display); font-size:1.35rem; letter-spacing:.04em; text-transform:uppercase; }
+
+main { max-width:1660px; padding:30px clamp(18px,3vw,48px) 28px; }
+.intro { min-height:210px; margin-bottom:28px; border-radius:16px; clip-path:none; box-shadow:0 18px 46px #04110e1f; }
+.intro h1 { font-size:clamp(3.2rem,6vw,5.7rem); }
+.sports-panel { margin:28px 0; border:1px solid #ccd7d2; border-radius:18px; box-shadow:0 16px 42px #09261f12; }
+.sports-panel-head { min-height:108px; padding:26px clamp(22px,3vw,38px); }
+.sports-panel-head h2 { font-size:clamp(2.15rem,4vw,3.8rem); }
+.today-grid { padding:22px clamp(18px,2.5vw,30px); background:#eef2ef; }
+#todayPanel > .match-center { margin:28px clamp(18px,2.5vw,30px); overflow:hidden; border:1px solid #c7d3ce; border-radius:14px; box-shadow:0 9px 26px #09261f12; }
+.match-center-head { padding:16px 20px; border-left-width:6px; }
+.match-center-grid { gap:1px; }
+.match-center-card { min-height:142px; padding:18px 20px; }
+
+.home-schedule-panel { margin:30px; overflow:hidden; background:#f8faf8; border:1px solid #c7d3ce; border-radius:14px; box-shadow:0 9px 26px #09261f0d; }
+.home-schedule-panel-head { display:flex; align-items:end; justify-content:space-between; gap:24px; padding:22px 24px 18px; background:#fff; border-bottom:1px solid #dbe3df; }
+.home-schedule-panel-head h3,.home-schedule-panel-head p { margin:0; }
+.home-schedule-panel-head h3 { color:#102f29; font-family:var(--sports-display); font-size:clamp(1.35rem,2.4vw,2rem); letter-spacing:.02em; text-transform:uppercase; }
+.home-schedule-panel-head > span { color:#64736e; font-size:.82rem; }
+.home-schedule-panel > .season-toolbar { margin:20px 22px 24px; padding:18px; background:#fff; border-radius:11px; }
+.home-schedule { gap:22px; padding:0 22px 24px; }
+.home-schedule section { padding:18px; background:#fff; border:1px solid #d2dcd7; border-radius:11px; }
+.home-schedule h3 { margin:0 0 16px; padding-bottom:12px; }
+.home-schedule .team-profile-match:last-child { margin-bottom:0; }
+
+.club-event-banner {
+  position:relative;
+  isolation:isolate;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(210px,30%) auto;
+  gap:28px;
+  align-items:center;
+  min-height:176px;
+  margin:0 0 28px;
+  padding:26px clamp(22px,4vw,44px);
+  overflow:hidden;
+  color:#fff;
+  background:linear-gradient(105deg,#8d190f 0%,#c63528 48%,#7d130b 100%);
+  border-radius:16px;
+  box-shadow:0 16px 40px #4c100d2c;
+}
+.club-event-banner[hidden] { display:none; }
+.club-event-banner::before { content:""; position:absolute; z-index:-1; inset:0; opacity:.2; background:repeating-linear-gradient(-56deg,transparent 0 40px,#fff 41px 43px); }
+.club-event-copy { min-width:0; }
+.club-event-copy .eyebrow { color:#ffe184; }
+.club-event-copy h2 { margin:0; font-family:var(--sports-display); font-size:clamp(2rem,4vw,3.7rem); line-height:.92; text-transform:uppercase; }
+.club-event-copy > p:not(.eyebrow) { max-width:780px; margin:12px 0 0; color:#fff2ef; line-height:1.5; }
+.club-event-meta { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+.club-event-meta span { padding:7px 10px; color:#3b0b08; background:#ffe184; border-radius:999px; font-size:.8rem; font-weight:850; }
+.club-event-art { display:flex; align-items:center; justify-content:center; gap:14px; min-height:124px; border-left:1px solid #ffffff40; }
+.club-event-art img { width:min(230px,100%); max-height:240px; object-fit:contain; border-radius:8px; box-shadow:0 12px 30px #0006; }
+.club-event-banner.has-event-image { grid-template-columns:minmax(0,1fr) minmax(230px,34%) auto; }
+.club-event-banner.has-event-image .club-event-art .club-logo,.club-event-banner.has-event-image .club-event-art strong { display:none; }
+.club-event-art .club-logo { width:104px; height:92px; filter:drop-shadow(0 10px 16px #0007); }
+.club-event-art strong { color:#ffffff22; font-family:var(--sports-display); font-size:2rem; line-height:.85; }
+.club-event-link { display:inline-grid; place-items:center; min-height:48px; padding:11px 16px; color:#17342e; text-decoration:none; background:#fff; border-radius:8px; font-weight:850; white-space:nowrap; }
+.club-event-link:hover { background:#ffe184; }
+
+.source-note { max-width:none; margin:34px 0 8px; padding:16px 18px; background:#ffffff8c; border:1px solid #d4ddd9; border-radius:12px; }
+body.tv-live .home-schedule-panel,body.tv-live .club-event-banner { display:none; }
+
+[data-theme="dark"] .more-navigation-menu { background:#10201c; border-color:#385048; }
+[data-theme="dark"] .primary-navigation .more-navigation-menu button { color:#dceae5; }
+[data-theme="dark"] .primary-navigation .more-navigation-menu button:hover,[data-theme="dark"] .primary-navigation .more-navigation-menu button[aria-pressed="true"] { color:#fff; background:#1b3a32; }
+[data-theme="dark"] .personal-settings[open] { background:#0d1a17; border-color:#385048; }
+[data-theme="dark"] .today-grid { background:#0b1613; }
+[data-theme="dark"] .home-schedule-panel { background:#0b1613; border-color:#30443e; }
+[data-theme="dark"] .home-schedule-panel-head,[data-theme="dark"] .home-schedule-panel > .season-toolbar,[data-theme="dark"] .home-schedule section { background:#111f1b; border-color:#30443e; }
+[data-theme="dark"] .home-schedule-panel-head h3 { color:#edf5f1; }
+[data-theme="dark"] .home-schedule-panel-head > span { color:#aebdb8; }
+[data-theme="dark"] .source-note { background:#0f1d19; border-color:#30443e; }
+
+@media(max-width:1050px) {
+  .more-navigation > summary { padding-inline:10px 28px; font-size:.8rem; }
+  .more-navigation > summary::after { right:8px; }
+  .club-event-banner { grid-template-columns:minmax(0,1fr) auto; }
+  .club-event-art { display:none; }
+}
+@media(max-width:800px) {
+  main { padding:18px 12px 22px; }
+  .darts-header .primary-navigation { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); overflow:visible; padding:0; }
+  .primary-navigation > button,.more-navigation > summary { justify-content:center; min-width:0; min-height:48px; padding:0 5px; font-size:.68rem; line-height:1.05; text-align:center; }
+  .more-navigation { position:static; }
+  .more-navigation > summary::after { display:none; }
+  .more-navigation-menu { top:100%; left:12px; right:12px; min-width:0; }
+  .intro { min-height:200px; margin-bottom:20px; border-radius:12px; }
+  .club-event-banner,.club-event-banner.has-event-image { grid-template-columns:minmax(0,1fr); gap:18px; margin-bottom:20px; padding:22px 18px; border-radius:12px; }
+  .club-event-banner.has-event-image .club-event-art { display:flex; min-height:0; border-left:0; }
+  .club-event-banner.has-event-image .club-event-art img { width:min(300px,100%); max-height:390px; }
+  .club-event-link { justify-self:start; }
+  .sports-panel { margin:20px 0; border-radius:13px; }
+  #todayPanel > .match-center { margin:18px 12px; }
+  .home-schedule-panel { margin:20px 12px; }
+  .home-schedule-panel-head { align-items:start; flex-direction:column; gap:6px; padding:18px 16px; }
+  .home-schedule-panel > .season-toolbar { margin:14px; }
+  .home-schedule { padding:0 14px 16px; }
+}
+@media(max-width:520px) {
+  .darts-header { padding-inline:10px; }
+  .darts-header .primary-navigation { margin-inline:-10px; }
+  .primary-navigation > button,.more-navigation > summary { padding-inline:3px; font-size:.6rem; letter-spacing:.015em; }
+  .intro { min-height:174px; padding:20px 16px; }
+  .intro h1 { font-size:clamp(2.65rem,15vw,4rem); }
+  .club-event-copy h2 { font-size:1.85rem; }
+  .club-event-link { justify-self:stretch; }
+  #todayPanel > .match-center { margin-inline:10px; }
+  .match-center-head { align-items:start; flex-direction:column; gap:4px; }
+  .match-center-head > span { font-size:.68rem; }
+  .match-center-card { min-height:128px; padding:14px 12px; }
+  .home-schedule-panel { margin-inline:10px; }
+  .home-schedule section { padding:14px; }
+}

@@ -192,6 +192,21 @@ function dartsSponsors(config, now=Date.now()) {
   }).sort((a,b)=>b.priority-a.priority||a.name.localeCompare(b.name,'de')) : [];
   return {displaySeconds,sponsors};
 }
+function dartsClubEvents(config, now=Date.now()) {
+  const clean=(value,max)=>typeof value==='string'?value.trim().slice(0,max):'';
+  return (Array.isArray(config?.events)?config.events:[]).flatMap((item,index)=>{
+    const title=clean(item?.title,100); if (!title) return [];
+    const starts=item.startsAt?Date.parse(item.startsAt):-Infinity;
+    const ends=item.endsAt?Date.parse(item.endsAt):Infinity;
+    if (Number.isNaN(starts)||Number.isNaN(ends)||starts>ends||now<starts||now>ends) return [];
+    let href='';
+    if (typeof item.href==='string'&&item.href) {
+      try { const url=new URL(item.href); if (url.protocol==='https:'&&!url.username&&!url.password) href=url.href; } catch (_) {}
+    }
+    const image=typeof item.image==='string'&&/^\/pics\/events\/[a-z0-9][a-z0-9._-]*\.(?:avif|jpe?g|png|webp)$/i.test(item.image)?item.image:'';
+    return [{id:String(item.id||index),title,kicker:clean(item.kicker,40)||'Aus dem Verein',description:clean(item.description,240),date:clean(item.date,60),location:clean(item.location,80),buttonLabel:clean(item.buttonLabel,40)||'Mehr erfahren',href,image,priority:Number.isInteger(item.priority)?item.priority:0}];
+  }).sort((left,right)=>right.priority-left.priority||left.title.localeCompare(right.title,'de'));
+}
 function dartsLayout(raw) {
   const ids = DARTS_TEAMS.map(t=>t.id);
   const count = [1,2,3,4].includes(raw?.count) ? raw.count : 4;
@@ -332,6 +347,27 @@ function initDarts() {
     .catch(()=>fetch('/static/darts-sponsors.json',{headers:{Accept:'application/json'}}).then(response=>response.ok?response.json():Promise.reject(new Error('sponsors unavailable'))))
     .then(config=>startSponsorRotation(dartsSponsors(config)))
     .catch(()=>document.querySelectorAll('.sponsor-slot').forEach(slot=>{ slot.hidden=true; slot.replaceChildren(); }));
+  function renderClubEvent(event) {
+    const banner=q('#clubEventBanner');
+    if (!event) { banner.hidden=true; return; }
+    q('#clubEventKicker').textContent=event.kicker;
+    q('#clubEventTitle').textContent=event.title;
+    q('#clubEventDescription').textContent=event.description;
+    const meta=q('#clubEventMeta'); meta.replaceChildren();
+    for (const value of [event.date,event.location].filter(Boolean)) { const span=document.createElement('span'); span.textContent=value; meta.append(span); }
+    const link=q('#clubEventLink');
+    if (event.href) { link.href=event.href; link.textContent=event.buttonLabel; link.target='_blank'; link.rel='noopener noreferrer'; link.hidden=false; }
+    else { link.removeAttribute('href'); link.hidden=true; }
+    const image=q('#clubEventImage');
+    if (event.image) { image.src=event.image; image.alt=`Plakat: ${event.title}`; image.hidden=false; }
+    else { image.removeAttribute('src'); image.alt=''; image.hidden=true; }
+    banner.classList.toggle('has-event-image',Boolean(event.image));
+    banner.hidden=false;
+  }
+  fetch('/static/darts-events.json',{headers:{Accept:'application/json'},cache:'no-store'})
+    .then(response=>response.ok?response.json():Promise.reject(new Error('events unavailable')))
+    .then(config=>renderClubEvent(dartsClubEvents(config)[0]))
+    .catch(()=>renderClubEvent(null));
   updateTvTeamControls();
   let playerProfiles={}, playerProfileBase={}, playerStatCache={};
   let playerDataPromise=null;
@@ -1641,6 +1677,7 @@ function initDarts() {
     q('#gridView').setAttribute('aria-pressed',String(section === 'teams'));
     q('#membersView').setAttribute('aria-pressed',String(section === 'members'));
     q('#trainingView').setAttribute('aria-pressed',String(section === 'training'));
+    q('#moreNavigation').open=false;
   }
   function loadActivity() {
     const iframe = document.createElement('iframe');
@@ -1665,6 +1702,11 @@ function initDarts() {
   });
   q('#cupView').addEventListener('click',()=>{ setSection('cup'); loadSeason(); });
   q('#membersView').addEventListener('click',async()=>{ setSection('members'); await Promise.all([loadSeason(),loadClubMembers()]); renderMembers(); });
+  q('#personalSettingsToggle').addEventListener('click',()=>{
+    q('#moreNavigation').open=false;
+    q('#personalSettings').open=true;
+    q('#personalSettings').scrollIntoView({behavior:'smooth',block:'start'});
+  });
   q('#memberSearch').addEventListener('input',renderMembers);
   q('#memberGroup').addEventListener('change',renderMembers);
   q('#seasonTeam').addEventListener('change',renderSeason);
