@@ -182,7 +182,7 @@ const server=http.createServer((req,res)=>{
     await quiet.setViewportSize({width:390,height:844});
     await quiet.locator('#clubEventImage').scrollIntoViewIfNeeded();
     assert.ok((await quiet.locator('#clubEventImage').boundingBox()).width>=280,'poster readable on mobile');
-    assert.ok((await quiet.locator('#clubEventBanner').boundingBox()).height<650,'mobile event card must not have empty stretched rows');
+    assert.ok((await quiet.locator('#clubEventBanner').boundingBox()).height<(await quiet.locator('#clubEventImage').boundingBox()).height+260,'mobile event card must not have empty stretched rows');
     assert.equal(await quiet.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'quiet mobile overflow');
     await quiet.screenshot({path:path.join(root,'outputs/darts-home-quiet-mobile.png'),fullPage:true});
     await quiet.setViewportSize({width:1440,height:1000});
