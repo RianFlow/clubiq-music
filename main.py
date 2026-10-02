@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field
 from db_config import connection_kwargs
 from darts_feed import DartsFeedUnavailable, get_darts_center, get_darts_feed, get_darts_match, get_darts_player_stats, get_darts_season
 from darts_live import darts_live_hub
+from darts_tournament import get_tournament
 from darts_push import barver_push_candidates, push_payload, valid_push_endpoint, valid_push_key, subscription_matches, PUSH_EVENT_TYPES
 from radio_directory import DirectoryUnavailable, get_station, search_stations
 from radio_logos import CACHE_SECONDS, FAILURE_SECONDS, cached_logo
@@ -687,6 +688,20 @@ def darts_admin_display():
         "darts-admin.html",
         headers={"Cache-Control": "no-store, max-age=0"},
     )
+
+
+@app.get("/turnier")
+def tournament_display():
+    return FileResponse("turnier.html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/api/v1/darts/tournament")
+def tournament_feed(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return get_tournament()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/impressum")
