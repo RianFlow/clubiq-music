@@ -28,6 +28,7 @@ const server=http.createServer((req,res)=>{
     if(p.endsWith('/members')) data={members:['Patrick Lammers','Erika Beispiel']};
     if(p==='/api/v1/darts/events') data={events:[{id:1,title:'11. Barver Dart Open',description:'Einzel und Doppel in Barver',image:'/pics/events/barver-dart-open-2026.webp',active:true,priority:100},{id:2,title:'Vereinsabend',description:'Zweite Veranstaltung',active:true},{id:3,title:'Entwurf',active:false}]};
     if(p==='/api/v1/darts/social-links') data={links:[{id:1,platform:'whatsapp',label:'WhatsApp-Kanal',href:'https://whatsapp.com/channel/0029Vb1TkYQ5K3zONLbu0C0l',active:true}]};
+    if(p==='/api/v1/darts/sponsors') data={displaySeconds:12,sponsors:[{id:1,name:'Testpartner',type:'main',placements:['top','inline']}]};
     if(p.endsWith('/player-profiles')) data=JSON.parse(fs.readFileSync(path.join(root,'static/darts-players.json'),'utf8'));
     res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(data));return;
   }
@@ -173,6 +174,10 @@ const server=http.createServer((req,res)=>{
     assert.match(await quiet.locator('.club-training').innerText(),/Dienstag & Donnerstag/);
     assert.match(await quiet.locator('.club-training').innerText(),/19:30 Uhr/);
     assert.equal(await quiet.locator('.match-center .club-training').count(),0,'training has its own section');
+    await quiet.locator('#sponsorInline .sponsor-banner').waitFor();
+    assert.equal(await quiet.locator('.home-schedule-panel #sponsorInline').count(),1,'inline sponsor belongs below the schedule, not beside the top sponsor');
+    assert.equal(await quiet.locator('#sponsorTop').isVisible(),true);
+    assert.equal(await quiet.locator('#sponsorInline').evaluate(node=>node.previousElementSibling.id), 'homeSchedule');
     await quiet.locator('#clubEventPoster').click();
     assert.equal(await quiet.locator('#clubPosterDialog').evaluate(node=>node.open),true);
     assert.match(await quiet.locator('#clubPosterFull').getAttribute('src'),/barver-dart-open-2026.webp/);
