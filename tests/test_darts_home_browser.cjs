@@ -172,6 +172,12 @@ const server=http.createServer((req,res)=>{
     assert.equal(await quiet.locator('#clubEventImage').getAttribute('loading'),'lazy');
     assert.match(await quiet.locator('.club-training').innerText(),/Dienstag & Donnerstag/);
     assert.match(await quiet.locator('.club-training').innerText(),/19:30 Uhr/);
+    assert.equal(await quiet.locator('.match-center .club-training').count(),0,'training has its own section');
+    await quiet.locator('#clubEventPoster').click();
+    assert.equal(await quiet.locator('#clubPosterDialog').evaluate(node=>node.open),true);
+    assert.match(await quiet.locator('#clubPosterFull').getAttribute('src'),/barver-dart-open-2026.webp/);
+    await quiet.keyboard.press('Escape');
+    assert.equal(await quiet.locator('#clubPosterDialog').evaluate(node=>node.open),false);
     assert.equal(await quiet.evaluate(()=>Boolean(document.querySelector('.match-center').compareDocumentPosition(document.querySelector('#clubEventBanner'))&Node.DOCUMENT_POSITION_FOLLOWING)),true);
     await quiet.setViewportSize({width:390,height:844});
     await quiet.locator('#clubEventImage').scrollIntoViewIfNeeded();

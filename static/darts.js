@@ -426,6 +426,21 @@ function initDarts() {
     banner.hidden=false;
   }
   let clubEvents=[],clubEventIndex=0;
+  q('#clubEventPoster').addEventListener('click',event=>{
+    const image=q('#clubEventImage');
+    if(!image.getAttribute('src')) return;
+    event.preventDefault();
+    q('#clubPosterFull').src=image.src;
+    q('#clubPosterFull').alt=image.alt;
+    q('#clubPosterHeading').textContent=q('#clubEventTitle').textContent;
+    q('#clubPosterDialog').showModal();
+  });
+  q('#closeClubPoster').addEventListener('click',()=>q('#clubPosterDialog').close());
+  q('#clubPosterDialog').addEventListener('click',event=>{
+    if(event.target!==event.currentTarget) return;
+    const bounds=event.currentTarget.getBoundingClientRect();
+    if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom) event.currentTarget.close();
+  });
   function showClubEvent(index) {
     clubEventIndex=clubEvents.length?(index+clubEvents.length)%clubEvents.length:0;
     renderClubEvent(clubEvents[clubEventIndex]);
@@ -1949,6 +1964,7 @@ function initDarts() {
   q('#todayView').textContent='Startseite';
   q('#todayGrid').after(q('.match-center'));
   q('.match-center').after(q('#clubEventBanner'));
+  q('#clubEventBanner').after(q('.club-training'));
   q('#todayGrid').classList.add('featured-live');
   // The light ticker paints first; the complete season can arrive later.
   window.setTimeout(()=>loadSeason(true),500);

@@ -9,10 +9,10 @@
   <link rel="icon" href="/pics/logo.png">
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
   <link rel="preload" href="/pics/sv-barver-darts-tight-512.webp" as="image" type="image/webp">
-  <link rel="stylesheet" href="/static/darts.css?v=20261002-home1">
+  <link rel="stylesheet" href="/static/darts.css?v=20261002-home2">
   <link rel="stylesheet" href="/static/darts-broadcast.css?v=20261002-content1">
   <script defer src="/static/darts-broadcast.js?v=20261002-content1"></script>
-  <script defer src="/static/darts.js?v=20261002-home1"></script>
+  <script defer src="/static/darts.js?v=20261002-home2"></script>
 </head>
 <body>
   <header class="darts-header">
@@ -67,7 +67,7 @@
     </section>
     <aside id="clubEventBanner" class="club-event-banner" aria-labelledby="clubEventTitle" hidden>
       <div class="club-event-copy"><p id="clubEventKicker" class="eyebrow">Aus dem Verein</p><h2 id="clubEventTitle"></h2><p id="clubEventDescription"></p><div id="clubEventMeta" class="club-event-meta"></div></div>
-      <div class="club-event-art"><a id="clubEventPoster" target="_blank" rel="noopener noreferrer" hidden><img id="clubEventImage" alt="" loading="lazy" fetchpriority="low" decoding="async" hidden><span>Plakat ansehen ↗</span></a><span class="club-logo" aria-hidden="true"></span><strong aria-hidden="true">BARVER<br>DARTS</strong></div>
+      <div class="club-event-art"><a id="clubEventPoster" target="_blank" rel="noopener noreferrer" aria-haspopup="dialog" hidden><img id="clubEventImage" alt="" loading="lazy" fetchpriority="low" decoding="async" hidden><span>Plakat vergrößern ⤢</span></a><span class="club-logo" aria-hidden="true"></span><strong aria-hidden="true">BARVER<br>DARTS</strong></div>
       <a id="clubEventLink" class="club-event-link" hidden>Mehr erfahren</a>
       <div id="clubEventControls" class="club-event-controls" hidden><button id="previousClubEvent" type="button" aria-label="Vorherige Veranstaltung">‹</button><span id="clubEventCount" aria-live="polite"></span><button id="nextClubEvent" type="button" aria-label="Nächste Veranstaltung">›</button></div>
     </aside>
@@ -192,6 +192,10 @@
   <dialog id="playerDialog" class="player-profile-dialog" aria-labelledby="playerProfileHeading">
     <div class="dialog-head"><div><p class="eyebrow">SV Barver Darts · Spielerprofil</p><h2 id="playerProfileHeading">Spieler</h2></div><button id="closePlayerProfile" type="button" aria-label="Schließen">×</button></div>
     <div id="playerProfile"><p class="panel-loading">Spielerprofil wird geladen …</p></div>
+  </dialog>
+  <dialog id="clubPosterDialog" class="club-poster-dialog" aria-labelledby="clubPosterHeading">
+    <div class="dialog-head"><h2 id="clubPosterHeading">Veranstaltungsplakat</h2><button id="closeClubPoster" type="button" aria-label="Plakat schließen">×</button></div>
+    <img id="clubPosterFull" alt="">
   </dialog>
 </body>
 </html>
