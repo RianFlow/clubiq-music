@@ -9,8 +9,11 @@
   <link rel="icon" href="/pics/logo.png">
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
   <link rel="preload" href="/pics/sv-barver-darts-tight-512.webp" as="image" type="image/webp">
-  <link rel="stylesheet" href="/static/darts.css?v=20261002-layout3">
-  <script defer src="/static/darts.js?v=20261002-layout3"></script>
+  <link rel="stylesheet" href="/static/darts.css?v=20261002-content1">
+  <link rel="stylesheet" href="/static/darts-broadcast.css?v=20261002-content1">
+  <script defer src="/static/darts-broadcast.js?v=20261002-content1"></script>
+  <script defer src="/static/darts.js?v=20261002-content1"></script>
+  <script defer src="/static/darts-presence.js?v=20261002-online1"></script>
 </head>
 <body>
   <header class="darts-header">
@@ -31,6 +34,7 @@
   <details id="personalSettings" class="personal-settings">
     <summary>Mein Darts</summary>
     <div class="personal-push-actions"><button id="pushToggle" class="push-toggle" type="button" aria-pressed="false">🔔 Push aktivieren</button><span id="pushHealth" class="push-health" role="status" hidden></span></div>
+    <label class="broadcast-preference"><input id="broadcastEnabled" type="checkbox" checked><span><strong>Live-Highlights einblenden</strong><small>Kurze Einblendungen für neue Barver-Highlights. Deine Auswahl bleibt auf diesem Gerät gespeichert.</small></span></label>
     <form id="preferencesForm">
       <p>Gilt für diesen Browser. Deine Lieblingsmannschaft sortiert die Startseite. Push erhältst du für ausgewählte Teams <strong>oder</strong> abonnierte Spieler – nur für die ausgewählten Meldungsarten.</p>
       <div class="preferences-grid">
@@ -51,6 +55,7 @@
     <span class="live-push-alert-progress" aria-hidden="true"></span>
   </aside>
   <section class="score-ticker" aria-label="Aktuelle Spiele und Ergebnisse">
+    <span id="onlineVisitors" class="online-presence" title="Aktive Seitenansichten der letzten zwei Minuten, keine eindeutigen Personen" aria-label="Online-Zähler wird geladen">– online</span>
     <strong>3K AKTUELL</strong>
     <div class="ticker-window"><div id="tickerTrack" class="ticker-track" aria-live="polite"><span class="ticker-loading">Spielstände werden geladen …</span></div></div>
     <span id="tickerUpdated" class="ticker-updated"></span>
@@ -65,6 +70,7 @@
       <div class="club-event-copy"><p id="clubEventKicker" class="eyebrow">Aus dem Verein</p><h2 id="clubEventTitle"></h2><p id="clubEventDescription"></p><div id="clubEventMeta" class="club-event-meta"></div></div>
       <div class="club-event-art"><img id="clubEventImage" alt="" loading="eager" fetchpriority="high" decoding="async" hidden><span class="club-logo" aria-hidden="true"></span><strong aria-hidden="true">BARVER<br>DARTS</strong></div>
       <a id="clubEventLink" class="club-event-link" hidden>Mehr erfahren</a>
+      <div id="clubEventControls" class="club-event-controls" hidden><button id="previousClubEvent" type="button" aria-label="Vorherige Veranstaltung">‹</button><span id="clubEventCount" aria-live="polite"></span><button id="nextClubEvent" type="button" aria-label="Nächste Veranstaltung">›</button></div>
     </aside>
     <section id="layoutControls" class="layout-controls" aria-label="Spiele anordnen" hidden>
       <label class="count-control" for="gameCount"><span>Ansicht</span><select id="gameCount"><option value="1">1 Team</option><option value="2">2 Teams</option><option value="3">3 Teams</option><option value="4" selected>4 Teams</option></select></label>
@@ -90,6 +96,7 @@
           <button type="button" data-tv-team="D">D</button>
         </div>
         <strong id="tvTeamCount">4 Teams</strong>
+        <label class="tv-roster-choice" for="presentationTeam">Kader<select id="presentationTeam"><option value="A">Barver A</option><option value="B">Barver B</option><option value="C">Barver C</option><option value="D">Barver D</option></select></label><button id="presentTvRoster" type="button">Kader präsentieren</button>
       </div>
       <div id="todayGrid" class="today-grid"><p class="panel-loading">Spielstände werden geladen …</p></div>
       <aside id="sponsorTv" class="sponsor-slot sponsor-slot-tv" data-placement="tv" aria-label="TV-Partner" hidden></aside>
@@ -166,6 +173,7 @@
       <div id="trainingFrame" class="frame-wrap"><div class="placeholder"><strong>Euer Trainingsabend</strong><p>Teilnehmer, Spiele und Bestleistungen in der offiziellen 3K-Ansicht. Erst „Training anzeigen“ stellt die Verbindung her.</p></div></div>
       <p id="trainingNote" class="frame-note">Keine automatische 180-Animation oder Sieger-Meldung. Platzierungen sind erst verfügbar, wenn das Event in 3K abgeschlossen wurde.</p>
     </section>
+    <aside id="socialLinks" class="social-links" hidden><div><p class="eyebrow">Bleib verbunden</p><h2>SV Barver online</h2><p>Neuigkeiten, Turniere und Einblicke aus dem Verein.</p></div><nav id="socialLinksList" aria-label="Unsere Social-Media-Kanäle"></nav></aside>
     <details class="source-note"><summary>Woher kommen die Daten?</summary><p>ClubIQ bereitet die öffentlichen Ergebnisdaten von 3K Darts in einer eigenen, übersichtlichen Ansicht auf. 3K bleibt die offizielle Quelle; dorthin führt nur noch ein optionaler Quellenlink.</p></details>
     <aside id="sponsorFooter" class="sponsor-slot sponsor-slot-footer" data-placement="footer" aria-label="Unsere Partner" hidden></aside>
     <footer><span>ClubIQ zeigt öffentliche 3K-Ergebnisse in einer eigenen Ansicht. 3K bleibt die offizielle Quelle.</span><nav aria-label="Rechtliches und Verwaltung"><a href="/darts-admin">Dartsverwaltung</a><a href="/impressum">Impressum</a><a href="/datenschutz">Datenschutz</a><a href="https://portal.3k-darts.com/frontend/events" target="_blank" rel="noopener noreferrer">3K Darts öffnen ↗</a></nav></footer>

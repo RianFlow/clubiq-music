@@ -48,8 +48,8 @@ function dartsTheme(value, prefersDark=false) {
 function dartsRoster(members) {
   const roleRank = role => {
     const value=String(role || '').toLocaleLowerCase('de-DE');
-    if (value.includes('kapit')) return 0;
     if (value.includes('stell')) return 1;
+    if (value.includes('kapit')) return 0;
     return 2;
   };
   return [...(Array.isArray(members) ? members : [])].sort((left,right)=>
@@ -69,8 +69,8 @@ function dartsMemberRole(member={}, profile={}) {
     return role.toLocaleLowerCase('de-DE').includes('stell') ? 'Stellvertretender Kapitän' : role;
   }
   const normalized=role.toLocaleLowerCase('de-DE');
-  if (normalized.includes('kapit')) return 'Kapitänin';
   if (normalized.includes('stell')) return 'Stellvertretende Kapitänin';
+  if (normalized.includes('kapit')) return 'Kapitänin';
   if (normalized.includes('spieler')) return 'Spielerin';
   return role;
 }
@@ -195,6 +195,7 @@ function dartsSponsors(config, now=Date.now()) {
 function dartsClubEvents(config, now=Date.now()) {
   const clean=(value,max)=>typeof value==='string'?value.trim().slice(0,max):'';
   return (Array.isArray(config?.events)?config.events:[]).flatMap((item,index)=>{
+    if (item?.active===false) return [];
     const title=clean(item?.title,100); if (!title) return [];
     const starts=item.startsAt?Date.parse(item.startsAt):-Infinity;
     const ends=item.endsAt?Date.parse(item.endsAt):Infinity;
@@ -203,9 +204,20 @@ function dartsClubEvents(config, now=Date.now()) {
     if (typeof item.href==='string'&&item.href) {
       try { const url=new URL(item.href); if (url.protocol==='https:'&&!url.username&&!url.password) href=url.href; } catch (_) {}
     }
-    const image=typeof item.image==='string'&&/^\/pics\/events\/[a-z0-9][a-z0-9._-]*\.(?:avif|jpe?g|png|webp)$/i.test(item.image)?item.image:'';
-    return [{id:String(item.id||index),title,kicker:clean(item.kicker,40)||'Aus dem Verein',description:clean(item.description,240),date:clean(item.date,60),location:clean(item.location,80),buttonLabel:clean(item.buttonLabel,40)||'Mehr erfahren',href,image,priority:Number.isInteger(item.priority)?item.priority:0}];
+    const image=typeof item.image==='string'&&(/^[\/]pics\/events\/[a-z0-9][a-z0-9._-]*\.(?:avif|jpe?g|png|webp)$/i.test(item.image)||/^\/api\/v1\/darts\/events\/\d+\/image(?:\?v=\d+)?$/.test(item.image))?item.image:'';
+    return [{id:String(item.id||index),title,kicker:clean(item.kicker,50)||'Aus dem Verein',description:clean(item.description,600),date:clean(item.date,100),location:clean(item.location,120),buttonLabel:clean(item.buttonLabel,40)||'Mehr erfahren',href,image,priority:Number.isInteger(item.priority)?item.priority:0}];
   }).sort((left,right)=>right.priority-left.priority||left.title.localeCompare(right.title,'de'));
+}
+function dartsSocialLinks(config) {
+  const labels={whatsapp:'WhatsApp',instagram:'Instagram',facebook:'Facebook',youtube:'YouTube',tiktok:'TikTok',website:'Webseite',x:'X'};
+  return (Array.isArray(config?.links)?config.links:[]).flatMap(item=>{
+    if (!item || item.active===false || !labels[item.platform]) return [];
+    try {
+      const url=new URL(item.href);
+      if (url.protocol!=='https:'||url.username||url.password) return [];
+      return [{platform:item.platform,label:typeof item.label==='string'&&item.label.trim()?item.label.trim().slice(0,80):labels[item.platform],href:url.href,priority:Number.isInteger(item.priority)?item.priority:0}];
+    } catch (_) { return []; }
+  }).sort((a,b)=>b.priority-a.priority||a.label.localeCompare(b.label,'de'));
 }
 function dartsLayout(raw) {
   const ids = DARTS_TEAMS.map(t=>t.id);
@@ -254,6 +266,18 @@ function initDarts() {
   const q = selector => document.querySelector(selector);
   const grid = q('#teamGrid'), cards = new Map(), selections = {};
   const demoLive = ['127.0.0.1','localhost'].includes(location.hostname) && new URLSearchParams(location.search).get('demo') === 'live';
+  let broadcastEnabled=true;
+  try { broadcastEnabled=localStorage.getItem('clubiq_darts_broadcast_enabled')!=='false'; } catch (_) {}
+  q('#broadcastEnabled').checked=broadcastEnabled;
+  window.DartsBroadcast?.configure({enabled:broadcastEnabled,tv:false});
+  q('#broadcastEnabled').addEventListener('change',()=>{
+    broadcastEnabled=q('#broadcastEnabled').checked;
+    try { localStorage.setItem('clubiq_darts_broadcast_enabled',String(broadcastEnabled)); } catch (_) {}
+    window.DartsBroadcast?.configure({enabled:broadcastEnabled});
+  });
+  const broadcastBaselines=new Set();
+  // Initialize the transition stream even when the initial snapshot has no events.
+  window.DartsBroadcast?.ingest([],{baseline:true});
   const themeKey = 'clubiq_darts_theme';
   function applyTheme(theme, remember=false) {
     const selected=dartsTheme(theme);
@@ -364,10 +388,27 @@ function initDarts() {
     banner.classList.toggle('has-event-image',Boolean(event.image));
     banner.hidden=false;
   }
-  fetch('/static/darts-events.json',{headers:{Accept:'application/json'},cache:'no-store'})
-    .then(response=>response.ok?response.json():Promise.reject(new Error('events unavailable')))
-    .then(config=>renderClubEvent(dartsClubEvents(config)[0]))
+  let clubEvents=[],clubEventIndex=0;
+  function showClubEvent(index) {
+    clubEventIndex=clubEvents.length?(index+clubEvents.length)%clubEvents.length:0;
+    renderClubEvent(clubEvents[clubEventIndex]);
+    q('#clubEventControls').hidden=clubEvents.length<2;
+    q('#clubEventCount').textContent=`${clubEventIndex+1} / ${clubEvents.length}`;
+  }
+  q('#previousClubEvent').addEventListener('click',()=>showClubEvent(clubEventIndex-1));
+  q('#nextClubEvent').addEventListener('click',()=>showClubEvent(clubEventIndex+1));
+  fetch('/api/v1/darts/events',{headers:{Accept:'application/json'},cache:'no-store',signal:AbortSignal.timeout(8000)})
+    .then(response=>response.ok?response.json():Promise.reject(new Error('events api unavailable')))
+    .catch(()=>fetch('/static/darts-events.json',{headers:{Accept:'application/json'},signal:AbortSignal.timeout(8000)}).then(response=>response.ok?response.json():Promise.reject(new Error('events unavailable'))))
+    .then(config=>{clubEvents=dartsClubEvents(config);showClubEvent(0);})
     .catch(()=>renderClubEvent(null));
+  fetch('/api/v1/darts/social-links',{headers:{Accept:'application/json'},signal:AbortSignal.timeout(8000)})
+    .then(response=>response.ok?response.json():Promise.reject(new Error('events unavailable')))
+    .then(config=>{
+      const links=dartsSocialLinks(config),target=q('#socialLinksList');
+      target.replaceChildren(...links.map(item=>{const link=document.createElement('a');link.href=item.href;link.textContent=item.label;link.target='_blank';link.rel='noopener noreferrer';link.dataset.platform=item.platform;return link;}));
+      q('#socialLinks').hidden=!links.length;
+    }).catch(()=>{});
   updateTvTeamControls();
   let playerProfiles={}, playerProfileBase={}, playerStatCache={};
   let playerDataPromise=null;
@@ -613,6 +654,7 @@ function initDarts() {
   }
   function applyServerLiveGroup(group) {
     if (!group?.groupKey) return;
+    if (!demoLive && !group.stale && Array.isArray(group.events)) window.DartsBroadcast?.ingest(group.events);
     serverLiveGroups.set(String(group.groupKey),group);
     const serverCenters=[...serverLiveGroups.values()].filter(entry=>!entry.finished).map(liveGroupAsCenter);
     const ids=new Set(serverCenters.flatMap(center=>center.barverMatches.map(match=>match.id)));
@@ -898,6 +940,23 @@ function initDarts() {
       }));
       const available=results.filter(result=>result.status==='fulfilled').map(result=>result.value);
       if (available.length) {
+        if (!demoLive) for (const center of available) {
+          const key=center.league?.key;
+          if (!key||center.stale) continue;
+          const baseline=!broadcastBaselines.has(key);broadcastBaselines.add(key);
+          const matches=new Map((center.barverMatches||[]).map(item=>[item.id,item]));
+          const events=(center.pushEvents||[]).flatMap(event=>{
+            const match=matches.get(event.matchId);
+            if (!match || match.kind!=='live') return [];
+            const code=dartsTeamCode(event.team),side=match.barverSides?.[code] || (dartsTeamCode(match.home)===code?'home':dartsTeamCode(match.away)===code?'away':'');
+            return [{...event,barverSide:side}];
+          });
+          // Remember report facts quietly while SSE supplies the live transitions.
+          // This also seeds the fallback when a stream loses its connection.
+          const streamEvents=events.filter(event=>serverLiveGroups.get(String(event.matchId))?.connected);
+          window.DartsBroadcast?.ingest(streamEvents,{baseline:true});
+          window.DartsBroadcast?.ingest(events.filter(event=>!streamEvents.includes(event)),{baseline});
+        }
         liveCenters=[...available,...liveCenters.filter(old=>!available.some(fresh=>fresh.league?.key===old.league?.key))];
         if (demoLive) {
           const liveItems=(tickerData.items || []).filter(item=>item.kind==='live');
@@ -1187,6 +1246,14 @@ function initDarts() {
     }
     if (!rosterMembers.length) { const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent='Kader wird von 3K noch nicht bereitgestellt.'; roster.append(empty); }
     squad.append(roster);
+    if (rosterMembers.length && window.DartsBroadcast) {
+      const present=document.createElement('button');present.type='button';present.className='primary';present.textContent='Kader präsentieren';
+      present.addEventListener('click',()=>{
+        q('#teamDialog').close();
+        presentTeamRoster(team.code);
+      });
+      squad.append(present);
+    }
     const venue=team.venue || {}; const venueSection=document.createElement('section'); venueSection.className='team-profile-section team-venue'; const venueTitle=document.createElement('h3'); venueTitle.textContent='Heimspielstätte'; venueSection.append(venueTitle);
     const venueName=document.createElement('strong'); venueName.textContent=venue.name || 'Dorfgemeinschaftshaus Barver'; const address=document.createElement('span'); address.textContent=[venue.street,[venue.postalCode,venue.city].filter(Boolean).join(' ')].filter(Boolean).join(' · '); venueSection.append(venueName,address);
     if (venue.boards) { const boards=document.createElement('small'); boards.textContent=`${venue.boards} Boards an der Spielstätte`; venueSection.append(boards); }
@@ -1844,6 +1911,16 @@ function initDarts() {
   q('#closeMatch').addEventListener('click',()=>q('#matchDialog').close());
   q('#closeTeamProfile').addEventListener('click',()=>q('#teamDialog').close());
   q('#closePlayerProfile').addEventListener('click',()=>q('#playerDialog').close());
+  async function presentTeamRoster(code) {
+    try {
+      if (!seasonData) await loadSeason();
+      await loadPlayerData();
+      const team=teamByCode(code)||{code,name:`SV Barver Darts ${code}`};
+      const players=dartsTeamRoster(team).map(member=>({...playerProfiles[String(member.id||'')],...member,role:dartsMemberRole(member,playerProfiles[String(member.id||'')]||{})}));
+      if (!window.DartsBroadcast?.presentRoster({code,name:team.name,players})) message('Für diese Mannschaft ist noch kein Kader verfügbar.');
+    } catch (_) { message('Der Kader konnte gerade nicht geladen werden. Bitte erneut versuchen.'); }
+  }
+  q('#presentTvRoster').addEventListener('click',()=>presentTeamRoster(q('#presentationTeam').value));
   q('#fullscreen').addEventListener('click',async()=>{
     try { if (document.fullscreenElement) await document.exitFullscreen(); else { setSection('today'); if (document.body.requestFullscreen) await document.body.requestFullscreen(); else message('TV-Modus wird hier nicht unterstützt. Du kannst die Heute-Ansicht normal verwenden.'); } }
     catch (_) { message('Vollbild nicht verfügbar. Bitte die Browser-Vollbildfunktion oder „Groß“ verwenden.'); }
@@ -1851,6 +1928,7 @@ function initDarts() {
   document.addEventListener('fullscreenchange',()=>{
     const active=Boolean(document.fullscreenElement);
     document.body.classList.toggle('tv-live',active);
+    window.DartsBroadcast?.configure({tv:active});
     updateTvTeamControls(); renderToday(tickerData); refreshSponsorSlots(false);
     q('#fullscreen').textContent=active ? 'TV-Modus beenden' : 'TV-Modus';
   });

@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex,nofollow,noarchive">
   <title>ClubIQ · Dartsverwaltung</title>
   <link rel="icon" href="/pics/logo.png">
-  <link rel="stylesheet" href="/static/darts-admin.css?v=20260929-sponsor1">
-  <script defer src="/static/darts-admin.js?v=20260929-sponsor1"></script>
+  <link rel="stylesheet" href="/static/darts-admin.css?v=20261002-content1">
+  <script defer src="/static/darts-admin.js?v=20261002-content1"></script>
 </head>
 <body>
   <header class="admin-header">
@@ -31,6 +31,8 @@
       <nav class="admin-tabs" aria-label="Dartsverwaltung">
         <button id="playersAdminTab" type="button" class="active">Spielerprofile</button>
         <button id="sponsorsAdminTab" type="button">Sponsoren</button>
+        <button id="eventsAdminTab" type="button">Veranstaltungen</button>
+        <button id="socialAdminTab" type="button">Social Media</button>
       </nav>
       <section id="playersAdminView">
         <div class="admin-intro">
@@ -75,6 +77,38 @@
           <div class="form-actions"><button type="submit">Änderungen speichern</button><a id="publicPreview" href="/darts" target="_blank" rel="noopener">Öffentliche Seite ansehen</a></div>
           <p id="formStatus" role="status" hidden></p>
         </form>
+        </div>
+      </section>
+      <section id="eventsAdminView" hidden>
+        <div class="admin-intro"><div><p class="eyebrow">Termine & Banner</p><h1>Veranstaltungen</h1><p>Termine und Veranstaltungsbanner als Entwurf vorbereiten und gezielt veröffentlichen.</p></div><span id="eventDataStatus" role="status">Veranstaltungen werden geladen …</span></div>
+        <div class="admin-layout content-admin-layout">
+          <aside class="player-browser"><button id="newEvent" type="button">+ Veranstaltung anlegen</button><label>Veranstaltung suchen<input id="eventSearch" type="search" placeholder="Titel oder Ort" autocomplete="off"></label><div id="eventList" class="player-list"></div></aside>
+          <section id="eventEditorEmpty" class="editor-card empty-state"><strong>Wähle links eine Veranstaltung aus.</strong><span>Oder lege einen neuen Termin an.</span></section>
+          <form id="eventForm" class="editor-card" hidden>
+            <div class="profile-heading"><div id="eventImagePreview" class="photo-preview banner-preview"><span>Banner</span></div><div><p class="eyebrow">Veranstaltung</p><h2 id="eventHeading">Neue Veranstaltung</h2><span id="eventMeta">Noch nicht gespeichert</span></div></div>
+            <input id="eventId" type="hidden">
+            <div class="image-actions"><label class="file-button">Banner auswählen<input id="eventImage" type="file" accept="image/jpeg,image/png,image/webp"></label><button id="deleteEventImage" class="secondary danger" type="button">Banner entfernen</button><small>Das Bild wird im Browser verkleinert und als WebP gespeichert.</small></div>
+            <div class="form-grid">
+              <label>Titel<input id="eventTitle" maxlength="100" required></label><label>Kurztitel<input id="eventKicker" maxlength="50"></label>
+              <label class="wide">Beschreibung<textarea id="eventDescription" maxlength="600" rows="4"></textarea></label><label>Datum / Anzeige<input id="eventDate" maxlength="100" placeholder="z. B. Samstag, 15. August"></label><label>Ort<input id="eventLocation" maxlength="120"></label>
+              <label class="wide">Webseite<input id="eventHref" type="url" maxlength="500" placeholder="https://…"></label><label>Button-Text<input id="eventButtonLabel" maxlength="40" placeholder="Mehr erfahren"></label><label>Priorität<input id="eventPriority" type="number" min="-1000" max="1000" value="0"></label>
+              <label>Beginn<input id="eventStartsAt" type="datetime-local"></label><label>Ende<input id="eventEndsAt" type="datetime-local"></label>
+            </div>
+            <label class="publish-switch"><input id="eventActive" type="checkbox"><span><strong>Veranstaltung veröffentlichen</strong><small>Neue Veranstaltungen starten immer als unveröffentlichter Entwurf.</small></span></label>
+            <div class="form-actions"><button type="submit">Veranstaltung speichern</button><button id="deleteEvent" type="button" class="secondary danger">Veranstaltung löschen</button><a href="/darts" target="_blank" rel="noopener">Öffentliche Seite ansehen</a></div><p id="eventFormStatus" role="status" hidden></p>
+          </form>
+        </div>
+      </section>
+      <section id="socialAdminView" hidden>
+        <div class="admin-intro"><div><p class="eyebrow">Kanäle & Links</p><h1>Social Media</h1><p>Offizielle Vereinsprofile und weitere Links verwalten.</p></div><span id="socialDataStatus" role="status">Social Links werden geladen …</span></div>
+        <div class="admin-layout content-admin-layout">
+          <aside class="player-browser"><button id="newSocial" type="button">+ Link anlegen</button><label>Link suchen<input id="socialSearch" type="search" placeholder="Plattform oder Name" autocomplete="off"></label><div id="socialList" class="player-list"></div></aside>
+          <section id="socialEditorEmpty" class="editor-card empty-state"><strong>Wähle links einen Social-Link aus.</strong><span>Oder lege einen neuen Link an.</span></section>
+          <form id="socialForm" class="editor-card" hidden>
+            <div class="profile-heading"><div class="social-icon-preview">↗</div><div><p class="eyebrow">Social Media</p><h2 id="socialHeading">Neuer Link</h2><span id="socialMeta">Noch nicht gespeichert</span></div></div><input id="socialId" type="hidden">
+            <div class="form-grid"><label>Plattform<select id="socialPlatform" required><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="whatsapp">WhatsApp</option><option value="youtube">YouTube</option><option value="tiktok">TikTok</option><option value="x">X</option><option value="website">Webseite</option></select></label><label>Anzeigename<input id="socialLabel" maxlength="80" required placeholder="z. B. SV Barver auf Instagram"></label><label class="wide">HTTPS-Link<input id="socialHref" type="url" maxlength="500" placeholder="https://…" required></label><label>Priorität<input id="socialPriority" type="number" min="-1000" max="1000" value="0"></label></div>
+            <label class="publish-switch"><input id="socialActive" type="checkbox"><span><strong>Link veröffentlichen</strong><small>Neue Links starten immer als unveröffentlichter Entwurf.</small></span></label><div class="form-actions"><button type="submit">Link speichern</button><button id="deleteSocial" type="button" class="secondary danger">Link löschen</button><a href="/darts" target="_blank" rel="noopener">Öffentliche Seite ansehen</a></div><p id="socialFormStatus" role="status" hidden></p>
+          </form>
         </div>
       </section>
 

@@ -915,6 +915,10 @@ body { background:linear-gradient(180deg,#f2f3ef 0,#f7f7f4 48%,#eff1ec 100%); }
 .darts-header .theme-switch[aria-checked="false"] .theme-light,.darts-header .theme-switch[aria-checked="true"] .theme-dark { color:#fff; }
 .personal-settings:not([open]) { border-radius:2px; border-left:4px solid var(--sports-mint); }
 .score-ticker { min-height:44px; background:#020908; border-bottom:0; }
+.online-presence { order:3; flex:0 0 auto; padding:8px 12px; color:#b8c9c3; font-size:.75rem; white-space:nowrap; border-left:1px solid #ffffff26; }
+.online-presence::before { content:'●'; color:#74847d; margin-right:6px; }
+.online-presence.is-current::before { color:#78d7a8; }
+@media(max-width:600px) { .online-presence { padding:8px; font-size:.65rem; } }
 .score-ticker > strong { padding-inline:20px; background:var(--sports-red); color:#fff; font-family:var(--sports-display); font-size:.88rem; letter-spacing:.1em; }
 .ticker-item,.ticker-loading { min-height:44px; }
 .ticker-item::before { border-radius:2px; }
@@ -1178,6 +1182,27 @@ main { max-width:1660px; padding:30px clamp(18px,3vw,48px) 28px; }
 .club-event-art strong { color:#ffffff22; font-family:var(--sports-display); font-size:2rem; line-height:.85; }
 .club-event-link { display:inline-grid; place-items:center; min-height:48px; padding:11px 16px; color:#17342e; text-decoration:none; background:#fff; border-radius:8px; font-weight:850; white-space:nowrap; }
 .club-event-link:hover { background:#ffe184; }
+.club-event-controls { grid-column:1/-1; display:flex; gap:14px; align-items:center; justify-content:flex-end; }
+.club-event-controls button { min-width:42px; min-height:38px; border:1px solid #ffffff60; border-radius:8px; background:#ffffff18; color:white; font-size:1.5rem; cursor:pointer; }
+.club-event-controls span { font-size:.85rem; font-weight:800; }
+.social-links { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:24px; margin:32px 0; padding:26px 30px; border:1px solid var(--line); border-radius:16px; background:#fff; }
+.social-links h2 { margin:0; font-family:var(--sports-display); text-transform:uppercase; font-size:1.8rem; }
+.social-links p:last-child { margin:8px 0 0; color:#64736e; }
+.social-links nav { display:flex; flex-wrap:wrap; gap:10px; }
+.social-links a { display:inline-flex; align-items:center; min-height:46px; padding:10px 17px; border:1px solid var(--line); border-radius:9px; color:#163c36; background:#eef4f1; font-weight:800; text-decoration:none; }
+.social-links a:hover { border-color:var(--sports-mint); }
+.social-links a[data-platform="whatsapp"] { color:#fff; background:#126b48; border-color:#228761; }
+body.tv-live .social-links { display:none; }
+.broadcast-preference { display:flex; align-items:start; gap:12px; padding:16px 0; }
+.broadcast-preference input { width:20px; height:20px; accent-color:#24735f; }
+.broadcast-preference span { display:grid; gap:5px; }
+.broadcast-preference small { color:#64736e; font-weight:400; }
+.tv-roster-choice { display:flex; gap:8px; align-items:center; font-size:.8rem; }
+.tv-roster-choice select { max-width:130px; padding:5px 8px; color:#d9e9e4; background:#142923; border:1px solid #426158; border-radius:8px; }
+[data-theme="dark"] .social-links { background:#111f1b; }
+[data-theme="dark"] .social-links a:not([data-platform="whatsapp"]) { color:#dceae5; background:#172722; }
+[data-theme="dark"] .social-links p:last-child,[data-theme="dark"] .broadcast-preference small { color:#aebdb8; }
+@media(max-width:520px) { .social-links { padding:20px 18px; } .social-links nav { width:100%; } .social-links a { flex:1; justify-content:center; } }
 
 .source-note { max-width:none; margin:34px 0 8px; padding:16px 18px; background:#ffffff8c; border:1px solid #d4ddd9; border-radius:12px; }
 body.tv-live .home-schedule-panel,body.tv-live .club-event-banner { display:none; }

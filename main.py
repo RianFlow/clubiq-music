@@ -528,6 +528,28 @@ class DartsSponsorUpdate(BaseModel):
     active: bool = True
 
 
+class DartsEventUpdate(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+    kicker: str | None = Field(default=None, max_length=50)
+    description: str | None = Field(default=None, max_length=600)
+    date_label: str | None = Field(default=None, max_length=100)
+    location: str | None = Field(default=None, max_length=120)
+    website: str | None = Field(default=None, max_length=500)
+    button_label: str | None = Field(default=None, max_length=40)
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    priority: int = Field(default=0, ge=-1000, le=1000)
+    active: bool = True
+
+
+class DartsSocialLinkUpdate(BaseModel):
+    platform: str = Field(pattern=r"^(whatsapp|instagram|facebook|youtube|tiktok|website|x)$")
+    label: str = Field(min_length=1, max_length=80)
+    website: str = Field(min_length=8, max_length=500)
+    priority: int = Field(default=0, ge=-1000, le=1000)
+    active: bool = True
+
+
 class SuggestionCreate(BaseModel):
     provider: str = Field(default="youtube", pattern=r"^[a-z0-9_-]{2,30}$")
     external_id: str = Field(min_length=1, max_length=100)
@@ -837,6 +859,235 @@ def _query_darts_sponsors(public_only: bool) -> list[dict]:
             """
         )
         return [_sponsor_from_row(row) for row in cur.fetchall()]
+
+
+def _https_url(value: str | None, field_name: str) -> str | None:
+    value = (value or "").strip()
+    if not value:
+        return None
+    try:
+        parsed = urlparse(value)
+        valid_host = bool(parsed.hostname)
+        _ = parsed.port
+    except ValueError:
+        valid_host = False
+        parsed = None
+    if not parsed or parsed.scheme.lower() != "https" or not valid_host or parsed.username or parsed.password:
+        raise HTTPException(status_code=422, detail=f"{field_name} muss eine gültige HTTPS-Adresse ohne Zugangsdaten sein.")
+    return parsed.geturl()
+
+
+def _validated_darts_event(update: DartsEventUpdate) -> dict:
+    title = " ".join(update.title.strip().split())
+    if not title:
+        raise HTTPException(status_code=422, detail="Der Veranstaltungstitel darf nicht leer sein.")
+    starts_at = utc_datetime(update.starts_at, "Startzeit") if update.starts_at else None
+    ends_at = utc_datetime(update.ends_at, "Endzeit") if update.ends_at else None
+    if starts_at and ends_at and ends_at < starts_at:
+        raise HTTPException(status_code=422, detail="Das Veranstaltungsende muss nach dem Start liegen.")
+    return {
+        "title": title,
+        "kicker": _clean_profile_text(update.kicker),
+        "description": _clean_profile_text(update.description),
+        "date_label": _clean_profile_text(update.date_label),
+        "location": _clean_profile_text(update.location),
+        "website": _https_url(update.website, "Webseite"),
+        "button_label": _clean_profile_text(update.button_label),
+        "starts_at": starts_at, "ends_at": ends_at,
+        "priority": update.priority, "active": update.active,
+    }
+
+
+def _event_dict(row, admin: bool = False) -> dict:
+    event_id = str(row[0])
+    image = None
+    if row[12]:
+        endpoint = "/api/v1/darts/admin/events" if admin else "/api/v1/darts/events"
+        image = f"{endpoint}/{event_id}/image?v={int(row[14] or 0)}"
+    elif row[13]:
+        image = row[13]
+    return {
+        "id": int(row[0]), "slug": row[1] or "", "kicker": row[2] or "", "title": row[3],
+        "description": row[4] or "", "date": row[5] or "", "dateLabel": row[5] or "",
+        "location": row[6] or "", "href": row[7] or "", "buttonLabel": row[8] or "",
+        "startsAt": row[9], "endsAt": row[10], "priority": int(row[11] or 0),
+        "active": bool(row[15]), "image": image, "hasImage": bool(row[12] or row[13]),
+    }
+
+
+_DARTS_EVENT_SELECT = """SELECT id, slug, kicker, title, description, date_label, location,
+    website, button_label, starts_at, ends_at, priority, (image_data IS NOT NULL), image_path,
+    image_version, active FROM darts_events"""
+
+
+def _darts_events(public_only: bool) -> list[dict]:
+    where = " WHERE active=TRUE AND (starts_at IS NULL OR starts_at<=CURRENT_TIMESTAMP) AND (ends_at IS NULL OR ends_at>=CURRENT_TIMESTAMP)" if public_only else ""
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(f"{_DARTS_EVENT_SELECT}{where} ORDER BY priority DESC, starts_at NULLS LAST, id;")
+        return [_event_dict(row, admin=not public_only) for row in cur.fetchall()]
+
+
+def _validated_social_link(update: DartsSocialLinkUpdate) -> dict:
+    label = " ".join(update.label.strip().split())
+    website = _https_url(update.website, "Webseite")
+    if not label:
+        raise HTTPException(status_code=422, detail="Das Link-Label darf nicht leer sein.")
+    if not website:
+        raise HTTPException(status_code=422, detail="Die Webseite darf nicht leer sein.")
+    return {"platform": update.platform, "label": label, "website": website, "priority": update.priority, "active": update.active}
+
+
+def _darts_social_links(public_only: bool) -> list[dict]:
+    where = " WHERE active=TRUE" if public_only else ""
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(f"SELECT id, platform, label, website, priority, active FROM darts_social_links{where} ORDER BY priority DESC, id;")
+        return [{"id": int(r[0]), "platform": r[1], "label": r[2], "href": r[3], "priority": int(r[4]), "active": bool(r[5])} for r in cur.fetchall()]
+
+
+@app.get("/api/v1/darts/events")
+def darts_events():
+    return Response(content=json.dumps({"events": _darts_events(True)}, ensure_ascii=False, default=str), media_type="application/json",
+                    headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=300"})
+
+
+class DartsPresenceUpdate(BaseModel):
+    session_id: UUID
+    active: bool = True
+
+
+@app.post("/api/v1/darts/presence")
+def darts_presence(update: DartsPresenceUpdate):
+    # Ephemeral page IDs only: no IP, profile, user agent, or visit history.
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM darts_online_presence WHERE expires_at<=CURRENT_TIMESTAMP;")
+        if update.active:
+            cur.execute("""INSERT INTO darts_online_presence (session_id, expires_at)
+                VALUES (%s, CURRENT_TIMESTAMP + INTERVAL '120 seconds')
+                ON CONFLICT (session_id) DO UPDATE SET expires_at=EXCLUDED.expires_at;""",
+                (update.session_id,))
+        else:
+            cur.execute("DELETE FROM darts_online_presence WHERE session_id=%s;", (update.session_id,))
+        cur.execute("SELECT COUNT(*) FROM darts_online_presence WHERE expires_at>CURRENT_TIMESTAMP;")
+        count = int(cur.fetchone()[0])
+    return Response(content=json.dumps({"online": count, "windowSeconds": 120}),
+                    media_type="application/json", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/v1/darts/social-links")
+def darts_social_links():
+    return Response(content=json.dumps({"links": _darts_social_links(True)}, ensure_ascii=False, default=str), media_type="application/json",
+                    headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=300"})
+
+
+@app.get("/api/v1/darts/admin/events", dependencies=[Depends(require_admin)])
+def darts_admin_events():
+    return Response(content=json.dumps({"events": _darts_events(False)}, ensure_ascii=False, default=str), media_type="application/json", headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/v1/darts/admin/events", dependencies=[Depends(require_admin)], status_code=201)
+def darts_admin_create_event(update: DartsEventUpdate):
+    v = _validated_darts_event(update)
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("""INSERT INTO darts_events (title,kicker,description,date_label,location,website,button_label,starts_at,ends_at,priority,active)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id;""",
+            (v["title"],v["kicker"],v["description"],v["date_label"],v["location"],v["website"],v["button_label"],v["starts_at"],v["ends_at"],v["priority"],v["active"]))
+        event_id = int(cur.fetchone()[0]); conn.commit()
+    return {"status": "success", "id": event_id}
+
+
+@app.put("/api/v1/darts/admin/events/{event_id}", dependencies=[Depends(require_admin)])
+def darts_admin_update_event(event_id: int, update: DartsEventUpdate):
+    v = _validated_darts_event(update)
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("""UPDATE darts_events SET title=%s,kicker=%s,description=%s,date_label=%s,location=%s,website=%s,button_label=%s,
+            starts_at=%s,ends_at=%s,priority=%s,active=%s,updated_at=CURRENT_TIMESTAMP WHERE id=%s;""",
+            (v["title"],v["kicker"],v["description"],v["date_label"],v["location"],v["website"],v["button_label"],v["starts_at"],v["ends_at"],v["priority"],v["active"],event_id))
+        if cur.rowcount != 1: raise HTTPException(404, "Veranstaltung nicht gefunden.")
+        conn.commit()
+    return {"status": "success", "id": event_id}
+
+
+@app.delete("/api/v1/darts/admin/events/{event_id}", dependencies=[Depends(require_admin)])
+def darts_admin_delete_event(event_id: int):
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM darts_events WHERE id=%s;", (event_id,))
+        if cur.rowcount != 1: raise HTTPException(404, "Veranstaltung nicht gefunden.")
+        conn.commit()
+    return {"status": "success"}
+
+
+@app.post("/api/v1/darts/admin/events/{event_id}/image", dependencies=[Depends(require_admin)])
+async def darts_admin_upload_event_image(event_id: int, image: UploadFile = File(...)):
+    media_type, data = _validated_player_image(await image.read(3 * 1024 * 1024 + 1))
+    version = int(datetime.now(timezone.utc).timestamp() * 1000)
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("UPDATE darts_events SET image_data=%s,image_media_type=%s,image_version=%s,updated_at=CURRENT_TIMESTAMP WHERE id=%s;", (data,media_type,version,event_id))
+        if cur.rowcount != 1: raise HTTPException(404, "Veranstaltung nicht gefunden.")
+        conn.commit()
+    return {"status": "success", "image": f"/api/v1/darts/events/{event_id}/image?v={version}"}
+
+
+@app.delete("/api/v1/darts/admin/events/{event_id}/image", dependencies=[Depends(require_admin)])
+def darts_admin_delete_event_image(event_id: int):
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("UPDATE darts_events SET image_data=NULL,image_media_type=NULL,image_path=NULL,image_version=image_version+1,updated_at=CURRENT_TIMESTAMP WHERE id=%s;", (event_id,))
+        if cur.rowcount != 1: raise HTTPException(404, "Veranstaltung nicht gefunden.")
+        conn.commit()
+    return {"status": "success"}
+
+
+@app.get("/api/v1/darts/admin/events/{event_id}/image", dependencies=[Depends(require_admin)])
+def darts_admin_event_image_preview(event_id: int):
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT image_data,image_media_type,image_version FROM darts_events WHERE id=%s;", (event_id,))
+        row = cur.fetchone()
+    if not row or row[0] is None:
+        raise HTTPException(status_code=404, detail="Kein Veranstaltungsbild vorhanden.")
+    return Response(content=bytes(row[0]), media_type=row[1] or "image/webp", headers={
+        "Cache-Control": "no-store", "ETag": f'"event-admin-{event_id}-{row[2]}"',
+    })
+
+
+@app.get("/api/v1/darts/events/{event_id}/image")
+def darts_event_image(event_id: int):
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT image_data,image_media_type,image_version FROM darts_events WHERE id=%s AND active=TRUE AND (starts_at IS NULL OR starts_at<=CURRENT_TIMESTAMP) AND (ends_at IS NULL OR ends_at>=CURRENT_TIMESTAMP);", (event_id,))
+        row = cur.fetchone()
+    if not row or row[0] is None: raise HTTPException(404, "Kein veröffentlichtes Veranstaltungsbild vorhanden.")
+    return Response(content=bytes(row[0]), media_type=row[1] or "image/webp", headers={"Cache-Control": "public, max-age=31536000, immutable", "ETag": f'"event-{event_id}-{row[2]}"'})
+
+
+@app.get("/api/v1/darts/admin/social-links", dependencies=[Depends(require_admin)])
+def darts_admin_social_links():
+    return Response(content=json.dumps({"links": _darts_social_links(False)}, ensure_ascii=False), media_type="application/json", headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/v1/darts/admin/social-links", dependencies=[Depends(require_admin)], status_code=201)
+def darts_admin_create_social_link(update: DartsSocialLinkUpdate):
+    v = _validated_social_link(update)
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("INSERT INTO darts_social_links(platform,label,website,priority,active) VALUES (%s,%s,%s,%s,%s) RETURNING id;", (v["platform"],v["label"],v["website"],v["priority"],v["active"]))
+        link_id = int(cur.fetchone()[0]); conn.commit()
+    return {"status": "success", "id": link_id}
+
+
+@app.put("/api/v1/darts/admin/social-links/{link_id}", dependencies=[Depends(require_admin)])
+def darts_admin_update_social_link(link_id: int, update: DartsSocialLinkUpdate):
+    v = _validated_social_link(update)
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("UPDATE darts_social_links SET platform=%s,label=%s,website=%s,priority=%s,active=%s,updated_at=CURRENT_TIMESTAMP WHERE id=%s;", (v["platform"],v["label"],v["website"],v["priority"],v["active"],link_id))
+        if cur.rowcount != 1: raise HTTPException(404, "Social-Link nicht gefunden.")
+        conn.commit()
+    return {"status": "success", "id": link_id}
+
+
+@app.delete("/api/v1/darts/admin/social-links/{link_id}", dependencies=[Depends(require_admin)])
+def darts_admin_delete_social_link(link_id: int):
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM darts_social_links WHERE id=%s;", (link_id,))
+        if cur.rowcount != 1: raise HTTPException(404, "Social-Link nicht gefunden.")
+        conn.commit()
+    return {"status": "success"}
 
 
 def _base_darts_player_profiles() -> dict[str, dict]:

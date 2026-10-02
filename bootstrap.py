@@ -287,6 +287,55 @@ CREATE TABLE IF NOT EXISTS darts_sponsor_audit (
 );
 CREATE INDEX IF NOT EXISTS idx_darts_sponsor_audit_time
 ON darts_sponsor_audit(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS darts_events (
+    id BIGSERIAL PRIMARY KEY,
+    slug VARCHAR(80) UNIQUE,
+    kicker VARCHAR(50),
+    title VARCHAR(100) NOT NULL,
+    description VARCHAR(600),
+    date_label VARCHAR(100),
+    location VARCHAR(120),
+    website TEXT,
+    button_label VARCHAR(40),
+    starts_at TIMESTAMPTZ,
+    ends_at TIMESTAMPTZ,
+    priority INTEGER NOT NULL DEFAULT 0,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    image_data BYTEA,
+    image_media_type VARCHAR(30),
+    image_version BIGINT NOT NULL DEFAULT 0,
+    image_path TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK (starts_at IS NULL OR ends_at IS NULL OR starts_at <= ends_at)
+);
+CREATE INDEX IF NOT EXISTS idx_darts_events_active_priority
+ON darts_events(active, priority DESC, id);
+
+CREATE TABLE IF NOT EXISTS darts_social_links (
+    id BIGSERIAL PRIMARY KEY,
+    platform VARCHAR(20) NOT NULL,
+    label VARCHAR(80) NOT NULL,
+    website TEXT NOT NULL,
+    priority INTEGER NOT NULL DEFAULT 0,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK (platform IN ('whatsapp','instagram','facebook','youtube','tiktok','website','x'))
+);
+CREATE INDEX IF NOT EXISTS idx_darts_social_links_active_priority
+ON darts_social_links(active, priority DESC, id);
+CREATE TABLE IF NOT EXISTS darts_content_seed_migrations (
+    migration_key VARCHAR(100) PRIMARY KEY,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS darts_online_presence (
+    session_id UUID PRIMARY KEY,
+    expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_darts_online_presence_expiry
+ON darts_online_presence(expires_at);
 """
 
 DEFAULTS_SQL = """
@@ -307,6 +356,28 @@ VALUES (
     'active'
 )
 ON CONFLICT (id) DO NOTHING;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM darts_content_seed_migrations WHERE migration_key='events-social-v1') THEN
+        INSERT INTO darts_events (
+            slug, kicker, title, description, date_label, location, website, button_label,
+            starts_at, ends_at, priority, active, image_path
+        ) VALUES (
+            'barver-dart-open-2026', 'Turnier in Barver', '11. Barver Dart Open',
+            'Einzel am Samstag, Doppel am Sonntag – Gruppenphase und anschließende K.-o.-Runde.',
+            '3. und 4. Oktober 2026', 'SV Barver',
+            'https://whatsapp.com/channel/0029Vb1TkYQ5K3zONLbu0C0l', 'WhatsApp-Kanal folgen',
+            '2026-09-15 00:00:00+02', '2026-10-04 23:59:59+02', 100, TRUE,
+            '/pics/events/barver-dart-open-2026.webp'
+        ) ON CONFLICT (slug) DO NOTHING;
+        INSERT INTO darts_social_links (platform, label, website, priority, active)
+        SELECT 'whatsapp', 'WhatsApp-Kanal', 'https://whatsapp.com/channel/0029Vb1TkYQ5K3zONLbu0C0l', 100, TRUE
+        WHERE NOT EXISTS (SELECT 1 FROM darts_social_links
+            WHERE platform='whatsapp' AND website='https://whatsapp.com/channel/0029Vb1TkYQ5K3zONLbu0C0l');
+        INSERT INTO darts_content_seed_migrations (migration_key) VALUES ('events-social-v1');
+    END IF;
+END $$;
 
 SELECT setval(
     pg_get_serial_sequence('music_profiles', 'id'),

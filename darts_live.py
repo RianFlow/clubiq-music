@@ -171,7 +171,7 @@ def detect_events(previous: dict | None, current: dict, meta: dict) -> list[dict
         if isinstance(old_legs, int) and isinstance(new_legs, int) and new_legs > old_legs:
             events.append({
                 "type": "leg", "matchId": group_key, "gameId": current["id"], "winnerSide": side,
-                "legCount": new_legs, "team": team_name, "player": player["name"],
+                "legCount": new_legs, "team": team_name, "player": player["name"], "barverWon": True,
                 "title": f"Leg für {player['name']}",
                 "text": f"{current['home']['name']} {current['home'].get('legs', 0)}:{current['guest'].get('legs', 0)} {current['guest']['name']}",
                 "occurred_at": occurred,
@@ -332,7 +332,11 @@ class DartsLiveHub:
             if changed:
                 self._revision += 1
                 group["revision"] = self._revision
-                message = {"type": "live-group-update", "revision": self._revision, "group": self._public_group(group)}
+                # Transition events belong only to this update. Never retain them in
+                # snapshots: a reconnect must not replay old celebrations.
+                public_group = self._public_group(group)
+                public_group["events"] = emitted
+                message = {"type": "live-group-update", "revision": self._revision, "group": public_group}
                 self._broadcast(message)
         for event in emitted:
             self._events.put(event)

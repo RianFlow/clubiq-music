@@ -1,0 +1,140 @@
+.darts-broadcast {
+  position: fixed;
+  z-index: 1200;
+  inset: auto max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) auto;
+  width: min(430px, calc(100vw - 24px));
+  color: #f8f5ec;
+  pointer-events: none;
+  font-family: Inter, "Arial Narrow", Arial, sans-serif;
+}
+.darts-broadcast:empty { display: none !important; }
+.darts-broadcast-card {
+  position: relative;
+  display: grid;
+  gap: .14rem;
+  overflow: hidden;
+  padding: 1rem 1.2rem 1.1rem;
+  background: linear-gradient(115deg, #05241c 0%, #08120f 68%, #150e0d 100%);
+  border: 1px solid rgba(201, 167, 88, .55);
+  border-left: 5px solid #b52a32;
+  box-shadow: 0 16px 45px rgba(0, 0, 0, .5);
+  animation: darts-broadcast-in .35s cubic-bezier(.18, .7, .22, 1) both;
+}
+.darts-broadcast-card::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 28%;
+  transform: skewX(-22deg) translateX(55%);
+  background: linear-gradient(90deg, transparent, rgba(202, 164, 82, .08));
+  pointer-events: none;
+}
+.darts-broadcast-kicker, .darts-roster-eyebrow {
+  color: #d9bd7a;
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .22em;
+}
+.darts-broadcast-headline {
+  font-size: clamp(2rem, 7vw, 3.4rem);
+  font-weight: 900;
+  line-height: 1.03;
+  letter-spacing: -.04em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+.darts-broadcast-detail { font-size: 1.06rem; font-weight: 650; overflow-wrap: anywhere; }
+.darts-broadcast-foot { margin-top: .3rem; color: #b8c8bf; font-size: .78rem; letter-spacing: .07em; text-transform: uppercase; }
+.darts-broadcast.is-tv:not(.has-roster) {
+  inset: 0;
+  width: 100vw;
+  display: grid;
+  place-items: center;
+  background: rgba(1, 9, 7, .72);
+}
+.darts-broadcast.is-tv .darts-broadcast-card {
+  width: min(92vw, 1100px);
+  min-height: min(54vh, 470px);
+  align-content: center;
+  padding: clamp(2rem, 5vw, 5rem);
+  border-left-width: 9px;
+  text-align: center;
+}
+.darts-broadcast.is-tv .darts-broadcast-headline { font-size: clamp(4rem, 12vw, 10rem); }
+.darts-broadcast.is-tv .darts-broadcast-kicker { font-size: clamp(1rem, 2vw, 1.6rem); }
+.darts-broadcast.is-tv .darts-broadcast-detail { font-size: clamp(1.4rem, 3vw, 2.6rem); }
+.darts-broadcast.has-roster {
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  pointer-events: auto;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 8, 6, .94);
+}
+.darts-roster-slide {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: .8rem;
+  width: min(100vw, 1500px);
+  height: 100%;
+  padding: clamp(2rem, 6vw, 6rem);
+  overflow: auto;
+  text-align: center;
+  background: radial-gradient(ellipse at 70% 10%, #164637 0, transparent 40%), linear-gradient(135deg, #031912, #080e0b 75%, #261414);
+  border-block: 3px solid #b99650;
+  animation: darts-broadcast-in .35s ease-out both;
+}
+.darts-roster-slide::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: clamp(1rem, 5vw, 5rem);
+  width: min(18vw, 170px);
+  height: 5px;
+  background: #ad2930;
+}
+.darts-roster-slide::after { content:""; position:absolute; width:min(65vw,780px); height:65%; background:url('/pics/sv-barver-darts-tight-512.webp') center/contain no-repeat; opacity:.055; pointer-events:none; }
+.darts-roster-slide > * { position:relative; z-index:1; }
+.darts-roster-slide > .darts-roster-close,.darts-roster-slide > .darts-roster-progress { position:absolute; }
+.darts-roster-close {
+  position: absolute;
+  z-index: 1;
+  top: max(1rem, env(safe-area-inset-top));
+  right: max(1rem, env(safe-area-inset-right));
+  border: 1px solid #a48445;
+  border-radius: 2px;
+  padding: .55rem .85rem;
+  background: #10291f;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+.darts-roster-close:focus-visible { outline: 3px solid #f0cb7c; outline-offset: 3px; }
+.darts-roster-team { font-size: clamp(3rem, 9vw, 8rem); line-height: .95; text-transform: uppercase; letter-spacing: -.055em; }
+.darts-roster-caption { color: #d6b775; letter-spacing: .3em; font-weight: 800; }
+.darts-roster-photo { flex: 1 1 auto; min-height: 0; max-height: 55vh; display: grid; place-items: end center; }
+.darts-roster-photo img { display: block; max-width: min(65vw, 620px); max-height: 55vh; object-fit: contain; object-position: bottom; filter: drop-shadow(0 10px 25px #0009); }
+.darts-roster-copy { display: grid; gap: .35rem; justify-items: center; }
+.darts-roster-alias { color: #d5b979; font-size: clamp(1.1rem, 2.3vw, 1.8rem); }
+.darts-roster-player { font-size: clamp(2.5rem, 7vw, 6.5rem); line-height: 1.02; text-transform: uppercase; overflow-wrap: anywhere; }
+.darts-roster-role { color: #e3dfd5; font-size: clamp(1rem, 2vw, 1.6rem); }
+.darts-roster-stats { margin-top: .6rem; color: #c8d6cd; font-size: clamp(.9rem, 1.5vw, 1.2rem); }
+.darts-roster-names { display: flex; justify-content: center; flex-wrap: wrap; gap: .5rem 1.4rem; max-width: 1000px; color: #d6d8cd; font-size: clamp(.9rem, 1.5vw, 1.3rem); }
+.darts-roster-progress { position: absolute; bottom: max(.8rem, env(safe-area-inset-bottom)); color: #b4bcb3; font-size: .78rem; letter-spacing: .18em; }
+.darts-roster-controls { display: flex; gap: .5rem; margin-bottom: 1.5rem; }
+.darts-roster-controls button { border: 1px solid #8c7545; border-radius: 2px; padding: .5rem .8rem; background: #10291f; color: #f5f1e8; font: inherit; cursor: pointer; }
+.darts-roster-controls button:disabled { opacity: .4; cursor: default; }
+.darts-roster-controls button:focus-visible { outline: 3px solid #f0cb7c; outline-offset: 3px; }
+@keyframes darts-broadcast-in { from { opacity: 0; transform: translateY(16px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@media (max-width: 620px) {
+  .darts-broadcast:not(.has-roster):not(.is-tv) { inset: auto 10px max(10px, env(safe-area-inset-bottom)); width: calc(100vw - 20px); }
+  .darts-roster-slide { padding: 4.5rem 1.25rem 3rem; }
+  .darts-roster-photo img { max-width: 90vw; max-height: 46vh; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .darts-broadcast-card, .darts-roster-slide { animation: none; }
+}
