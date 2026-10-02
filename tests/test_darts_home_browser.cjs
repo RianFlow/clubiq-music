@@ -62,6 +62,15 @@ const server=http.createServer((req,res)=>{
     await page.locator('#socialLinksList a').waitFor();assert.match(await page.locator('#socialLinksList a').getAttribute('href'),/whatsapp.com\/channel/);
     await page.locator('#todayGrid .today-live-game').nth(1).waitFor();
     assert.equal(await page.locator('#matchCenterGrid .match-center-card').count(),4);
+    assert.equal(await page.locator('#matchCenterGrid .present-team-roster').count(),4);
+    assert.equal(await page.locator('#teamGrid .present-team-roster').count(),4);
+    for (const code of ['A','B','C','D']) {
+      await page.locator('#matchCenterGrid').getByRole('button',{name:`Kader Barver ${code} vorstellen`,exact:true}).click();
+      await page.locator('.darts-roster-slide').waitFor();
+      assert.match(await page.locator('.darts-roster-team').innerText(),new RegExp(`Darts ${code}`,'i'));
+      assert.equal(await page.locator('#teamDialog').evaluate(node=>node.open),false);
+      await page.keyboard.press('Escape');
+    }
     assert.equal(await page.locator('#todayGrid .today-game').count(),1);
     assert.equal(await page.locator('#homeSchedule > section').count(),3);
     await page.selectOption('#favoriteTeam','D');

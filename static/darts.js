@@ -741,7 +741,12 @@ function initDarts() {
       const status=document.createElement('b'); status.className='match-center-status'; status.textContent=item ? (item.isSpecial&&item.kind==='upcoming'?competitionLabel(item):labels[item.kind]) : 'KEIN TERMIN';
       const text=document.createElement('strong'); appendTeamAwareText(text,item ? (item.text || `${item.home} ${item.score||'vs'} ${item.away}`) : 'Keine Begegnung im aktuellen Zeitraum');
       const when=document.createElement('span'); when.className='match-center-time'; when.textContent=item ? tickerTime(item) : '3K-Spielplan prüfen';
-      card.append(top,status,text,when); fragment.append(card);
+      card.append(top,status,text,when);
+      const entry=document.createElement('div');entry.className='match-center-entry';
+      const roster=document.createElement('button');roster.type='button';roster.className='present-team-roster';
+      roster.textContent='Kader vorstellen';roster.setAttribute('aria-label',`Kader Barver ${code} vorstellen`);
+      roster.addEventListener('click',()=>presentTeamRoster(code));
+      entry.append(card,roster);fragment.append(entry);
     }
     center.replaceChildren(fragment);
   }
@@ -1898,6 +1903,10 @@ function initDarts() {
       <div class="team-tools"><select aria-label="Ansicht für ${team.name}"><option value="team">Spielplan & Ergebnisse</option><option value="report" disabled>Gewählter Spielbericht</option><option value="live" disabled>Gewähltes Spiel live</option></select><button class="configure" type="button">Spiel wählen</button><button class="reload" type="button" aria-label="${team.name} neu laden">Neu laden</button><a class="external" target="_blank" rel="noopener noreferrer">Bei 3K öffnen ↗</a></div>
       <div class="frame-wrap"><div class="placeholder"><strong>${team.league}</strong><p>Spielplan und Ergebnisse dieser Mannschaft von 3K Darts laden.</p><button class="load-team primary" type="button">${team.id.toUpperCase()} anzeigen</button></div></div><p class="frame-note">Noch keine Verbindung zu 3K. Die Musik wird durch diese Ansicht nicht gesteuert.</p>`;
     card.querySelector('h2').replaceChildren(makeTeamJump(team.id.toUpperCase(),team.name));
+    const rosterButton=document.createElement('button');rosterButton.type='button';rosterButton.className='present-team-roster';
+    rosterButton.textContent='Kader vorstellen';rosterButton.setAttribute('aria-label',`Kader Barver ${team.id.toUpperCase()} vorstellen`);
+    rosterButton.addEventListener('click',()=>presentTeamRoster(team.id.toUpperCase()));
+    card.querySelector('.team-tools').append(rosterButton);
     grid.append(card);
     const c = {card,wrap:card.querySelector('.frame-wrap'),select:card.querySelector('select'),open:card.querySelector('.external'),note:card.querySelector('.frame-note'),matchNote:card.querySelector('.match-note'),focus:card.querySelector('.focus-team'),loaded:false};
     cards.set(team.id,c); c.select.value = layout.modes[team.id]; sync(team);
