@@ -330,12 +330,6 @@ CREATE TABLE IF NOT EXISTS darts_content_seed_migrations (
     migration_key VARCHAR(100) PRIMARY KEY,
     applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE TABLE IF NOT EXISTS darts_online_presence (
-    session_id UUID PRIMARY KEY,
-    expires_at TIMESTAMPTZ NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_darts_online_presence_expiry
-ON darts_online_presence(expires_at);
 """
 
 DEFAULTS_SQL = """

@@ -86,6 +86,9 @@ button.primary { color:white; background:var(--green); border-color:var(--green)
 @keyframes ticker-scroll { to { transform:translateX(-50%); } }
 @media(prefers-reduced-motion:reduce) { .ticker-track { animation:none; } .ticker-window { overflow-x:auto; } }
 @media(prefers-reduced-motion:reduce) { .live-push-alert.show { animation:none; opacity:1; transform:translate(-50%,0); } .live-push-alert.show .live-push-alert-progress { animation:none; } }
+.darts-online { display:inline-flex; align-items:center; gap:6px; color:#879892; font-size:.72rem; font-weight:700; white-space:nowrap; }
+.darts-online::before { content:''; width:6px; height:6px; flex:0 0 auto; background:#5bb894; border-radius:50%; opacity:.8; }
+[data-theme="dark"] .darts-online { color:#9aada7; }
 .sponsor-slot { max-width:1500px; margin:12px auto; padding:0 24px; }
 .sponsor-slot-inline { margin-top:8px; margin-bottom:14px; padding:0; }
 .sponsor-slot-footer { margin-top:22px; margin-bottom:8px; }
@@ -554,9 +557,9 @@ body:fullscreen .today-time { font-size:.9rem; }
 [data-theme="dark"] .theme-track { background:#31413c; box-shadow:inset 0 0 0 1px #566861; }
 [data-theme="dark"] .theme-switch[aria-checked="true"] .theme-track { background:#2e7769; box-shadow:inset 0 0 0 1px #65a99a; }
 [data-theme="dark"] .push-toggle[aria-pressed="true"] { color:#fff1b7; background:#4a401c; border-color:#827135; }
-[data-theme="dark"] .sponsor-banner { color:#e8f0ec; background:linear-gradient(120deg,#111f1b,#172722); border-color:#30443e; box-shadow:0 6px 20px #0004; }
-[data-theme="dark"] a.sponsor-banner:hover { background:#1a2d27; border-color:#48675e; }
-[data-theme="dark"] .sponsor-caption { color:#91a39d; }
+[data-theme="dark"] .sponsor-banner { color:#17332d; background:#f5f5f5; border-color:#d7ddd9; box-shadow:0 6px 20px #0004; }
+[data-theme="dark"] a.sponsor-banner:hover { background:#fff; border-color:#acc2ba; }
+[data-theme="dark"] .sponsor-caption { color:#66746f; }
 [data-theme="dark"] .eyebrow,[data-theme="dark"] .source-note summary,[data-theme="dark"] footer a { color:#8dd0be; }
 [data-theme="dark"] .intro p:last-child,[data-theme="dark"] .source-note,[data-theme="dark"] footer,[data-theme="dark"] .match-center-head>span,[data-theme="dark"] .match-center-time,[data-theme="dark"] .team-head p,[data-theme="dark"] .frame-note,[data-theme="dark"] .subtle,[data-theme="dark"] .sport-card-title span,[data-theme="dark"] .data-note,[data-theme="dark"] .panel-loading { color:#aebdb8; }
 [data-theme="dark"] .layout-controls,[data-theme="dark"] .match-center-loading,[data-theme="dark"] .match-center-card,[data-theme="dark"] .today-game,[data-theme="dark"] .league-controls,[data-theme="dark"] .sport-card,[data-theme="dark"] .team-card,[data-theme="dark"] dialog,[data-theme="dark"] .data-note { color:#e8f0ec; background:#111f1b; border-color:#30443e; }

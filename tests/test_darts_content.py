@@ -46,25 +46,19 @@ class _Connection:
 
 
 class DartsContentTests(unittest.TestCase):
-    def test_presence_is_ephemeral_upserts_and_returns_uncached_count(self):
-        update = main.DartsPresenceUpdate(session_id="b34a89d7-11c4-4ae2-9d03-cf848508ae02")
-        cursor = _Cursor(row=(2,))
-        with patch.object(main, "db_connect", return_value=_Connection(cursor)):
-            response = main.darts_presence(update)
-        self.assertEqual(json.loads(response.body), {"online": 2, "windowSeconds": 120})
-        self.assertEqual(response.headers["cache-control"], "no-store")
-        self.assertIn("expires_at<=CURRENT_TIMESTAMP", cursor.sql[0])
-        self.assertIn("ON CONFLICT (session_id) DO UPDATE", cursor.sql[1])
-        self.assertIn("120 seconds", cursor.sql[1])
-        self.assertIn("expires_at>CURRENT_TIMESTAMP", cursor.sql[2])
-        self.assertNotIn("ip_address", " ".join(cursor.sql))
-        cursor = _Cursor(row=(1,))
-        update.active = False
-        with patch.object(main, "db_connect", return_value=_Connection(cursor)):
-            main.darts_presence(update)
-        self.assertIn("DELETE FROM darts_online_presence WHERE session_id=%s", cursor.sql[1])
+    def test_presence_deduplicates_browsers_expires_and_is_not_cached(self):
+        update = main.DartsPresenceHeartbeat(clientId="b34a89d7-11c4-4ae2-9d03-cf848508ae02")
+        response = main.Response()
+        with patch.object(main, "_darts_presence", {}):
+            self.assertEqual(main.darts_presence_heartbeat(update, response), {"online": 1})
+            self.assertEqual(main.darts_presence_heartbeat(update, response), {"online": 1})
+            self.assertEqual(response.headers["cache-control"], "no-store")
+            main._darts_presence["expired-browser"] = 0
+            self.assertEqual(main.darts_presence(response), {"online": 1})
+            main._darts_presence[update.clientId] = 0
+            self.assertEqual(main.darts_presence(response), {"online": 0})
         with self.assertRaises(ValidationError):
-            main.DartsPresenceUpdate(session_id="not-a-uuid")
+            main.DartsPresenceHeartbeat(clientId="invalid")
 
     def test_admin_crud_routes_require_admin_and_missing_password_denies(self):
         paths = {

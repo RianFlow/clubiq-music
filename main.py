@@ -13,6 +13,7 @@ import socket
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from threading import Lock
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -263,6 +264,20 @@ def close_expired_cycles() -> None:
         print(f"[BACKGROUND ERROR] {exc}")
 
 
+DARTS_PRESENCE_TTL_SECONDS = 90
+DARTS_PRESENCE_MAX_CLIENTS = 5000
+_darts_presence: dict[str, float] = {}
+_darts_presence_lock = Lock()
+
+
+def _darts_presence_count(now: float) -> int:
+    cutoff = now - DARTS_PRESENCE_TTL_SECONDS
+    stale = [client_id for client_id, seen_at in _darts_presence.items() if seen_at < cutoff]
+    for client_id in stale:
+        _darts_presence.pop(client_id, None)
+    return len(_darts_presence)
+
+
 _darts_push_status = {
     "configured": bool(DARTS_VAPID_PUBLIC_KEY and DARTS_VAPID_PRIVATE_KEY and webpush),
     "upstreamAvailable": None,
@@ -479,6 +494,10 @@ class DartsPushSubscribe(BaseModel):
 
 class DartsPushUnsubscribe(BaseModel):
     endpoint: str = Field(min_length=20, max_length=2048)
+
+
+class DartsPresenceHeartbeat(BaseModel):
+    clientId: str = Field(min_length=16, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 class DartsPlayerProfileUpdate(BaseModel):
@@ -948,29 +967,6 @@ def _darts_social_links(public_only: bool) -> list[dict]:
 def darts_events():
     return Response(content=json.dumps({"events": _darts_events(True)}, ensure_ascii=False, default=str), media_type="application/json",
                     headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=300"})
-
-
-class DartsPresenceUpdate(BaseModel):
-    session_id: UUID
-    active: bool = True
-
-
-@app.post("/api/v1/darts/presence")
-def darts_presence(update: DartsPresenceUpdate):
-    # Ephemeral page IDs only: no IP, profile, user agent, or visit history.
-    with db_connect() as conn, conn.cursor() as cur:
-        cur.execute("DELETE FROM darts_online_presence WHERE expires_at<=CURRENT_TIMESTAMP;")
-        if update.active:
-            cur.execute("""INSERT INTO darts_online_presence (session_id, expires_at)
-                VALUES (%s, CURRENT_TIMESTAMP + INTERVAL '120 seconds')
-                ON CONFLICT (session_id) DO UPDATE SET expires_at=EXCLUDED.expires_at;""",
-                (update.session_id,))
-        else:
-            cur.execute("DELETE FROM darts_online_presence WHERE session_id=%s;", (update.session_id,))
-        cur.execute("SELECT COUNT(*) FROM darts_online_presence WHERE expires_at>CURRENT_TIMESTAMP;")
-        count = int(cur.fetchone()[0])
-    return Response(content=json.dumps({"online": count, "windowSeconds": 120}),
-                    media_type="application/json", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/v1/darts/social-links")
@@ -1547,6 +1543,27 @@ def darts_members():
             "SELECT display_name FROM club_members WHERE active = TRUE ORDER BY lower(display_name);"
         )
         return {"members": [row[0] for row in cur.fetchall()]}
+
+
+@app.post("/api/v1/darts/presence")
+def darts_presence_heartbeat(payload: DartsPresenceHeartbeat, response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    now = datetime.now(timezone.utc).timestamp()
+    with _darts_presence_lock:
+        _darts_presence_count(now)
+        if payload.clientId not in _darts_presence and len(_darts_presence) >= DARTS_PRESENCE_MAX_CLIENTS:
+            oldest = min(_darts_presence, key=_darts_presence.get)
+            _darts_presence.pop(oldest, None)
+        _darts_presence[payload.clientId] = now
+        return {"online": len(_darts_presence)}
+
+
+@app.get("/api/v1/darts/presence")
+def darts_presence(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    now = datetime.now(timezone.utc).timestamp()
+    with _darts_presence_lock:
+        return {"online": _darts_presence_count(now)}
 
 
 @app.get("/api/v1/darts/push/config")
