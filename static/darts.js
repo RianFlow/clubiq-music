@@ -1965,6 +1965,7 @@ function initDarts() {
   q('#todayGrid').after(q('.match-center'));
   q('.match-center').after(q('#clubEventBanner'));
   q('#clubEventBanner').after(q('.club-training'));
+  q('#homeSchedule').after(q('#sponsorInline'));
   q('#todayGrid').classList.add('featured-live');
   // The light ticker paints first; the complete season can arrive later.
   window.setTimeout(()=>loadSeason(true),500);
