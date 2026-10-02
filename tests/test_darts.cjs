@@ -22,6 +22,19 @@ const clubEvents = dartsClubEvents({events:[
 assert.equal(clubEvents.length,1);
 assert.equal(clubEvents[0].title,'11. Barver Dart Open');
 assert.equal(clubEvents[0].image,'/pics/events/barver-dart-open-2026.webp');
+const uploadedEvents=dartsClubEvents({events:[{title:'Entwurf',active:false},{title:'Neu',image:'/api/v1/darts/events/5/image?v=123',description:'a'.repeat(500)},{title:'Unsicher',image:'https://example.com/track.png'}]});
+assert.equal(uploadedEvents.length,2);
+assert.equal(uploadedEvents[0].image,'/api/v1/darts/events/5/image?v=123');
+assert.equal(uploadedEvents[0].description.length,500);
+assert.equal(uploadedEvents[1].image,'');
+const socialLinks=vm.runInContext('dartsSocialLinks',context)({links:[
+  {platform:'whatsapp',label:'Vereinskanal',href:'https://whatsapp.com/channel/test'},
+  {platform:'instagram',href:'https://instagram.com/test',active:false},
+  {platform:'facebook',href:'javascript:alert(1)'},
+  {platform:'website',href:'https://user:secret@example.com'},
+]});
+assert.equal(socialLinks.length,1);
+assert.equal(socialLinks[0].label,'Vereinskanal');
 const dartsRoster = vm.runInContext('dartsRoster',context);
 const orderedRoster = dartsRoster([
   {name:'Zeno Spieler',role:'Spieler'},

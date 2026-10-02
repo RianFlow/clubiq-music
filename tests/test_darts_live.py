@@ -47,6 +47,22 @@ class DartsLiveTests(unittest.TestCase):
         events = detect_events(before, after, META)
         self.assertEqual({event["type"] for event in events}, {"leg", "180", "high_finish"})
         self.assertTrue(all(event["team"] == "SV Barver Darts B" for event in events))
+        self.assertTrue(next(event for event in events if event["type"] == "leg")["barverWon"])
+
+    def test_transition_events_are_only_in_updates_not_reconnect_snapshot(self):
+        hub = DartsLiveHub()
+        hub._groups["1657285"] = hub._empty_group("1657285", META)
+        channel = hub.subscribe()
+        before = normalize_match(raw_match())
+        changed_players = [dict(player) for player in raw_match()["matchPlayers"]]
+        changed_players[1]["count180"] = 1
+        after = normalize_match(raw_match(stamp="2026-09-27T13:35:53.000000001", matchPlayers=changed_players))
+        hub.apply("1657285", [before], "rest")
+        self.assertEqual(channel.get_nowait()["group"]["events"], [])
+        hub.apply("1657285", [after], "rest")
+        update = channel.get_nowait()
+        self.assertEqual([event["type"] for event in update["group"]["events"]], ["180"])
+        self.assertNotIn("events", hub.snapshot()["groups"][0])
 
     def test_hub_rejects_stale_and_broadcasts_new_state(self):
         hub = DartsLiveHub()

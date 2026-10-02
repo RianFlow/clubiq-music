@@ -1,5 +1,5 @@
 const $ = selector => document.querySelector(selector);
-const state = { password: sessionStorage.getItem('clubiq_darts_admin') || '', players: [], selected: null, pendingPhoto: null, previewUrl: '', sponsors: [], selectedSponsor: null, pendingSponsorLogo: null };
+const state = { password: sessionStorage.getItem('clubiq_darts_admin') || '', players: [], selected: null, pendingPhoto: null, previewUrl: '', sponsors: [], selectedSponsor: null, pendingSponsorLogo: null, events: [], selectedEvent: null, pendingEventImage: null, eventImageObjectUrl: '', socialLinks: [], selectedSocial: null };
 
 async function api(path, options = {}) {
   const headers = new Headers(options.headers || {});
@@ -114,6 +114,14 @@ async function compressPhoto(file) {
   const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',0.84));
   if (!blob) throw new Error('Das Bild konnte nicht verarbeitet werden.');
   return new File([blob],'spielerprofil.webp',{type:'image/webp'});
+}
+async function compressBanner(file) {
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error('Bitte ein JPEG-, PNG- oder WebP-Bild auswählen.');
+  if (file.size > 15 * 1024 * 1024) throw new Error('Das Ausgangsbild darf höchstens 15 MB groß sein.');
+  const bitmap=await createImageBitmap(file), scale=Math.min(1,1600/bitmap.width,900/bitmap.height);
+  const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+  const context=canvas.getContext('2d',{alpha:true});context.imageSmoothingEnabled=true;context.imageSmoothingQuality='high';context.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',0.84));if(!blob)throw new Error('Das Banner konnte nicht verarbeitet werden.');return new File([blob],'veranstaltung.webp',{type:'image/webp'});
 }
 
 async function saveProfile(event) {
@@ -271,21 +279,85 @@ async function deleteSponsorLogo() {
   catch(error){status.textContent=error.message;}
 }
 function showAdminView(view) {
-  const sponsors=view==='sponsors';
-  $('#playersAdminView').hidden=sponsors; $('#sponsorsAdminView').hidden=!sponsors;
-  $('#playersAdminTab').classList.toggle('active',!sponsors); $('#sponsorsAdminTab').classList.toggle('active',sponsors);
+  for (const name of ['players','sponsors','events','social']) {
+    const visible=view===name;
+    $(`#${name}AdminView`).hidden=!visible;
+    $(`#${name}AdminTab`).classList.toggle('active',visible);
+  }
 }
+
+function eventImagePreview(item, source='') {
+  const root=$('#eventImagePreview'); root.replaceChildren();
+  const src=source||item?.image||'';
+  if(src){const img=document.createElement('img');img.src=src;img.alt=`Banner ${item?.title||''}`;img.addEventListener('error',()=>root.replaceChildren(Object.assign(document.createElement('span'),{textContent:'Banner'})),{once:true});root.append(img);}
+  else root.append(Object.assign(document.createElement('span'),{textContent:'Banner'}));
+}
+function revokeEventImagePreview(){if(state.eventImageObjectUrl){URL.revokeObjectURL(state.eventImageObjectUrl);state.eventImageObjectUrl='';}}
+async function loadProtectedEventImage(item){
+  revokeEventImagePreview();
+  if(!item?.id||!item.hasImage)return;
+  const selectedId=item.id;
+  try{
+    const response=await fetch(`/api/v1/darts/admin/events/${selectedId}/image`,{headers:{'X-Admin-Password':state.password},cache:'no-store'});
+    if(!response.ok)throw new Error('Banner-Vorschau nicht verfügbar.');
+    const url=URL.createObjectURL(await response.blob());
+    if(state.selectedEvent?.id!==selectedId){URL.revokeObjectURL(url);return;}
+    state.eventImageObjectUrl=url;eventImagePreview(item,url);
+  }catch(_){if(state.selectedEvent?.id===selectedId)eventImagePreview(item);}
+}
+function renderEventList(){
+  const q=clean($('#eventSearch').value).toLocaleLowerCase('de-DE'), fragment=document.createDocumentFragment();
+  for(const item of state.events.filter(e=>!q||`${e.title||''} ${e.location||''}`.toLocaleLowerCase('de-DE').includes(q))){
+    const button=document.createElement('button');button.type='button';if(state.selectedEvent?.id===item.id)button.classList.add('active');
+    const name=document.createElement('strong');name.textContent=item.title||'Unbenannte Veranstaltung';const meta=document.createElement('span');meta.textContent=`${item.date||'Ohne Datum'} · ${item.active?'veröffentlicht':'Entwurf'}`;
+    button.append(name,meta);button.addEventListener('click',()=>selectEvent(item));fragment.append(button);
+  }
+  if(!fragment.childNodes.length)fragment.append(Object.assign(document.createElement('p'),{textContent:'Keine passenden Veranstaltungen.'}));$('#eventList').replaceChildren(fragment);
+}
+function selectEvent(item){
+  revokeEventImagePreview();state.selectedEvent=item;state.pendingEventImage=null;$('#eventEditorEmpty').hidden=true;$('#eventForm').hidden=false;$('#eventId').value=item.id||'';
+  $('#eventTitle').value=item.title||'';$('#eventKicker').value=item.kicker||'';$('#eventDescription').value=item.description||'';$('#eventDate').value=item.date||'';$('#eventLocation').value=item.location||'';$('#eventHref').value=item.href||'';$('#eventButtonLabel').value=item.buttonLabel||'';$('#eventPriority').value=item.priority??0;$('#eventStartsAt').value=localDateTimeValue(item.startsAt);$('#eventEndsAt').value=localDateTimeValue(item.endsAt);$('#eventActive').checked=item.active===true;
+  $('#eventHeading').textContent=item.title||'Neue Veranstaltung';$('#eventMeta').textContent=item.id?`Veranstaltung #${item.id}`:'Noch nicht gespeichert';$('#eventImage').value='';$('#deleteEventImage').disabled=!item.hasImage;$('#deleteEvent').disabled=!item.id;$('#eventFormStatus').hidden=true;eventImagePreview(item.image&&!String(item.image).includes('/api/v1/darts/admin/events/')?item:null);if(item.hasImage)loadProtectedEventImage(item);renderEventList();
+}
+function newEvent(){selectEvent({id:null,title:'',kicker:'',description:'',date:'',location:'',href:'',buttonLabel:'',priority:0,active:false,hasImage:false});$('#eventTitle').focus();}
+async function loadEvents(){
+  $('#eventDataStatus').textContent='Veranstaltungen werden geladen …';const keep=state.selectedEvent?.id;const result=await api('/api/v1/darts/admin/events');
+  state.events=Array.isArray(result.events)?result.events:[];$('#eventDataStatus').textContent=`${state.events.length} Veranstaltung${state.events.length===1?'':'en'}`;
+  const selected=state.events.find(e=>e.id===keep);if(selected)selectEvent(selected);else{state.selectedEvent=null;$('#eventForm').hidden=true;$('#eventEditorEmpty').hidden=false;renderEventList();}
+}
+async function saveEvent(event){
+  event.preventDefault();const status=$('#eventFormStatus');status.hidden=false;status.textContent='Veranstaltung wird gespeichert …';
+  const dateValue=id=>$('#'+id).value?new Date($('#'+id).value).toISOString():null;
+  const payload={title:clean($('#eventTitle').value),kicker:clean($('#eventKicker').value),description:clean($('#eventDescription').value),date_label:clean($('#eventDate').value),location:clean($('#eventLocation').value),website:clean($('#eventHref').value)||null,button_label:clean($('#eventButtonLabel').value)||null,starts_at:dateValue('eventStartsAt'),ends_at:dateValue('eventEndsAt'),priority:Number($('#eventPriority').value||0),active:$('#eventActive').checked};
+  try{const id=Number($('#eventId').value)||null;const saved=await api(id?`/api/v1/darts/admin/events/${id}`:'/api/v1/darts/admin/events',{method:id?'PUT':'POST',body:JSON.stringify(payload)});const eventId=id||saved.id;
+    if(state.pendingEventImage){const form=new FormData();form.set('image',state.pendingEventImage);await api(`/api/v1/darts/admin/events/${eventId}/image`,{method:'POST',body:form});}
+    state.selectedEvent={id:eventId};state.pendingEventImage=null;await loadEvents();const updated=state.events.find(e=>e.id===eventId);if(updated)selectEvent(updated);status.hidden=false;status.textContent='Veranstaltung gespeichert.';
+  }catch(error){status.textContent=error.message;}
+}
+async function deleteEvent(){const id=Number($('#eventId').value);if(!id||!confirm('Diese Veranstaltung wirklich löschen?'))return;const status=$('#eventFormStatus');status.hidden=false;status.textContent='Veranstaltung wird gelöscht …';try{await api(`/api/v1/darts/admin/events/${id}`,{method:'DELETE'});state.selectedEvent=null;await loadEvents();status.hidden=true;}catch(error){status.textContent=error.message;}}
+async function deleteEventImage(){const id=Number($('#eventId').value);if(!id||!state.selectedEvent?.hasImage||!confirm('Veranstaltungsbanner wirklich entfernen?'))return;const status=$('#eventFormStatus');status.hidden=false;status.textContent='Banner wird entfernt …';try{await api(`/api/v1/darts/admin/events/${id}/image`,{method:'DELETE'});await loadEvents();const item=state.events.find(e=>e.id===id);if(item)selectEvent(item);status.hidden=false;status.textContent='Banner entfernt.';}catch(error){status.textContent=error.message;}}
+
+function renderSocialList(){const q=clean($('#socialSearch').value).toLocaleLowerCase('de-DE'),fragment=document.createDocumentFragment();for(const item of state.socialLinks.filter(x=>!q||`${x.platform||''} ${x.label||''}`.toLocaleLowerCase('de-DE').includes(q))){const button=document.createElement('button');button.type='button';if(state.selectedSocial?.id===item.id)button.classList.add('active');const name=document.createElement('strong');name.textContent=item.label||item.platform;const meta=document.createElement('span');meta.textContent=`${item.platform} · ${item.active?'veröffentlicht':'Entwurf'}`;button.append(name,meta);button.addEventListener('click',()=>selectSocial(item));fragment.append(button);}if(!fragment.childNodes.length)fragment.append(Object.assign(document.createElement('p'),{textContent:'Keine passenden Links.'}));$('#socialList').replaceChildren(fragment);}
+function selectSocial(item){state.selectedSocial=item;$('#socialEditorEmpty').hidden=true;$('#socialForm').hidden=false;$('#socialId').value=item.id||'';$('#socialPlatform').value=item.platform||'instagram';$('#socialLabel').value=item.label||'';$('#socialHref').value=item.href||'';$('#socialPriority').value=item.priority??0;$('#socialActive').checked=item.active===true;$('#socialHeading').textContent=item.label||'Neuer Link';$('#socialMeta').textContent=item.id?`Social Link #${item.id}`:'Noch nicht gespeichert';$('#deleteSocial').disabled=!item.id;$('#socialFormStatus').hidden=true;renderSocialList();}
+function newSocial(){selectSocial({id:null,platform:'instagram',label:'',href:'',priority:0,active:false});$('#socialLabel').focus();}
+async function loadSocial(){ $('#socialDataStatus').textContent='Social Links werden geladen …';const keep=state.selectedSocial?.id;const result=await api('/api/v1/darts/admin/social-links');state.socialLinks=Array.isArray(result.links)?result.links:[];$('#socialDataStatus').textContent=`${state.socialLinks.length} Link${state.socialLinks.length===1?'':'s'}`;const item=state.socialLinks.find(x=>x.id===keep);if(item)selectSocial(item);else{state.selectedSocial=null;$('#socialForm').hidden=true;$('#socialEditorEmpty').hidden=false;renderSocialList();}}
+async function saveSocial(event){event.preventDefault();const status=$('#socialFormStatus');status.hidden=false;status.textContent='Link wird gespeichert …';try{const id=Number($('#socialId').value)||null;const payload={platform:$('#socialPlatform').value,label:clean($('#socialLabel').value),website:clean($('#socialHref').value),priority:Number($('#socialPriority').value||0),active:$('#socialActive').checked};if(!/^https:\/\//i.test(payload.website)){status.textContent='Bitte einen HTTPS-Link eingeben.';return;}const saved=await api(id?`/api/v1/darts/admin/social-links/${id}`:'/api/v1/darts/admin/social-links',{method:id?'PUT':'POST',body:JSON.stringify(payload)});const savedId=id||saved.id;state.selectedSocial={id:savedId};await loadSocial();const updated=state.socialLinks.find(x=>x.id===savedId);if(updated)selectSocial(updated);status.hidden=false;status.textContent='Link gespeichert.';}catch(error){status.textContent=error.message;}}
+async function deleteSocial(){const id=Number($('#socialId').value);if(!id||!confirm('Diesen Social-Link wirklich löschen?'))return;const status=$('#socialFormStatus');status.hidden=false;status.textContent='Link wird gelöscht …';try{await api(`/api/v1/darts/admin/social-links/${id}`,{method:'DELETE'});state.selectedSocial=null;await loadSocial();status.hidden=true;}catch(error){status.textContent=error.message;}}
 
 async function openAdmin(password) {
   state.password=password;
   await api('/api/v1/music/admin/verify');
   sessionStorage.setItem('clubiq_darts_admin',password);
   $('#loginPanel').hidden=true; $('#adminPanel').hidden=false; $('#logout').hidden=false;
-  await Promise.all([loadData(),loadSponsors()]);
+  const results=await Promise.allSettled([loadData(),loadSponsors(),loadEvents(),loadSocial()]);
+  const targets=['#dataStatus','#sponsorDataStatus','#eventDataStatus','#socialDataStatus'];
+  results.forEach((result,index)=>{if(result.status==='rejected')$(targets[index]).textContent=`Laden fehlgeschlagen: ${result.reason?.message||'Unbekannter Fehler'}`;});
 }
 
 $('#playersAdminTab').addEventListener('click',()=>showAdminView('players'));
 $('#sponsorsAdminTab').addEventListener('click',()=>showAdminView('sponsors'));
+$('#eventsAdminTab').addEventListener('click',()=>showAdminView('events'));
+$('#socialAdminTab').addEventListener('click',()=>showAdminView('social'));
 $('#sponsorSearch').addEventListener('input',renderSponsorList);
 $('#sponsorTypeFilter').addEventListener('change',renderSponsorList);
 $('#newSponsor').addEventListener('click',newSponsor);
@@ -302,9 +374,13 @@ $('#sponsorLogo').addEventListener('change',async event=>{
   } catch(error){state.pendingSponsorLogo=null;status.textContent=error.message;}
 });
 $('#sponsorType').addEventListener('change',()=>{$('#sponsorTypeLabel').textContent=sponsorTypeLabels[$('#sponsorType').value]||'Sponsor';});
+$('#eventSearch').addEventListener('input',renderEventList);$('#newEvent').addEventListener('click',newEvent);$('#eventForm').addEventListener('submit',saveEvent);$('#deleteEvent').addEventListener('click',deleteEvent);$('#deleteEventImage').addEventListener('click',deleteEventImage);
+$('#eventImage').addEventListener('change',async event=>{const file=event.target.files?.[0];if(!file||!state.selectedEvent)return;revokeEventImagePreview();const status=$('#eventFormStatus');status.hidden=false;status.textContent='Banner wird optimiert …';try{state.pendingEventImage=await compressBanner(file);eventImagePreview(state.selectedEvent,await photoDataUrl(state.pendingEventImage));status.textContent=`Banner vorbereitet (${Math.max(1,Math.round(state.pendingEventImage.size/1024))} KB). Zum Übernehmen noch speichern.`;}catch(error){state.pendingEventImage=null;status.textContent=error.message;}});
+$('#eventTitle').addEventListener('input',()=>$('#eventHeading').textContent=clean($('#eventTitle').value)||'Neue Veranstaltung');
+$('#socialSearch').addEventListener('input',renderSocialList);$('#newSocial').addEventListener('click',newSocial);$('#socialForm').addEventListener('submit',saveSocial);$('#deleteSocial').addEventListener('click',deleteSocial);$('#socialLabel').addEventListener('input',()=>$('#socialHeading').textContent=clean($('#socialLabel').value)||'Neuer Link');
 
 $('#loginForm').addEventListener('submit',async event=>{event.preventDefault();const error=$('#loginError');error.hidden=true;try{await openAdmin($('#adminPassword').value);}catch(problem){state.password='';sessionStorage.removeItem('clubiq_darts_admin');error.textContent=problem.message;error.hidden=false;}});
-$('#logout').addEventListener('click',()=>{state.password='';sessionStorage.removeItem('clubiq_darts_admin');location.reload();});
+$('#logout').addEventListener('click',()=>{revokeEventImagePreview();state.password='';sessionStorage.removeItem('clubiq_darts_admin');location.reload();});
 $('#playerSearch').addEventListener('input',renderPlayerList); $('#teamFilter').addEventListener('change',renderPlayerList);
 $('#profileForm').addEventListener('submit',saveProfile); $('#deletePhoto').addEventListener('click',deletePhoto);
 $('#newPlayer').addEventListener('click',()=>{$('#newPlayerError').hidden=true;$('#newPlayerDialog').showModal();$('#newPlayerName').focus();});

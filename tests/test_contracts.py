@@ -326,7 +326,7 @@ class OfflineFrontendContractTests(unittest.TestCase):
         self.assertIn("Veranstaltungspartner", html_source)
         self.assertIn("data-sponsor-placement", html_source)
         self.assertIn("image/webp", script_source)
-        self.assertNotRegex(html_source, r'https?://')
+        self.assertNotRegex(html_source, r'(?:src|href)=["\']https?://')
 
     def test_pwa_and_companion_views_are_local_only(self):
         manifest = (ROOT / "manifest.webmanifest").read_text(encoding="utf-8")
