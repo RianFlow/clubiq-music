@@ -253,6 +253,33 @@ if (typeof document !== 'undefined') initDarts();
 function initDarts() {
   const q = selector => document.querySelector(selector);
   const grid = q('#teamGrid'), cards = new Map(), selections = {};
+  const onlineNode = q('#dartsOnline');
+  const presenceKey = 'clubiq_darts_presence_id';
+  let presenceId = '';
+  try {
+    presenceId = localStorage.getItem(presenceKey) || '';
+    if (!/^[A-Za-z0-9_-]{16,80}$/.test(presenceId)) {
+      presenceId = globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+      localStorage.setItem(presenceKey,presenceId);
+    }
+  } catch (_) {
+    presenceId = globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+  }
+  async function updatePresence() {
+    if (!onlineNode || document.hidden || !presenceId) return;
+    try {
+      const response = await fetch('/api/v1/darts/presence',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Accept':'application/json'},
+        body:JSON.stringify({clientId:presenceId}),
+        cache:'no-store',
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      const online = Number.isInteger(data.online) && data.online >= 0 ? data.online : null;
+      if (online !== null) onlineNode.textContent = `${online} online`;
+    } catch (_) { /* Presence is informative only; never disturb the page. */ }
+  }
   const demoLive = ['127.0.0.1','localhost'].includes(location.hostname) && new URLSearchParams(location.search).get('demo') === 'live';
   const themeKey = 'clubiq_darts_theme';
   function applyTheme(theme, remember=false) {
@@ -1844,6 +1871,11 @@ function initDarts() {
   q('#closeMatch').addEventListener('click',()=>q('#matchDialog').close());
   q('#closeTeamProfile').addEventListener('click',()=>q('#teamDialog').close());
   q('#closePlayerProfile').addEventListener('click',()=>q('#playerDialog').close());
+  updatePresence();
+  window.setInterval(updatePresence,30000);
+  window.addEventListener('online',updatePresence);
+  document.addEventListener('visibilitychange',()=>{ if (!document.hidden) updatePresence(); });
+
   q('#fullscreen').addEventListener('click',async()=>{
     try { if (document.fullscreenElement) await document.exitFullscreen(); else { setSection('today'); if (document.body.requestFullscreen) await document.body.requestFullscreen(); else message('TV-Modus wird hier nicht unterstützt. Du kannst die Heute-Ansicht normal verwenden.'); } }
     catch (_) { message('Vollbild nicht verfügbar. Bitte die Browser-Vollbildfunktion oder „Groß“ verwenden.'); }

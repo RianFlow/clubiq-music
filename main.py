@@ -13,6 +13,7 @@ import socket
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from threading import Lock
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -263,6 +264,20 @@ def close_expired_cycles() -> None:
         print(f"[BACKGROUND ERROR] {exc}")
 
 
+DARTS_PRESENCE_TTL_SECONDS = 90
+DARTS_PRESENCE_MAX_CLIENTS = 5000
+_darts_presence: dict[str, float] = {}
+_darts_presence_lock = Lock()
+
+
+def _darts_presence_count(now: float) -> int:
+    cutoff = now - DARTS_PRESENCE_TTL_SECONDS
+    stale = [client_id for client_id, seen_at in _darts_presence.items() if seen_at < cutoff]
+    for client_id in stale:
+        _darts_presence.pop(client_id, None)
+    return len(_darts_presence)
+
+
 _darts_push_status = {
     "configured": bool(DARTS_VAPID_PUBLIC_KEY and DARTS_VAPID_PRIVATE_KEY and webpush),
     "upstreamAvailable": None,
@@ -479,6 +494,10 @@ class DartsPushSubscribe(BaseModel):
 
 class DartsPushUnsubscribe(BaseModel):
     endpoint: str = Field(min_length=20, max_length=2048)
+
+
+class DartsPresenceHeartbeat(BaseModel):
+    clientId: str = Field(min_length=16, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 class DartsPlayerProfileUpdate(BaseModel):
@@ -1296,6 +1315,25 @@ def darts_members():
             "SELECT display_name FROM club_members WHERE active = TRUE ORDER BY lower(display_name);"
         )
         return {"members": [row[0] for row in cur.fetchall()]}
+
+
+@app.post("/api/v1/darts/presence")
+def darts_presence_heartbeat(payload: DartsPresenceHeartbeat):
+    now = datetime.now(timezone.utc).timestamp()
+    with _darts_presence_lock:
+        _darts_presence_count(now)
+        if payload.clientId not in _darts_presence and len(_darts_presence) >= DARTS_PRESENCE_MAX_CLIENTS:
+            oldest = min(_darts_presence, key=_darts_presence.get)
+            _darts_presence.pop(oldest, None)
+        _darts_presence[payload.clientId] = now
+        return {"online": len(_darts_presence)}
+
+
+@app.get("/api/v1/darts/presence")
+def darts_presence():
+    now = datetime.now(timezone.utc).timestamp()
+    with _darts_presence_lock:
+        return {"online": _darts_presence_count(now)}
 
 
 @app.get("/api/v1/darts/push/config")

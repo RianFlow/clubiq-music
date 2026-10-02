@@ -86,6 +86,9 @@ button.primary { color:white; background:var(--green); border-color:var(--green)
 @keyframes ticker-scroll { to { transform:translateX(-50%); } }
 @media(prefers-reduced-motion:reduce) { .ticker-track { animation:none; } .ticker-window { overflow-x:auto; } }
 @media(prefers-reduced-motion:reduce) { .live-push-alert.show { animation:none; opacity:1; transform:translate(-50%,0); } .live-push-alert.show .live-push-alert-progress { animation:none; } }
+.darts-online { display:inline-flex; align-items:center; gap:6px; color:#879892; font-size:.72rem; font-weight:700; white-space:nowrap; }
+.darts-online::before { content:''; width:6px; height:6px; flex:0 0 auto; background:#5bb894; border-radius:50%; opacity:.8; }
+[data-theme="dark"] .darts-online { color:#9aada7; }
 .sponsor-slot { max-width:1500px; margin:12px auto; padding:0 24px; }
 .sponsor-slot-inline { margin-top:8px; margin-bottom:14px; padding:0; }
 .sponsor-slot-footer { margin-top:22px; margin-bottom:8px; }
