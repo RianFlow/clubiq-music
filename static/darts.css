@@ -1347,7 +1347,7 @@ body.tv-live .club-training { display:none; }
   .home-filters > summary span { display:block; margin:6px 0 0; }
 }
 @media(max-width:680px) {
-  #todayPanel .club-event-banner,#todayPanel .club-event-banner.has-event-image { grid-template-columns:minmax(0,1fr); }
+  #todayPanel .club-event-banner,#todayPanel .club-event-banner.has-event-image { grid-template-columns:minmax(0,1fr); grid-template-rows:repeat(4,auto); }
   #todayPanel .club-event-copy { grid-column:1; grid-row:2; }
   #todayPanel .club-event-art { grid-column:1; grid-row:1; }
   #todayPanel .club-event-art img { width:min(340px,100%); height:auto; }
