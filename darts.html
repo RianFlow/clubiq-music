@@ -9,10 +9,10 @@
   <link rel="icon" href="/pics/logo.png">
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
   <link rel="preload" href="/pics/sv-barver-darts-tight-512.webp" as="image" type="image/webp">
-  <link rel="stylesheet" href="/static/darts.css?v=20261002-content1">
+  <link rel="stylesheet" href="/static/darts.css?v=20261002-home2">
   <link rel="stylesheet" href="/static/darts-broadcast.css?v=20261002-content1">
   <script defer src="/static/darts-broadcast.js?v=20261002-content1"></script>
-  <script defer src="/static/darts.js?v=20261002-content1"></script>
+  <script defer src="/static/darts.js?v=20261002-home2"></script>
 </head>
 <body>
   <header class="darts-header">
@@ -67,7 +67,7 @@
     </section>
     <aside id="clubEventBanner" class="club-event-banner" aria-labelledby="clubEventTitle" hidden>
       <div class="club-event-copy"><p id="clubEventKicker" class="eyebrow">Aus dem Verein</p><h2 id="clubEventTitle"></h2><p id="clubEventDescription"></p><div id="clubEventMeta" class="club-event-meta"></div></div>
-      <div class="club-event-art"><img id="clubEventImage" alt="" loading="eager" fetchpriority="high" decoding="async" hidden><span class="club-logo" aria-hidden="true"></span><strong aria-hidden="true">BARVER<br>DARTS</strong></div>
+      <div class="club-event-art"><a id="clubEventPoster" target="_blank" rel="noopener noreferrer" aria-haspopup="dialog" hidden><img id="clubEventImage" alt="" loading="lazy" fetchpriority="low" decoding="async" hidden><span>Plakat vergrößern ⤢</span></a><span class="club-logo" aria-hidden="true"></span><strong aria-hidden="true">BARVER<br>DARTS</strong></div>
       <a id="clubEventLink" class="club-event-link" hidden>Mehr erfahren</a>
       <div id="clubEventControls" class="club-event-controls" hidden><button id="previousClubEvent" type="button" aria-label="Vorherige Veranstaltung">‹</button><span id="clubEventCount" aria-live="polite"></span><button id="nextClubEvent" type="button" aria-label="Nächste Veranstaltung">›</button></div>
     </aside>
@@ -78,8 +78,9 @@
       <label class="auto-load" title="Ausgewählte 3K-Ansichten beim Öffnen automatisch laden"><input id="autoLoad" type="checkbox"><span>Automatisch laden</span></label>
     </section>
     <section class="match-center" aria-labelledby="matchCenterHeading">
-      <div class="match-center-head"><div><p class="eyebrow">Matchcenter</p><h2 id="matchCenterHeading">Barver A–D</h2></div><span>Live · nächste Spiele · letzte Ergebnisse</span></div>
+      <div class="match-center-head"><div><p class="eyebrow">Unsere Mannschaften</p><h2 id="matchCenterHeading">Barver A–D</h2></div><span>Vier Teams. Ein Verein.</span></div>
       <div id="matchCenterGrid" class="match-center-grid"><p class="match-center-loading">3K-Spielplan wird geladen …</p></div>
+      <aside class="club-training" aria-label="Trainingszeiten"><strong>Unser Training</strong><span>Dienstag & Donnerstag</span><time datetime="19:30">jeweils 19:30 Uhr</time></aside>
     </section>
     <aside id="sponsorInline" class="sponsor-slot sponsor-slot-inline" data-placement="inline" aria-label="Werbepartner" hidden></aside>
     <p id="pageStatus" class="message" role="status" hidden></p>
@@ -100,12 +101,14 @@
       <div id="todayGrid" class="today-grid"><p class="panel-loading">Spielstände werden geladen …</p></div>
       <aside id="sponsorTv" class="sponsor-slot sponsor-slot-tv" data-placement="tv" aria-label="TV-Partner" hidden></aside>
       <section class="home-schedule-panel" aria-labelledby="homeScheduleHeading">
-        <div class="home-schedule-panel-head"><div><p class="eyebrow">Spielplan</p><h3 id="homeScheduleHeading">Heute, demnächst & zuletzt</h3></div><span>Nach Team, Wettbewerb oder Datum filtern</span></div>
+        <div class="home-schedule-panel-head"><div><p class="eyebrow">Termine & Ergebnisse</p><h3 id="homeScheduleHeading">Rund um unsere Teams</h3></div><span>Die nächsten Begegnungen und die letzten Ergebnisse</span></div>
+        <details id="homeFilters" class="home-filters"><summary>Spielplan filtern <span id="homeFilterSummary">Alle Teams · alle Wettbewerbe</span></summary>
         <div class="season-toolbar" aria-label="Startseite filtern">
           <label>Mannschaft<select id="homeTeam"><option value="all">Alle Teams</option><option>A</option><option>B</option><option>C</option><option>D</option></select></label>
           <label>Liga / Wettbewerb<select id="homeLeague"><option value="all">Alle Wettbewerbe</option><option value="1445">Kreisligen 04 · A–C</option><option value="1460">Kreisklasse 11 · D</option><option value="special">Pokal & Sondertermine</option></select></label>
           <label>Datum<input id="homeDate" type="date"></label><button id="resetHomeFilters" type="button">Filter zurücksetzen</button>
         </div>
+        </details>
         <div id="homeSchedule" class="home-schedule"></div>
       </section>
     </section>
@@ -189,6 +192,10 @@
   <dialog id="playerDialog" class="player-profile-dialog" aria-labelledby="playerProfileHeading">
     <div class="dialog-head"><div><p class="eyebrow">SV Barver Darts · Spielerprofil</p><h2 id="playerProfileHeading">Spieler</h2></div><button id="closePlayerProfile" type="button" aria-label="Schließen">×</button></div>
     <div id="playerProfile"><p class="panel-loading">Spielerprofil wird geladen …</p></div>
+  </dialog>
+  <dialog id="clubPosterDialog" class="club-poster-dialog" aria-labelledby="clubPosterHeading">
+    <div class="dialog-head"><h2 id="clubPosterHeading">Veranstaltungsplakat</h2><button id="closeClubPoster" type="button" aria-label="Plakat schließen">×</button></div>
+    <img id="clubPosterFull" alt="">
   </dialog>
 </body>
 </html>

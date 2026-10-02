@@ -9,6 +9,7 @@ const matches=[
   {id:903,barverTeam:'B',home:'SV Barver Darts B',away:'Demo-Team B',kind:'upcoming',eventId:1445,plannedAt:day(2),isSpecial:true,league:'special-500',competitionBadge:'POKAL',round:{name:'Runde 1'}},
   {id:904,barverTeam:'C',home:'Demo-Team C',away:'SV Barver Darts C',kind:'final',score:'4:8',eventId:1445,plannedAt:day(-2)},
 ];
+if(process.argv.includes('--quiet'))for(const match of matches)if(match.kind==='live'){match.kind='upcoming';delete match.score;}
 const teams=['A','B','C','D'].map((code,i)=>({code,name:`SV Barver Darts ${code}`,league:{name:code==='D'?'Kreisklasse 11':'Kreisligen 04'},record:{},matches:matches.filter(m=>m.barverTeam===code),roster:[{id:89027+i,name:code==='A'?'Jannik Kläning':`Demo-Spieler ${code}`,role:'Kapitän'}]}));
 teams[1].roster=[{id:89029,name:'Patrick Lammers',role:'Kapitän'}];
 let fail=false;
@@ -36,7 +37,7 @@ const server=http.createServer((req,res)=>{
     const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.webp':'image/webp','.json':'application/json','.svg':'image/svg+xml'};
     if(!error&&file.endsWith('darts.html')) {
       let html=body.toString().replace('<main>','<main><p class="message">VORSCHAU · Simulierte Begegnungen, keine echten Spielstände</p>');
-      if(process.argv.includes('--serve')) html=html.replace('</body>','<script src="/tests/darts-motion-demo.js"></script></body>');
+      if(process.argv.includes('--serve')&&url.searchParams.get('preview')!=='home') html=html.replace('</body>','<script src="/tests/darts-motion-demo.js"></script></body>');
       body=Buffer.from(html);
     }
     res.writeHead(error?404:200,{'Content-Type':types[path.extname(file)]||'application/octet-stream','Cache-Control':'no-store'});res.end(error?'Not found':body);
@@ -75,7 +76,10 @@ const server=http.createServer((req,res)=>{
     assert.equal(await page.locator('#homeSchedule > section').count(),3);
     await page.selectOption('#favoriteTeam','D');
     assert.match(await page.locator('#todayGrid').innerText(),/BARVER D/);
+    assert.equal(await page.locator('#homeFilters').evaluate(node=>node.open),false);
+    await page.locator('#homeFilters summary').click();
     await page.selectOption('#homeTeam','D');
+    assert.match(await page.locator('#homeFilterSummary').innerText(),/Barver D/);
     assert.equal(await page.locator('#homeSchedule .team-profile-match').count(),1);
     await page.click('#resetHomeFilters');
     await page.click('#cupView');
@@ -158,6 +162,32 @@ const server=http.createServer((req,res)=>{
     assert.equal(await page.locator('.darts-broadcast-card').count(),1);
     await page.locator('.darts-broadcast-card').waitFor({state:'detached'});
     assert.equal(await page.locator('.darts-broadcast').isVisible(),false,'TV backdrop must disappear with highlight');
+    const quiet=await context.newPage();
+    await quiet.route('**/api/v1/darts/ticker',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({items:matches.map(item=>({...item,kind:item.kind==='live'?'upcoming':item.kind})),updatedAt:now(),stale:false})}));
+    await quiet.goto(`${origin}/darts`);
+    await quiet.getByText('Barver im Überblick',{exact:true}).waitFor();
+    assert.equal(await quiet.locator('#todayGrid').isVisible(),false,'no empty live block');
+    assert.equal(await quiet.locator('#homeFilters').evaluate(node=>node.open),false);
+    assert.equal(await quiet.locator('#clubEventPoster').getAttribute('href'),'/pics/events/barver-dart-open-2026.webp');
+    assert.equal(await quiet.locator('#clubEventImage').getAttribute('loading'),'lazy');
+    assert.match(await quiet.locator('.club-training').innerText(),/Dienstag & Donnerstag/);
+    assert.match(await quiet.locator('.club-training').innerText(),/19:30 Uhr/);
+    assert.equal(await quiet.locator('.match-center .club-training').count(),0,'training has its own section');
+    await quiet.locator('#clubEventPoster').click();
+    assert.equal(await quiet.locator('#clubPosterDialog').evaluate(node=>node.open),true);
+    assert.match(await quiet.locator('#clubPosterFull').getAttribute('src'),/barver-dart-open-2026.webp/);
+    await quiet.keyboard.press('Escape');
+    assert.equal(await quiet.locator('#clubPosterDialog').evaluate(node=>node.open),false);
+    assert.equal(await quiet.evaluate(()=>Boolean(document.querySelector('.match-center').compareDocumentPosition(document.querySelector('#clubEventBanner'))&Node.DOCUMENT_POSITION_FOLLOWING)),true);
+    await quiet.setViewportSize({width:390,height:844});
+    await quiet.locator('#clubEventImage').scrollIntoViewIfNeeded();
+    assert.ok((await quiet.locator('#clubEventImage').boundingBox()).width>=280,'poster readable on mobile');
+    assert.ok((await quiet.locator('#clubEventBanner').boundingBox()).height<(await quiet.locator('#clubEventImage').boundingBox()).height+260,'mobile event card must not have empty stretched rows');
+    assert.equal(await quiet.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'quiet mobile overflow');
+    await quiet.screenshot({path:path.join(root,'outputs/darts-home-quiet-mobile.png'),fullPage:true});
+    await quiet.setViewportSize({width:1440,height:1000});
+    await quiet.screenshot({path:path.join(root,'outputs/darts-home-quiet-desktop.png'),fullPage:true});
+    await quiet.close();
     assert.deepEqual(errors,[]);
     console.log('Browser: homepage, two boards, favorites, filters, saved player/type preferences, reconnect, mobile OK');
   } finally {await browser.close();server.close();}
