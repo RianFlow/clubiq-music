@@ -334,6 +334,11 @@ function initDarts() {
     .catch(()=>document.querySelectorAll('.sponsor-slot').forEach(slot=>{ slot.hidden=true; slot.replaceChildren(); }));
   updateTvTeamControls();
   let playerProfiles={}, playerProfileBase={}, playerStatCache={};
+  let playerDataPromise=null;
+  const runWhenIdle=callback=>{
+    if ('requestIdleCallback' in window) window.requestIdleCallback(callback,{timeout:2200});
+    else window.setTimeout(callback,1200);
+  };
   const mergePlayerProfiles=()=>{
     const ids=new Set([...Object.keys(playerProfileBase),...Object.keys(playerStatCache)]);
     playerProfiles=Object.fromEntries([...ids].map(id=>[id,{...(playerProfileBase[id]||{}),...(playerStatCache[id]||{})}]));
@@ -347,15 +352,20 @@ function initDarts() {
       if(index>=0) DARTS_FALLBACK_ROSTERS[profile.team][index]=member; else DARTS_FALLBACK_ROSTERS[profile.team].push(member);
     }
   };
-  fetch('/api/v1/darts/player-profiles',{headers:{Accept:'application/json'}})
-    .then(response=>response.ok?response.json():Promise.reject(new Error('player profiles unavailable')))
-    .catch(()=>fetch('/static/darts-players.json',{headers:{Accept:'application/json'}}).then(response=>response.ok?response.json():Promise.reject(new Error('player photos unavailable'))))
-    .then(config=>{ playerProfileBase=dartsPlayerProfiles(config); syncProfileRosters(); mergePlayerProfiles(); })
-    .catch(()=>{ playerProfileBase={}; mergePlayerProfiles(); });
-  fetch('/api/v1/darts/player-stats',{headers:{Accept:'application/json'}})
-    .then(response=>response.ok?response.json():Promise.reject(new Error('player stats unavailable')))
-    .then(config=>{ playerStatCache=dartsPlayerStats(config); mergePlayerProfiles(); })
-    .catch(()=>{ playerStatCache={}; mergePlayerProfiles(); });
+  function loadPlayerData() {
+    if (playerDataPromise) return playerDataPromise;
+    const profiles=fetch('/api/v1/darts/player-profiles',{headers:{Accept:'application/json'}})
+      .then(response=>response.ok?response.json():Promise.reject(new Error('player profiles unavailable')))
+      .catch(()=>fetch('/static/darts-players.json',{headers:{Accept:'application/json'}}).then(response=>response.ok?response.json():Promise.reject(new Error('player photos unavailable'))))
+      .then(config=>{ playerProfileBase=dartsPlayerProfiles(config); syncProfileRosters(); mergePlayerProfiles(); })
+      .catch(()=>{ playerProfileBase={}; mergePlayerProfiles(); });
+    const stats=fetch('/api/v1/darts/player-stats',{headers:{Accept:'application/json'}})
+      .then(response=>response.ok?response.json():Promise.reject(new Error('player stats unavailable')))
+      .then(config=>{ playerStatCache=dartsPlayerStats(config); mergePlayerProfiles(); })
+      .catch(()=>{ playerStatCache={}; mergePlayerProfiles(); });
+    playerDataPromise=Promise.allSettled([profiles,stats]);
+    return playerDataPromise;
+  }
   let livePushAlertTimer=0;
   function closeLivePushAlert() {
     window.clearTimeout(livePushAlertTimer);
@@ -422,7 +432,7 @@ function initDarts() {
   }
   q('#personalSettings').addEventListener('toggle',async()=>{
     if (!q('#personalSettings').open) return;
-    renderNotificationHistory(); await loadSeason(); renderPlayerOptions();
+    renderNotificationHistory(); await Promise.all([loadSeason(),loadPlayerData()]); renderPlayerOptions();
   });
   q('#preferencesForm').addEventListener('submit',async event=>{
     event.preventDefault(); const form=event.currentTarget, button=form.querySelector('button[type="submit"]'); button.disabled=true;
@@ -766,7 +776,7 @@ function initDarts() {
     }
     const duplicate = group.cloneNode(true); duplicate.setAttribute('aria-hidden','true'); duplicate.querySelectorAll('a,[role="link"]').forEach(link=>link.tabIndex=-1);
     track.replaceChildren(group,duplicate);
-    const pixelsPerSecond=window.matchMedia('(max-width:800px)').matches?22:26;
+    const pixelsPerSecond=window.matchMedia('(max-width:800px)').matches?18:21;
     const duration=Math.max(80,Math.min(300,Math.round(Math.max(group.scrollWidth,window.innerWidth)/pixelsPerSecond)));
     track.style.setProperty('--ticker-duration',`${duration}s`);
     const updated = new Date(data.updatedAt);
@@ -875,7 +885,8 @@ function initDarts() {
   let clubMembers=null, membersLoading=false, membersPromise=null, membersError='';
   try { const saved=JSON.parse(localStorage.getItem('clubiq_darts_last_ticker')||'null'); if (Array.isArray(saved?.items)) {renderTicker(saved);updateFreshness(true);} } catch (_) {}
   try { const saved=JSON.parse(localStorage.getItem('clubiq_darts_last_season')||'null'); if (Array.isArray(saved?.matches)&&Array.isArray(saved?.teams)) {seasonData=saved;renderSeason();renderHomeSchedule();renderCompleteMatchCenter();} } catch (_) {}
-  loadTicker(); loadHighlights(); initServerLiveStream();
+  loadTicker(); initServerLiveStream();
+  runWhenIdle(()=>{ loadHighlights(); loadPlayerData(); });
   for (const id of ['#homeTeam','#homeLeague','#homeDate']) q(id).addEventListener('change',renderHomeSchedule);
   q('#resetHomeFilters').addEventListener('click',()=>{q('#homeTeam').value='all';q('#homeLeague').value='all';q('#homeDate').value='';renderHomeSchedule();});
   function teamByCode(code) {
@@ -891,7 +902,7 @@ function initDarts() {
     for (const selector of ['#matchDialog','#playerDialog','#teamDialog']) {
       const dialog=q(selector); if (dialog?.open) dialog.close();
     }
-    openTeamProfile(team);
+    await openTeamProfile(team);
   }
   function makeTeamJump(code, label=`Barver ${code}`) {
     const jump=document.createElement('span'); jump.className='barver-team-link'; jump.textContent=label;
@@ -985,10 +996,14 @@ function initDarts() {
     } else { avatar.textContent=playerInitials(member?.name); avatar.classList.add('avatar-fallback'); }
     return avatar;
   }
-  function openPlayerProfile(member, team) {
+  async function openPlayerProfile(member, team) {
     if (!member || !team) return;
     q('#playerProfileHeading').textContent=member.name;
     const target=q('#playerProfile');
+    const loading=document.createElement('p'); loading.className='panel-loading'; loading.textContent='Spielerprofil wird geladen …';
+    target.replaceChildren(loading);
+    if (!q('#playerDialog').open) q('#playerDialog').showModal();
+    await loadPlayerData();
     const profile=playerProfiles[String(member.id || '')] || {};
     const hero=document.createElement('section'); hero.className='player-profile-hero';
     const copy=document.createElement('div'); copy.className='player-profile-identity';
@@ -1083,10 +1098,15 @@ function initDarts() {
     grid.append(sport,results); target.replaceChildren(hero,facts,performance,personalSection,grid,actions);
     if (!q('#playerDialog').open) q('#playerDialog').showModal();
   }
-  function openTeamProfile(team) {
+  async function openTeamProfile(team) {
     if (!team) return;
     q('#teamProfileHeading').textContent=team.name;
-    const target=q('#teamProfile'), record=team.record || {}, rosterMembers=dartsTeamRoster(team);
+    const target=q('#teamProfile');
+    const loading=document.createElement('p'); loading.className='panel-loading'; loading.textContent='Mannschaft wird geladen …';
+    target.replaceChildren(loading);
+    if (!q('#teamDialog').open) q('#teamDialog').showModal();
+    await loadPlayerData();
+    const record=team.record || {}, rosterMembers=dartsTeamRoster(team);
     const hero=document.createElement('section'); hero.className='team-profile-hero';
     const identity=document.createElement('div');
     const mark=document.createElement('b'); mark.textContent=team.code;
@@ -1104,7 +1124,7 @@ function initDarts() {
       const clubName=document.createElement('small'); clubName.textContent='SV BARVER DARTS';
       const teamName=document.createElement('strong'); teamName.textContent='BARVER B';
       wordmark.append(clubName,teamName);
-      const crest=document.createElement('img'); crest.className='team-group-crest'; crest.src='/pics/sv-barver-darts-tight.png'; crest.alt=''; crest.width=340; crest.height=340; crest.loading='lazy'; crest.decoding='async';
+      const crest=document.createElement('img'); crest.className='team-group-crest'; crest.src='/pics/sv-barver-darts-tight-512.webp'; crest.alt=''; crest.width=340; crest.height=340; crest.loading='lazy'; crest.decoding='async';
       const image=document.createElement('img'); image.className='team-group-players'; image.src='/pics/teams/barver-b-team-cutout.webp?v=20260927-2'; image.alt='Freigestelltes Mannschaftsfoto SV Barver Darts B'; image.width=1600; image.height=738; image.loading='lazy'; image.decoding='async';
       const caption=document.createElement('figcaption'); caption.textContent='SV Barver Darts B · Mannschaft 2026 / 2027';
       teamPhoto.append(wordmark,crest,image,caption);

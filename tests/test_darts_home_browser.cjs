@@ -97,7 +97,7 @@ const server=http.createServer((req,res)=>{
     await page.locator('.team-group-players').waitFor();
     assert.equal(await page.locator('.team-group-players').getAttribute('src'),'/pics/teams/barver-b-team-cutout.webp?v=20260927-2');
     assert.equal(await page.locator('.team-group-wordmark strong').innerText(),'BARVER B');
-    assert.equal(await page.locator('.team-group-crest').getAttribute('src'),'/pics/sv-barver-darts-tight.png');
+    assert.equal(await page.locator('.team-group-crest').getAttribute('src'),'/pics/sv-barver-darts-tight-512.webp');
     assert.equal(await page.locator('.player-roster-card').count(),6);
     assert.equal(await page.locator('.player-roster-card img').count(),6);
     await page.getByRole('button',{name:'Patrick Lammers, Profil öffnen'}).click();

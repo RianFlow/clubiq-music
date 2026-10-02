@@ -1,8 +1,8 @@
 :root { font-family: Inter, system-ui, sans-serif; color: #13211f; background: #f4f4ef; --green:#163c36; --line:#d9ddd7; }
 .personal-settings { margin:12px 24px; padding:12px 16px; border:1px solid var(--line); border-radius:12px; }
 .personal-settings summary { cursor:pointer; font-weight:750; min-height:32px; }
-.personal-settings:not([open]) { width:max-content; max-width:calc(100% - 48px); margin-block:8px; padding:7px 12px; border-radius:999px; }
-.personal-settings:not([open]) summary { min-height:24px; }
+.personal-settings:not([open]) { width:max-content; max-width:calc(100% - 48px); margin-block:4px; padding:4px 10px; border-radius:999px; }
+.personal-settings:not([open]) summary { min-height:20px; font-size:.82rem; }
 .personal-push-actions { display:flex; align-items:center; gap:8px; margin:10px 0 4px; }
 .preferences-grid { display:grid; grid-template-columns:1fr 1fr 2fr; gap:16px; margin:16px 0; }
 .preferences-grid fieldset { min-width:0; border:1px solid var(--line); border-radius:10px; }
@@ -39,7 +39,7 @@ button.primary { color:white; background:var(--green); border-color:var(--green)
 .brand img { width:44px; height:44px; border-radius:12px; }
 .brand span { display:grid; gap:2px; font-size:.85rem; }
 .brand b { font-size:1rem; }
-.club-logo { display:block; flex-shrink:0; background:url('/pics/sv-barver-darts-tight.png') center / contain no-repeat; }
+.club-logo { display:block; flex-shrink:0; background:url('/pics/sv-barver-darts-tight-512.webp') center / contain no-repeat; }
 .primary-navigation { display:flex; justify-content:center; gap:6px; min-width:0; }
 .primary-navigation button { min-height:40px; padding:8px 12px; }
 .header-tools { display:flex; align-items:center; gap:6px; }
@@ -165,6 +165,8 @@ h1 { font:500 clamp(1.7rem,3vw,2.7rem)/1.15 Georgia,serif; margin:0; }
 .sports-panel-head select,.league-controls select { min-height:44px; padding:8px 34px 8px 10px; border:1px solid #8ca59e; border-radius:9px; color:#173b35; background:white; font-size:16px; }
 .panel-club-logo { width:104px; height:72px; }
 .today-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; padding:14px; background:#e8ebe5; border:1px solid var(--line); border-top:0; border-radius:0 0 18px 18px; }
+.today-grid:has(> .panel-loading:only-child) { display:block; padding:0; }
+.today-grid > .panel-loading:only-child { padding:13px 20px; }
 .today-game { display:grid; grid-template-columns:auto 1fr; gap:8px 12px; min-height:142px; padding:18px; color:#17312c; text-decoration:none; background:#fffef9; border:1px solid #d6ddd8; border-left:6px solid #2c7768; border-radius:12px; }
 .today-game.final { border-left-color:#c79f45; }
 .today-game.live { border-left-color:#c9392d; box-shadow:0 0 0 2px #c9392d18; }
@@ -921,9 +923,9 @@ main { max-width:1920px; padding-top:20px; }
 .intro {
   position:relative;
   isolation:isolate;
-  min-height:280px;
+  min-height:236px;
   margin:0 0 20px;
-  padding:34px clamp(24px,5vw,74px);
+  padding:28px clamp(24px,5vw,66px);
   overflow:hidden;
   color:#fff;
   background:linear-gradient(105deg,#04110f 0%,#092b24 48%,#0b4236 100%);
@@ -934,9 +936,9 @@ main { max-width:1920px; padding-top:20px; }
 .intro::after { content:""; position:absolute; z-index:-1; inset:0; background:linear-gradient(90deg,transparent 0 47%,#07191520 68%,#0207079e 100%); }
 .intro-copy { position:relative; z-index:2; max-width:720px; }
 .intro .eyebrow { margin-bottom:8px; color:var(--sports-mint); font-size:.8rem; letter-spacing:.22em; }
-.intro h1 { margin:0; color:#fff; font-family:var(--sports-display); font-size:clamp(3.9rem,8vw,7.8rem); font-weight:900; line-height:.7; letter-spacing:-.025em; text-transform:uppercase; text-shadow:0 8px 30px #0008; }
+.intro h1 { margin:0; color:#fff; font-family:var(--sports-display); font-size:clamp(3.6rem,7vw,6.8rem); font-weight:900; line-height:.72; letter-spacing:-.025em; text-transform:uppercase; text-shadow:0 8px 30px #0008; }
 .intro h1 span { color:var(--sports-gold); }
-.intro p:last-child { margin:26px 0 0; color:#dce9e5; font-size:clamp(.9rem,1.4vw,1.08rem); letter-spacing:.02em; }
+.intro p:last-child { margin:20px 0 0; color:#dce9e5; font-size:clamp(.9rem,1.4vw,1.08rem); letter-spacing:.02em; }
 .intro p:last-child strong { color:#fff; }
 .intro-visual { position:absolute; inset:0 2% 0 auto; width:min(46%,650px); }
 .intro-watermark { position:absolute; right:-4%; bottom:-5%; color:#ffffff08; font-family:var(--sports-display); font-size:clamp(6rem,14vw,13rem); font-weight:900; line-height:.75; letter-spacing:-.06em; }
@@ -979,6 +981,12 @@ main { max-width:1920px; padding-top:20px; }
 .member-card:hover { border-left-color:var(--sports-mint); }
 footer { margin-top:34px; padding:24px; color:#b9c9c4; background:var(--sports-ink); border-top:5px solid var(--sports-gold); }
 footer a { color:#d8e9e3; }
+
+/* Paint long, below-the-fold areas only when they approach the viewport. */
+.home-schedule section,.league-block,.native-match-list,.members-grid {
+  content-visibility:auto;
+  contain-intrinsic-size:auto 520px;
+}
 
 [data-theme="dark"] body { background:linear-gradient(180deg,#06110f,#0a1412); }
 [data-theme="dark"] .darts-header { background:linear-gradient(100deg,#020706,#061914 58%,#0b332b 100%); border-bottom-color:var(--sports-gold); }

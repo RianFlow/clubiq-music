@@ -149,7 +149,7 @@ assert.match(html,/href="\/datenschutz"/);
 assert.match(html,/href="\/darts-admin"/);
 assert.doesNotMatch(html,/<iframe|https:\/\/portal[^" ]+\.js/,'external content is opt-in');
 const script = fs.readFileSync('static/darts.js','utf8');
-assert.match(fs.readFileSync('static/darts.css','utf8'),/sv-barver-darts-tight\.png/);
+assert.match(fs.readFileSync('static/darts.css','utf8'),/sv-barver-darts-tight-512\.webp/);
 assert.match(fs.readFileSync('static/darts.css','utf8'),/data-theme="dark"/);
 assert.match(script,/function renderMatchCenter\(data\)/);
 assert.match(script,/function makeTeamJump\(code/);

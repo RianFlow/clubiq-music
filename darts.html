@@ -8,12 +8,13 @@
   <meta name="description" content="SV Barver Darts A, B, C und D: Spielpläne, Spielberichte und Live-Ansichten gemeinsam verfolgen.">
   <link rel="icon" href="/pics/logo.png">
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
-  <link rel="stylesheet" href="/static/darts.css?v=20260929-sponsor1">
-  <script defer src="/static/darts.js?v=20260929-hotfix1"></script>
+  <link rel="preload" href="/pics/sv-barver-darts-tight-512.webp" as="image" type="image/webp">
+  <link rel="stylesheet" href="/static/darts.css?v=20261002-performance1">
+  <script defer src="/static/darts.js?v=20261002-performance1"></script>
 </head>
 <body>
   <header class="darts-header">
-    <a class="brand" href="/darts" aria-label="Zur Darts-Startseite"><img src="/pics/sv-barver-darts-tight.png" alt=""><span><small>SV BARVER</small><b>DARTS</b><em>ClubIQ Matchcenter</em></span></a>
+    <a class="brand" href="/darts" aria-label="Zur Darts-Startseite"><img src="/pics/sv-barver-darts-tight-512.webp" alt="" width="58" height="58" fetchpriority="high" decoding="async"><span><small>SV BARVER</small><b>DARTS</b><em>ClubIQ Matchcenter</em></span></a>
     <nav class="primary-navigation" aria-label="Anzeige"><button id="todayView" type="button">Live</button><button id="leagueView" type="button">Tabellen</button><button id="cupView" type="button">Pokal</button><button id="gridView" type="button">Spiele & Teams</button><button id="membersView" type="button">Mitglieder</button><button id="trainingView" type="button">Training</button></nav>
     <div class="header-tools"><button id="themeToggle" class="theme-switch" type="button" role="switch" aria-checked="false" aria-label="Dunkelmodus"><span class="theme-option theme-light">Hell</span><span class="theme-track" aria-hidden="true"><span></span></span><span class="theme-option theme-dark">Dunkel</span></button><button id="fullscreen" type="button">TV-Modus</button></div>
   </header>
