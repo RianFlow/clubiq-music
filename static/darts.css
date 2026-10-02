@@ -1,4 +1,6 @@
 :root { font-family: Inter, system-ui, sans-serif; color: #13211f; background: #f4f4ef; --green:#163c36; --line:#d9ddd7; }
+.primary-navigation .tournament-menu-link { display:block; padding:14px 16px; color:inherit; background:transparent; text-decoration:none; border:0; border-radius:8px; text-transform:none; }
+.primary-navigation .tournament-menu-link:hover { background:#dceae1; color:#163c36; }
 .personal-settings { margin:12px 24px; padding:12px 16px; border:1px solid var(--line); border-radius:12px; }
 .personal-settings summary { cursor:pointer; font-weight:750; min-height:32px; }
 .personal-settings:not([open]) { width:max-content; max-width:calc(100% - 48px); margin-block:4px; padding:4px 10px; border-radius:999px; }
