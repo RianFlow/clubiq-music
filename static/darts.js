@@ -418,6 +418,8 @@ function initDarts() {
     if (event.href) { link.href=event.href; link.textContent=event.buttonLabel; link.target='_blank'; link.rel='noopener noreferrer'; link.hidden=false; }
     else { link.removeAttribute('href'); link.hidden=true; }
     const image=q('#clubEventImage');
+    const poster=q('#clubEventPoster');poster.hidden=!event.image;
+    if(event.image){poster.href=event.image;poster.setAttribute('aria-label',`Plakat zu ${event.title} ansehen`);}else poster.removeAttribute('href');
     if (event.image) { image.src=event.image; image.alt=`Plakat: ${event.title}`; image.hidden=false; }
     else { image.removeAttribute('src'); image.alt=''; image.hidden=true; }
     banner.classList.toggle('has-event-image',Boolean(event.image));
@@ -767,14 +769,15 @@ function initDarts() {
     const upcoming = wanted.filter(item=>item.kind==='upcoming');
     const finals = wanted.filter(item=>item.kind==='final');
     const shown = tvActive ? live : live.slice(0,1);
+    target.hidden=!shown.length;
     target.dataset.liveCount=String(shown.length);
     const today = new Date().toLocaleDateString('de-DE');
     const playingToday = shown.some(item=>item.plannedAt && new Date(item.plannedAt).toLocaleDateString('de-DE')===today);
-    q('#todayHeading').textContent = live.length ? 'Jetzt am Board' : 'Dein Barver-Spieltag';
+    q('#todayHeading').textContent = live.length ? 'Jetzt am Board' : 'Barver im Überblick';
     q('#todaySubtitle').textContent = tvActive && liveAll.length && !live.length
       ? 'Für deine TV-Auswahl läuft gerade keine Begegnung.'
       : live.length ? `${live.length} Begegnung${live.length===1?'':'en'} ${live.length===1?'läuft':'laufen'} gerade. Weitere Spiele findest du unter „Heute“.` : 'Heute, nächste Termine und Ergebnisse – alle Teams im Blick.';
-    if (!shown.length) { const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent='Gerade kein Live-Spiel gemeldet.'; target.replaceChildren(empty); return; }
+    if (!shown.length) { target.replaceChildren(); return; }
     const fragment=document.createDocumentFragment();
     for (const item of shown) {
       const card=document.createElement('a'); card.className=`today-game ${item.kind}`; card.href=`#match-${item.id}`; card.addEventListener('click',event=>{ event.preventDefault(); openMatch(item.id); });
@@ -850,12 +853,19 @@ function initDarts() {
     const byId=new Map((seasonData?.matches||[]).map(item=>[item.id,item]));
     for (const item of tickerData.items||[]) byId.set(item.id,{...byId.get(item.id),...item});
     const groups=dartsHomeGroups([...byId.values()],{team:q('#homeTeam').value,league:q('#homeLeague').value,date:q('#homeDate').value});
+    const filterSummary=q('#homeFilterSummary');
+    const filters=[q('#homeTeam').value==='all'?'Alle Teams':`Barver ${q('#homeTeam').value}`,q('#homeLeague').selectedOptions[0].textContent];
+    if(q('#homeDate').value)filters.push(new Date(q('#homeDate').value+'T12:00:00').toLocaleDateString('de-DE'));
+    filterSummary.textContent=filters.join(' · ');
+    q('#homeFilters').classList.toggle('has-filters',q('#homeTeam').value!=='all'||q('#homeLeague').value!=='all'||!!q('#homeDate').value);
     const target=q('#homeSchedule'); target.replaceChildren();
     for (const [key,title] of [['today','Heute'],['upcoming','Demnächst'],['final','Letzte Ergebnisse']]) {
       const section=document.createElement('section'), heading=document.createElement('h3'); heading.textContent=title; section.append(heading);
-      for (const item of groups[key].slice(0,8)) section.append(makeProfileMatch(item,barverTeam(item)));
+      section.classList.toggle('is-empty',!groups[key].length);
+      const limit=key==='today'?4:3;
+      for (const item of groups[key].slice(0,limit)) section.append(makeProfileMatch(item,barverTeam(item)));
       if (!groups[key].length) { const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent=seasonLoading?'Spielplan wird ergänzt …':'Keine Begegnungen für diese Auswahl.'; section.append(empty); }
-      if (groups[key].length>8) { const more=document.createElement('button'); more.type='button'; more.textContent=`Alle ${groups[key].length} Spiele anzeigen`; more.addEventListener('click',()=>{setSection('teams');q('#seasonTeam').value=q('#homeTeam').value;seasonStatus=key==='final'?'final':'upcoming';renderSeason();}); section.append(more); }
+      if (groups[key].length>limit) { const more=document.createElement('button'); more.type='button'; more.textContent=`Alle ${groups[key].length} Spiele anzeigen`; more.addEventListener('click',()=>{setSection('teams');q('#seasonTeam').value=q('#homeTeam').value;seasonStatus=key==='final'?'final':'upcoming';renderSeason();}); section.append(more); }
       target.append(section);
     }
   }
@@ -1938,6 +1948,7 @@ function initDarts() {
   setSection('today');
   q('#todayView').textContent='Startseite';
   q('#todayGrid').after(q('.match-center'));
+  q('.match-center').after(q('#clubEventBanner'));
   q('#todayGrid').classList.add('featured-live');
   // The light ticker paints first; the complete season can arrive later.
   window.setTimeout(()=>loadSeason(true),500);
