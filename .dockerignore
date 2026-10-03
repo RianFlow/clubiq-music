@@ -13,3 +13,4 @@ cloudflared
 cloudflared.deb
 backups
 *.sql.gz
+mobile

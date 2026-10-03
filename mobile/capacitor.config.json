@@ -1,0 +1,9 @@
+{
+  "appId": "party.clubiq.barverdarts",
+  "appName": "Barver Darts",
+  "webDir": "dist",
+  "backgroundColor": "#071813",
+  "plugins": {
+    "PushNotifications": { "presentationOptions": ["badge", "sound", "alert"] }
+  }
+}
