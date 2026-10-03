@@ -288,6 +288,17 @@ CREATE TABLE IF NOT EXISTS darts_sponsor_audit (
 CREATE INDEX IF NOT EXISTS idx_darts_sponsor_audit_time
 ON darts_sponsor_audit(created_at DESC);
 
+CREATE TABLE IF NOT EXISTS darts_tournament_settings (
+    id INTEGER PRIMARY KEY CHECK (id=1),
+    source VARCHAR(500) NOT NULL,
+    name VARCHAR(160) NOT NULL,
+    event_date VARCHAR(80),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+INSERT INTO darts_tournament_settings (id, source, name)
+VALUES (1, 'https://portal.3k-darts.com/frontend/events/5/event/22536/participants', '11. Küster Barver DartsOpen')
+ON CONFLICT (id) DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS darts_events (
     id BIGSERIAL PRIMARY KEY,
     slug VARCHAR(80) UNIQUE,

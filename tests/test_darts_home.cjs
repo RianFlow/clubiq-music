@@ -25,3 +25,14 @@ const postponed=[
 ];
 assert.equal(dartsMatchCenterItem(postponed,'A').id,7,'moved fixture with the earliest real date wins');
 console.log('Darts homepage groups and personal preferences OK');
+const {dartsCupActive,dartsLiveGroupActive}=vm.runInContext('({dartsCupActive,dartsLiveGroupActive})',context);
+const cup={specialEventsAvailable:true,matches:['A','B','C','D'].map((code,i)=>({id:i,eventId:1,competitionType:'cup',kind:'final',score:'3:9',barverTeams:[code],barverSides:{[code]:'home'},updatedAt:`2026-09-${20+i}`}))};
+assert.equal(dartsCupActive(cup),false);
+assert.equal(dartsCupActive({...cup,stale:true}),true);
+assert.equal(dartsCupActive({...cup,matches:cup.matches.slice(0,3)}),true);
+assert.equal(dartsCupActive({...cup,matches:[...cup.matches,{eventId:1,competitionType:'cup',kind:'upcoming',barverTeams:['B'],plannedAt:'2026-10-10'}]}),true);
+assert.equal(dartsLiveGroupActive({matches:[]}),false);
+assert.equal(dartsLiveGroupActive({matches:[{active:true,finished:false,lastUpdateNs:Date.now()*1e6}]}),true);
+assert.equal(dartsLiveGroupActive({retired:true,matches:[{active:true,lastUpdateNs:Date.now()*1e6}]}),false);
+assert.equal(dartsLiveGroupActive({matches:[{active:true,lastUpdateNs:(Date.now()-3600000)*1e6}]}),false);
+console.log('Cup elimination and empty/old live watcher safeguards OK');

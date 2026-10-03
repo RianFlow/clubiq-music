@@ -2,6 +2,8 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from threading import Lock
+from urllib.parse import urlsplit
+import re
 import time
 
 import requests
@@ -10,13 +12,17 @@ from darts_live import normalize_rest
 BASE = "https://backend4.3k-darts.com/2k-backend4/api/v1/frontend/event/22536"
 SOURCE = "https://portal.3k-darts.com/frontend/events/5/event/22536/participants"
 LIVE = "https://live.3k-darts.com/dartsscorer-liveticker/api/v1"
+BACKENDS = {5: "https://backend4.3k-darts.com/2k-backend4/api/v1/frontend", 10: "https://backend-ddv.3k-darts.com/2k-backend-ddv/api/v1/frontend"}
 _lock = Lock()
 _cache = None
+_cache_key = None
 _attempt = 0.0
 
 
 def _get(url):
-    response = requests.get(url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://portal.3k-darts.com/", "Origin": "https://portal.3k-darts.com", "Accept": "application/json"}, timeout=(3, 8))
+    response = requests.get(url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://portal.3k-darts.com/", "Origin": "https://portal.3k-darts.com", "Accept": "application/json"}, timeout=(3, 8), allow_redirects=False)
+    if 300 <= response.status_code < 400:
+        raise ValueError("Unexpected source redirect")
     response.raise_for_status()
     response.encoding = "utf-8"
     return response.json()
@@ -28,6 +34,54 @@ def _number(value):
 
 def _text(value):
     return " ".join(str(value or "").split())[:160]
+
+
+def tournament_source(source=SOURCE):
+    """Never fetch a user URL: derive the endpoint from an exact public portal path."""
+    parsed = urlsplit(source.strip())
+    match = re.fullmatch(r"/frontend/events/([0-9]+)/event/([0-9]+)(?:/[A-Za-z0-9/_-]*)?/?", parsed.path)
+    if parsed.scheme != "https" or parsed.hostname != "portal.3k-darts.com" or parsed.username or parsed.password or parsed.port not in (None, 443) or not match:
+        raise ValueError("Bitte den öffentlichen HTTPS-Turnierlink aus dem 3K-Portal einfügen.")
+    database, event_id = map(int, match.groups())
+    if database not in BACKENDS or not 0 < event_id <= 10000000:
+        raise ValueError("Dieser 3K-Bereich wird noch nicht unterstützt. Unterstützt sind die Bereiche 5 und 10.")
+    canonical = f"https://portal.3k-darts.com/frontend/events/{database}/event/{event_id}/participants"
+    return database, event_id, f"{BACKENDS[database]}/event/{event_id}", canonical
+
+
+def _detail(source):
+    database, event_id, base, canonical = tournament_source(source)
+    detail = _get(base)
+    event = detail.get("event") or {}
+    if event.get("id") != event_id or event.get("dbId") != database:
+        raise ValueError("Unexpected tournament source")
+    model = {"id": event_id, "database": database, "name": _text(event.get("name")), "date": event.get("datetime"), "status": _text(event.get("statusCd"))}
+    return detail, model, base, canonical
+
+
+def preview_tournament(source):
+    _, event, _, canonical = _detail(source)
+    return {"event": event, "source": canonical}
+
+
+def group_models(payload, phase, round_id):
+    groups = []
+    info = payload.get("tableInfo") or {}
+    for index, group in enumerate(info.get("tableEntries") or []):
+        if not isinstance(group, dict) or not isinstance(group.get("tableEntries"), list):
+            continue
+        entries = []
+        for row in group["tableEntries"]:
+            if not isinstance(row, dict):
+                continue
+            entries.append({"rank": _text(row.get("placement")), "name": _text(row.get("participantName")),
+                            "played": _number(row.get("matchCount")), "wins": _number(row.get("win")),
+                            "lost": _number(row.get("lost")), "pointsFor": _number(row.get("points1")),
+                            "pointsAgainst": _number(row.get("points2")), "legsFor": _number(row.get("legs1")),
+                            "legsAgainst": _number(row.get("legs2"))})
+        groups.append({"id": f"{phase}-{round_id}-{index}", "name": _text(group.get("name")) or "Gruppe",
+                       "phaseId": phase, "roundId": round_id, "entries": entries})
+    return groups
 
 
 def match_model(raw):
@@ -47,14 +101,15 @@ def match_model(raw):
 
 
 def _round(job):
-    phase, round_id = job
-    payload = _get(f"{BASE}/phase/{phase}/round/{round_id}")
-    return [model for raw in payload.get("matches", []) if isinstance(raw, dict) and (model := match_model(raw))]
+    base, phase, round_id = job
+    payload = _get(f"{base}/phase/{phase}/round/{round_id}")
+    return {"matches": [model for raw in payload.get("matches", []) if isinstance(raw, dict) and (model := match_model(raw))],
+            "groups": group_models(payload, phase, round_id)}
 
 
-def _live(match):
+def _live(match, database=5):
     try:
-        games = normalize_rest(_get(f"{LIVE}/match/5/0/{match['id']}"))
+        games = normalize_rest(_get(f"{LIVE}/match/{database}/0/{match['id']}"))
         match["live"] = next((game for game in games if game["active"] and not game["finished"]), None)
         if match["live"] and match["live"]["board"]:
             match["board"] = match["live"]["board"]
@@ -63,45 +118,49 @@ def _live(match):
     return match
 
 
-def _load():
-    detail = _get(BASE)
-    event = detail.get("event") or {}
-    if event.get("id") != 22536 or event.get("dbId") != 5:
-        raise ValueError("Unexpected tournament source")
-    participants = _get(f"{BASE}/participant")
+def _load(source=SOURCE):
+    detail, event, base, canonical = _detail(source)
+    participants = _get(f"{base}/participant")
     # Deliberately exclude payment, registration and other personal metadata.
     players = [{"id": _number(item.get("id")), "name": _text(item.get("displayName")), "waiting": item.get("waitingList") is True}
                for item in participants if isinstance(item, dict)]
     jobs = []
     phases = detail.get("phases") or []
     for phase in phases:
+        if not isinstance(phase, dict):
+            continue
         phase_id = _number(phase.get("id"))
         if phase_id:
-            data = _get(f"{BASE}/phase/{phase_id}")
-            jobs.extend((phase_id, round_id) for row in data.get("rounds", []) if (round_id := _number(row.get("id"))))
+            data = _get(f"{base}/phase/{phase_id}")
+            jobs.extend((base, phase_id, round_id) for row in data.get("rounds", []) if isinstance(row, dict) and (round_id := _number(row.get("id"))))
     rows = {}
+    groups = []
     with ThreadPoolExecutor(max_workers=4) as pool:
-        for matches in pool.map(_round, jobs):
-            rows.update({match["id"]: match for match in matches})
+        for result in pool.map(_round, jobs):
+            rows.update({match["id"]: match for match in result["matches"]})
+            groups.extend(result["groups"])
         live_matches = [match for match in rows.values() if match["kind"] == "live"]
-        list(pool.map(_live, live_matches))
-    return {"event": {"id": 22536, "name": _text(event.get("name")), "date": event.get("datetime"), "status": _text(event.get("statusCd"))},
-            "participants": players, "matches": list(rows.values()), "source": SOURCE,
+        list(pool.map(lambda match: _live(match, event["database"]), live_matches))
+    return {"event": event, "groups": groups,
+            "participants": players, "matches": list(rows.values()), "source": canonical,
             "updatedAt": datetime.now(timezone.utc).isoformat(), "stale": False,
             "scheduleReady": bool(jobs), "livePointsAvailable": any(match["live"] for match in live_matches)}
 
 
-def get_tournament():
-    global _cache, _attempt
+def get_tournament(source=SOURCE):
+    global _cache, _attempt, _cache_key
+    key = tournament_source(source)[:2]
     with _lock:
+        if key != _cache_key:
+            _cache, _attempt, _cache_key = None, 0.0, key
         if _cache is not None and time.monotonic() - _attempt < 15:
             return _cache
         if time.monotonic() - _attempt < 15:
             raise RuntimeError("Turnierdaten vorübergehend nicht erreichbar")
         _attempt = time.monotonic()
         try:
-            _cache = _load()
-        except (requests.RequestException, ValueError, TypeError, KeyError) as exc:
+            _cache = _load(source)
+        except (requests.RequestException, ValueError, TypeError, KeyError, AttributeError) as exc:
             if _cache is None:
                 raise RuntimeError("Turnierdaten vorübergehend nicht erreichbar") from exc
             _cache = {**_cache, "stale": True}

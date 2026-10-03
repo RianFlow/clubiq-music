@@ -8,6 +8,17 @@ from darts_feed import _barver_code_from_name, _game_events, _is_special_event, 
 
 
 class DartsFeedTests(unittest.TestCase):
+    def test_past_unreported_fixture_is_pending_not_live_or_a_fake_final(self):
+        match = {'id': 1, 'statusCd': 'OPEN', 'datePlanned': '2026-10-02T17:30:00+00:00'}
+        now = datetime(2026, 10, 3, 9, tzinfo=timezone.utc)
+        item = _ticker_item(match, 1, 1, now)
+        self.assertEqual(item['kind'], 'pending'); self.assertIsNone(item['score'])
+        self.assertIn('Vorläufig beendet', item['text'])
+        match['statusCd'] = 'FINISH'; match['setsHome'] = 7; match['setsAway'] = 5
+        self.assertEqual(_ticker_item(match, 1, 1, now)['kind'], 'final')
+        match['statusCd'] = 'OPEN'; match['datePlanned'] = '2026-10-30T17:30:00+00:00'
+        self.assertEqual(_ticker_item(match, 1, 1, now)['kind'], 'live')
+
     def test_selects_previous_and_next_round(self):
         rounds = [
             {"id": 1, "dateFrom": "2026-09-04T00:00:00+02:00"},

@@ -163,6 +163,34 @@ class DartsLiveTests(unittest.TestCase):
         hub.reconcile([match, match])
         self.assertEqual(created, ["1657285"])
 
+    def test_pending_retires_empty_watcher_without_claiming_final(self):
+        hub = DartsLiveHub()
+        hub._groups["1657285"] = hub._empty_group("1657285", META)
+        hub.reconcile([{**META, "kind": "pending"}])
+        group = hub.get_group("1657285")
+        self.assertTrue(group["retired"])
+        self.assertFalse(group["finished"])
+        self.assertTrue(hub._events.empty())
+
+    def test_pending_keeps_fresh_active_board_then_retires_old_board(self):
+        class FakeConnector:
+            def __init__(self, *args):
+                pass
+            def start(self):
+                pass
+            def stop(self):
+                pass
+
+        hub = DartsLiveHub(FakeConnector)
+        hub._groups["1657285"] = hub._empty_group("1657285", META)
+        hub.apply("1657285", [normalize_match(raw_match(stamp=datetime.now(timezone.utc).isoformat()))], "rest")
+        hub.reconcile([{**META, "kind": "pending"}])
+        self.assertFalse(hub.get_group("1657285")["retired"])
+        hub._groups["1657285"]["matches"]["1657291"]["lastUpdateNs"] -= 601 * 1_000_000_000
+        hub.reconcile([{**META, "kind": "pending"}])
+        self.assertTrue(hub.get_group("1657285")["retired"])
+        self.assertFalse(hub.get_group("1657285")["finished"])
+
 
 if __name__ == "__main__":
     unittest.main()
