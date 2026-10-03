@@ -8,7 +8,7 @@
   <title>ClubIQ · Dartsverwaltung</title>
   <link rel="icon" href="/pics/logo.png">
   <link rel="stylesheet" href="/static/darts-admin.css?v=20261002-content1">
-  <script defer src="/static/darts-admin.js?v=20261002-content1"></script>
+  <script defer src="/static/darts-admin.js?v=20261003-turnier1"></script>
 </head>
 <body>
   <header class="admin-header">
@@ -32,6 +32,7 @@
         <button id="playersAdminTab" type="button" class="active">Spielerprofile</button>
         <button id="sponsorsAdminTab" type="button">Sponsoren</button>
         <button id="eventsAdminTab" type="button">Veranstaltungen</button>
+        <button id="tournamentAdminTab" type="button">Turniere</button>
         <button id="socialAdminTab" type="button">Social Media</button>
       </nav>
       <section id="playersAdminView">
@@ -78,6 +79,18 @@
           <p id="formStatus" role="status" hidden></p>
         </form>
         </div>
+      </section>
+      <section id="tournamentAdminView" hidden>
+        <div class="admin-intro"><div><p class="eyebrow">Live & TV</p><h1>Turnier auswählen</h1><p>Der aktive Turnierlink gilt für alle Besucher. Veranstaltungsbanner werden davon unabhängig verwaltet.</p></div></div>
+        <form id="tournamentForm" class="editor-card">
+          <p id="tournamentCurrent" role="status">Aktives Turnier wird geladen …</p>
+          <label>Öffentlicher 3K-Turnierlink<input id="tournamentSource" type="url" maxlength="500" required placeholder="https://portal.3k-darts.com/frontend/events/5/event/…/participants"></label>
+          <p>Für Einzel und Doppel jeweils den passenden Turnierlink verwenden. Derselbe TV-Link zeigt danach automatisch das neu aktivierte Turnier.</p>
+          <div class="form-actions"><button id="checkTournament" type="button">Turnier prüfen</button><button id="activateTournament" type="submit" disabled>Für Live & TV aktivieren</button></div>
+          <p id="tournamentPreview" role="status" hidden></p>
+          <p id="tournamentStatus" role="status" hidden></p>
+          <div class="form-actions"><a href="/turnier" target="_blank" rel="noopener">Turnier-Live öffnen ↗</a><a href="/turnier?tv=1" target="_blank" rel="noopener">TV-Modus öffnen ↗</a></div>
+        </form>
       </section>
       <section id="eventsAdminView" hidden>
         <div class="admin-intro"><div><p class="eyebrow">Termine & Banner</p><h1>Veranstaltungen</h1><p>Termine und Veranstaltungsbanner als Entwurf vorbereiten und gezielt veröffentlichen.</p></div><span id="eventDataStatus" role="status">Veranstaltungen werden geladen …</span></div>

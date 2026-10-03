@@ -235,13 +235,20 @@ class DartsLiveHub:
             meta = {
                 key: item.get(key) for key in (
                     "id", "home", "away", "barverTeam", "barverTeams", "barverSides", "league",
-                    "competitionBadge", "plannedAt", "url", "score", "updatedAt",
+                    "competitionBadge", "plannedAt", "url", "score", "updatedAt", "kind",
                 )
             }
             if item.get("kind") == "final":
                 finalized[group_key] = meta
                 continue
-            if not _watch_live_candidate(item, now):
+            with self._lock:
+                group = self._groups.get(group_key)
+                recent_boards = item.get("kind") == "pending" and group and any(
+                    board.get("active") and not board.get("finished") and
+                    0 <= now.timestamp() - (board.get("lastUpdateNs") or 0) / 1e9 < 600
+                    for board in group.get("matches", {}).values()
+                )
+            if not _watch_live_candidate(item, now) and not recent_boards:
                 continue
             desired[group_key] = meta
         with self._lock:
@@ -260,6 +267,7 @@ class DartsLiveHub:
                 self._broadcast({"type": "live-group-update", "revision": self._revision, "group": self._public_group(group)})
             for group_key, meta in desired.items():
                 group = self._groups.setdefault(group_key, self._empty_group(group_key, meta))
+                group["retired"] = False
                 group["meta"] = meta
                 if group_key not in self._connectors and not group.get("finished"):
                     connector = self._connector_factory(self, "10", group_key)
@@ -267,6 +275,15 @@ class DartsLiveHub:
                     connector.start()
             obsolete = [key for key in self._connectors if key not in desired]
             connectors = [self._connectors.pop(key) for key in obsolete]
+            # Retire watchers with no official final score instead of preserving
+            # an empty or old board as a permanent live event.
+            for key, group in self._groups.items():
+                if key not in desired and key not in finalized and not group.get("retired") and not group.get("finished"):
+                    group["retired"] = True
+                    group["connected"] = False
+                    self._revision += 1
+                    group["revision"] = self._revision
+                    self._broadcast({"type": "live-status", "revision": self._revision, "group": self._public_group(group)})
         for connector in connectors:
             connector.stop()
 
@@ -366,7 +383,7 @@ class DartsLiveHub:
     def _public_group(self, group: dict) -> dict:
         result = {key: group.get(key) for key in (
             "groupKey", "database", "meta", "connected", "source", "stale", "finished", "lastUpdate",
-            "lastSuccess", "lastError", "revision",
+            "lastSuccess", "lastError", "revision", "retired",
         )}
         result["matches"] = sorted(group["matches"].values(), key=lambda item: (item.get("board") or "", item["matchKey"]))
         return result

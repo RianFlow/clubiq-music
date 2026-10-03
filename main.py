@@ -29,7 +29,7 @@ from pydantic import BaseModel, Field
 from db_config import connection_kwargs
 from darts_feed import DartsFeedUnavailable, get_darts_center, get_darts_feed, get_darts_match, get_darts_player_stats, get_darts_season
 from darts_live import darts_live_hub
-from darts_tournament import get_tournament
+from darts_tournament import get_tournament, preview_tournament, SOURCE as DEFAULT_TOURNAMENT_SOURCE
 from darts_push import barver_push_candidates, push_payload, valid_push_endpoint, valid_push_key, subscription_matches, PUSH_EVENT_TYPES
 from radio_directory import DirectoryUnavailable, get_station, search_stations
 from radio_logos import CACHE_SECONDS, FAILURE_SECONDS, cached_logo
@@ -570,6 +570,10 @@ class DartsSocialLinkUpdate(BaseModel):
     active: bool = True
 
 
+class DartsTournamentUpdate(BaseModel):
+    source: str = Field(min_length=10, max_length=500)
+
+
 class SuggestionCreate(BaseModel):
     provider: str = Field(default="youtube", pattern=r"^[a-z0-9_-]{2,30}$")
     external_id: str = Field(min_length=1, max_length=100)
@@ -699,9 +703,49 @@ def tournament_display():
 def tournament_feed(response: Response):
     response.headers["Cache-Control"] = "no-store"
     try:
-        return get_tournament()
+        return get_tournament(_tournament_setting()["source"])
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+def _tournament_setting():
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT source, name, event_date FROM darts_tournament_settings WHERE id=1;")
+        row = cur.fetchone()
+    return {"source": row[0], "event": {"name": row[1], "date": row[2]}} if row else {"source": DEFAULT_TOURNAMENT_SOURCE, "event": {"name": "11. Küster Barver DartsOpen", "date": None}}
+
+
+def _tournament_preview(source):
+    try:
+        return preview_tournament(source)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except (requests.RequestException, TypeError, KeyError, AttributeError) as exc:
+        raise HTTPException(503, "Das Turnier konnte bei 3K gerade nicht geprüft werden. Die bisherige Auswahl bleibt erhalten.") from exc
+
+
+@app.get("/api/v1/darts/admin/tournament", dependencies=[Depends(require_admin)])
+def darts_admin_tournament(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return _tournament_setting()
+
+
+@app.post("/api/v1/darts/admin/tournament/preview", dependencies=[Depends(require_admin)])
+def darts_admin_tournament_preview(update: DartsTournamentUpdate, response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return _tournament_preview(update.source)
+
+
+@app.put("/api/v1/darts/admin/tournament", dependencies=[Depends(require_admin)])
+def darts_admin_set_tournament(update: DartsTournamentUpdate, response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    checked = _tournament_preview(update.source)
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("""INSERT INTO darts_tournament_settings (id,source,name,event_date) VALUES (1,%s,%s,%s)
+            ON CONFLICT (id) DO UPDATE SET source=EXCLUDED.source,name=EXCLUDED.name,event_date=EXCLUDED.event_date,updated_at=CURRENT_TIMESTAMP;""",
+            (checked["source"], checked["event"]["name"], checked["event"]["date"]))
+        conn.commit()
+    return checked
 
 
 @app.get("/impressum")

@@ -279,7 +279,7 @@ async function deleteSponsorLogo() {
   catch(error){status.textContent=error.message;}
 }
 function showAdminView(view) {
-  for (const name of ['players','sponsors','events','social']) {
+  for (const name of ['players','sponsors','events','social','tournament']) {
     const visible=view===name;
     $(`#${name}AdminView`).hidden=!visible;
     $(`#${name}AdminTab`).classList.toggle('active',visible);
@@ -344,13 +344,29 @@ async function loadSocial(){ $('#socialDataStatus').textContent='Social Links we
 async function saveSocial(event){event.preventDefault();const status=$('#socialFormStatus');status.hidden=false;status.textContent='Link wird gespeichert …';try{const id=Number($('#socialId').value)||null;const payload={platform:$('#socialPlatform').value,label:clean($('#socialLabel').value),website:clean($('#socialHref').value),priority:Number($('#socialPriority').value||0),active:$('#socialActive').checked};if(!/^https:\/\//i.test(payload.website)){status.textContent='Bitte einen HTTPS-Link eingeben.';return;}const saved=await api(id?`/api/v1/darts/admin/social-links/${id}`:'/api/v1/darts/admin/social-links',{method:id?'PUT':'POST',body:JSON.stringify(payload)});const savedId=id||saved.id;state.selectedSocial={id:savedId};await loadSocial();const updated=state.socialLinks.find(x=>x.id===savedId);if(updated)selectSocial(updated);status.hidden=false;status.textContent='Link gespeichert.';}catch(error){status.textContent=error.message;}}
 async function deleteSocial(){const id=Number($('#socialId').value);if(!id||!confirm('Diesen Social-Link wirklich löschen?'))return;const status=$('#socialFormStatus');status.hidden=false;status.textContent='Link wird gelöscht …';try{await api(`/api/v1/darts/admin/social-links/${id}`,{method:'DELETE'});state.selectedSocial=null;await loadSocial();status.hidden=true;}catch(error){status.textContent=error.message;}}
 
+let checkedTournamentSource = '', tournamentBusy = false;
+function tournamentLabel(item){const date=item.event.date?new Date(item.event.date).toLocaleDateString('de-DE'):'';return `${item.event.name}${date?' · '+date:''}`;}
+async function loadTournament(){const item=await api('/api/v1/darts/admin/tournament');$('#tournamentCurrent').textContent=`Aktiv: ${tournamentLabel(item)}`;$('#tournamentSource').value=item.source;}
+function invalidateTournament(){checkedTournamentSource='';$('#activateTournament').disabled=true;$('#tournamentPreview').hidden=true;}
+$('#tournamentSource').addEventListener('input',invalidateTournament);
+$('#checkTournament').addEventListener('click',async()=>{
+  if(tournamentBusy)return;const source=clean($('#tournamentSource').value);invalidateTournament();tournamentBusy=true;$('#checkTournament').disabled=true;const status=$('#tournamentStatus');status.hidden=false;status.textContent='Turnier wird bei 3K geprüft …';
+  try{const item=await api('/api/v1/darts/admin/tournament/preview',{method:'POST',body:JSON.stringify({source})});if(source!==clean($('#tournamentSource').value))return;checkedTournamentSource=source;$('#tournamentPreview').textContent=`Gefunden: ${tournamentLabel(item)}`;$('#tournamentPreview').hidden=false;$('#activateTournament').disabled=false;status.hidden=true;}catch(error){status.textContent=error.message;}finally{tournamentBusy=false;$('#checkTournament').disabled=false;}
+});
+$('#tournamentForm').addEventListener('submit',async event=>{
+  event.preventDefault();if(tournamentBusy||!checkedTournamentSource||checkedTournamentSource!==clean($('#tournamentSource').value))return;
+  if(!confirm('Dieses Turnier jetzt für alle Besucher und TV-Anzeigen aktivieren?'))return;
+  tournamentBusy=true;$('#activateTournament').disabled=true;$('#checkTournament').disabled=true;const status=$('#tournamentStatus');status.hidden=false;status.textContent='Turnier wird aktiviert …';
+  try{const item=await api('/api/v1/darts/admin/tournament',{method:'PUT',body:JSON.stringify({source:checkedTournamentSource})});$('#tournamentCurrent').textContent=`Aktiv: ${tournamentLabel(item)}`;$('#tournamentSource').value=item.source;invalidateTournament();status.textContent='Turnier aktiviert. Live- und TV-Anzeigen übernehmen es beim nächsten Abgleich.';}catch(error){status.textContent=error.message;$('#activateTournament').disabled=false;}finally{tournamentBusy=false;$('#checkTournament').disabled=false;}
+});
+
 async function openAdmin(password) {
   state.password=password;
   await api('/api/v1/music/admin/verify');
   sessionStorage.setItem('clubiq_darts_admin',password);
   $('#loginPanel').hidden=true; $('#adminPanel').hidden=false; $('#logout').hidden=false;
-  const results=await Promise.allSettled([loadData(),loadSponsors(),loadEvents(),loadSocial()]);
-  const targets=['#dataStatus','#sponsorDataStatus','#eventDataStatus','#socialDataStatus'];
+  const results=await Promise.allSettled([loadData(),loadSponsors(),loadEvents(),loadSocial(),loadTournament()]);
+  const targets=['#dataStatus','#sponsorDataStatus','#eventDataStatus','#socialDataStatus','#tournamentCurrent'];
   results.forEach((result,index)=>{if(result.status==='rejected')$(targets[index]).textContent=`Laden fehlgeschlagen: ${result.reason?.message||'Unbekannter Fehler'}`;});
 }
 
@@ -358,6 +374,7 @@ $('#playersAdminTab').addEventListener('click',()=>showAdminView('players'));
 $('#sponsorsAdminTab').addEventListener('click',()=>showAdminView('sponsors'));
 $('#eventsAdminTab').addEventListener('click',()=>showAdminView('events'));
 $('#socialAdminTab').addEventListener('click',()=>showAdminView('social'));
+$('#tournamentAdminTab').addEventListener('click',()=>showAdminView('tournament'));
 $('#sponsorSearch').addEventListener('input',renderSponsorList);
 $('#sponsorTypeFilter').addEventListener('change',renderSponsorList);
 $('#newSponsor').addEventListener('click',newSponsor);

@@ -40,7 +40,27 @@ function dartsHomeGroups(items, filters={}, now=new Date()) {
   const byTime=(a,b)=>String(a.plannedAt||'').localeCompare(String(b.plannedAt||''));
   return {today:matches.filter(m=>m.kind==='live'||dartsLocalDay(m.plannedAt)===today).sort(byTime),
     upcoming:matches.filter(m=>m.kind==='upcoming'&&dartsLocalDay(m.plannedAt)>today).sort(byTime),
-    final:matches.filter(m=>m.kind==='final'&&dartsLocalDay(m.plannedAt)!==today).sort((a,b)=>byTime(b,a))};
+    final:matches.filter(m=>(m.kind==='final'||m.kind==='pending')&&dartsLocalDay(m.plannedAt)!==today).sort((a,b)=>byTime(b,a))};
+}
+function dartsLiveGroupActive(group,now=Date.now()) {
+  if(group?.retired||group?.finished)return false;
+  return (group?.matches||[]).some(m=>m.active&&!m.finished&&Number(m.lastUpdateNs)>0&&now-Number(m.lastUpdateNs)/1e6>=0&&now-Number(m.lastUpdateNs)/1e6<600000);
+}
+function dartsCupActive(season) {
+  if(!season||season.stale||season.specialEventsAvailable===false)return true;
+  const matches=(season.matches||[]).filter(m=>m.competitionType==='cup'||m.competitionBadge==='POKAL');
+  if(!matches.length)return false;
+  const latest=new Map();
+  for(const m of [...matches].sort((a,b)=>String(a.plannedAt||a.updatedAt||'').localeCompare(String(b.plannedAt||b.updatedAt||''))))
+    for(const code of m.barverTeams||[m.barverTeam])if(code)latest.set(`${m.eventId}:${code}`,{m,code});
+  const known=new Set([...latest.values()].map(x=>x.code));
+  if(!['A','B','C','D'].every(code=>known.has(code)))return true;
+  return [...latest.values()].some(({m,code})=>{
+    const score=String(m.score||'').match(/^(\d+):(\d+)$/),side=m.barverSides?.[code];
+    if(m.kind!=='final'||!score||!side)return true;
+    const own=Number(score[side==='home'?1:2]),other=Number(score[side==='home'?2:1]);
+    return own>=other;
+  });
 }
 function dartsTheme(value, prefersDark=false) {
   return value === 'dark' || value === 'light' ? value : prefersDark ? 'dark' : 'light';
@@ -87,7 +107,7 @@ function dartsMatchCenterItem(items, code) {
   const live=candidates.filter(entry=>entry.kind==='live').sort((a,b)=>new Date(b.plannedAt||0)-new Date(a.plannedAt||0));
   const upcoming=candidates.filter(entry=>entry.kind==='upcoming').sort((a,b)=>new Date(a.plannedAt||'9999-12-31')-new Date(b.plannedAt||'9999-12-31'));
   const finals=candidates.filter(entry=>entry.kind==='final').sort((a,b)=>new Date(b.plannedAt||0)-new Date(a.plannedAt||0));
-  return live[0] || upcoming[0] || finals[0] || null;
+  return live[0] || upcoming[0] || candidates.find(entry=>entry.kind==='pending') || finals[0] || null;
 }
 function dartsTeamRoster(team) {
   const merged=[], seen=new Set();
@@ -675,6 +695,9 @@ function initDarts() {
   function upsertServerLiveTickerItem(group) {
     if (!group?.groupKey) return null;
     const matchId=Number(group.meta?.id || group.groupKey);
+    const existing=(tickerData.items||[]).find(entry=>entry.id===matchId);
+    if(!group.finished&&!dartsLiveGroupActive(group))return existing || null;
+    if(existing?.kind==='final'&&!group.finished)return existing;
     const latest=(group.matches || []).slice().sort((a,b)=>(b.lastUpdateNs||0)-(a.lastUpdateNs||0))[0];
     let item=(tickerData.items || []).find(entry=>entry.id===matchId);
     if (!item && group.meta && !group.finished) {
@@ -708,11 +731,11 @@ function initDarts() {
     if (!group?.groupKey) return;
     if (!demoLive && !group.stale && Array.isArray(group.events)) window.DartsBroadcast?.ingest(group.events);
     serverLiveGroups.set(String(group.groupKey),group);
-    const serverCenters=[...serverLiveGroups.values()].filter(entry=>!entry.finished).map(liveGroupAsCenter);
+    const serverCenters=[...serverLiveGroups.values()].filter(entry=>dartsLiveGroupActive(entry)).map(liveGroupAsCenter);
     const ids=new Set(serverCenters.flatMap(center=>center.barverMatches.map(match=>match.id)));
     liveCenters=[...serverCenters,...liveCenters.filter(center=>!center.liveGroup&&!(center.barverMatches || []).some(match=>ids.has(match.id)))];
     const item=upsertServerLiveTickerItem(group);
-    if (activeMatchDetailData && q('#matchDialog')?.open && Number(q('#matchDialog').dataset.matchId)===Number(group.meta?.id || group.groupKey)) {
+    if ((group.finished||dartsLiveGroupActive(group)) && activeMatchDetailData && q('#matchDialog')?.open && Number(q('#matchDialog').dataset.matchId)===Number(group.meta?.id || group.groupKey)) {
       activeMatchDetailData={...activeMatchDetailData,liveGames:normalizedLiveGames(group),match:{...activeMatchDetailData.match,kind:group.finished?'final':'live',score:item?.score || activeMatchDetailData.match?.score}};
       renderMatchDetail(activeMatchDetailData);
     }
@@ -746,7 +769,7 @@ function initDarts() {
   function renderMatchCenter(data) {
     const center = q('#matchCenterGrid');
     if (!center) return;
-    const labels = {live:'LIVE',upcoming:'NÄCHSTES',final:'ERGEBNIS'};
+    const labels = {live:'LIVE',upcoming:'NÄCHSTES',final:'ERGEBNIS',pending:'VORLÄUFIG BEENDET'};
     const fragment = document.createDocumentFragment();
     const codes = ['A','B','C','D'].sort((a,b)=>favorite === a ? -1 : favorite === b ? 1 : 0);
     for (const code of codes) {
@@ -1106,6 +1129,8 @@ function initDarts() {
     const panel=q('#specialEvents'), target=q('#specialEventsList');
     const events=seasonData?.specialEvents || [];
     const matches=(seasonData?.matches || []).filter(item=>item.isSpecial);
+    const cupActive=dartsCupActive(seasonData);q('#cupView').hidden=!cupActive;
+    if(!cupActive&&q('#cupView').getAttribute('aria-pressed')==='true')setSection('today');
     panel.hidden=false;
     if (!events.length) {
       q('#specialEventsCount').textContent='Noch kein Termin erkannt';
@@ -1138,6 +1163,7 @@ function initDarts() {
   function makeProfileMatch(item, code) {
     const row=document.createElement('button'); row.type='button'; row.className=`team-profile-match ${item.kind}`;
     const meta=document.createElement('span'); meta.textContent=`${competitionLabel(item)} · ${item.round?.name || 'Spiel'} · ${matchLocation(item,code)} · ${matchDate(item)}`;
+    if(item.kind==='pending')meta.textContent+=' · Vorläufig beendet – Bestätigung ausstehend';
     const score=document.createElement('strong'); score.append(clubNameNode(item.home,'span'),`  ${item.score || 'vs'}  `,clubNameNode(item.away,'span'));
     row.append(meta,score); row.addEventListener('click',()=>{ q('#teamDialog').close(); openMatch(item.id); });
     return row;
@@ -1346,8 +1372,8 @@ function initDarts() {
   function renderSeasonMatches() {
     const team=q('#seasonTeam').value;
     let matches=(seasonData?.matches || []).filter(item=>team==='all'||(item.barverTeams || [item.barverTeam]).includes(team));
-    if (seasonStatus==='upcoming') matches=matches.filter(item=>item.kind!=='final');
-    if (seasonStatus==='final') matches=matches.filter(item=>item.kind==='final').reverse();
+    if (seasonStatus==='upcoming') matches=matches.filter(item=>item.kind==='upcoming'||item.kind==='live');
+    if (seasonStatus==='final') matches=matches.filter(item=>item.kind==='final'||item.kind==='pending').reverse();
     const headings={upcoming:'Kommende Begegnungen',final:'Ergebnisse',all:'Alle Saisonspiele'};
     q('#seasonListHeading').textContent=headings[seasonStatus];
     q('#seasonCount').textContent=`${matches.length} ${matches.length===1?'Spiel':'Spiele'}`;
@@ -1361,7 +1387,7 @@ function initDarts() {
       const home=clubNameNode(item.home);
       const score=document.createElement('b'); score.textContent=item.score || 'vs';
       const away=clubNameNode(item.away);
-      const state=document.createElement('span'); state.className='native-match-state'; state.textContent=item.kind==='live'?'LIVE':item.kind==='final'?'Endstand':'Geplant';
+      const state=document.createElement('span'); state.className='native-match-state'; state.textContent=item.kind==='live'?'LIVE':item.kind==='final'?'Endstand':item.kind==='pending'?'Vorläufig beendet · Bestätigung ausstehend':'Geplant';
       teams.append(home,score,away); row.append(info,teams,state);
       row.addEventListener('click',()=>openMatch(item.id)); fragment.append(row);
     }
@@ -1536,7 +1562,7 @@ function initDarts() {
       return highlights;
     };
     const tickerItems=[];
-    if (match.score) tickerItems.push(`${match.kind==='live'?'🔴 Zwischenstand':'🏁 Endstand'}: ${match.home} ${match.score} ${match.away}`);
+    if (match.score) tickerItems.push(`${match.kind==='final'?'🏁 Endstand':'Zwischenstand'}: ${match.home} ${match.score} ${match.away}`);
     for (const event of data.performances || []) tickerItems.push(event.type==='180'?`🎯 180 von ${event.player}`:`🔥 High Finish ${event.value} von ${event.player}`);
     for (const game of finished) { const homeWon=game.homeLegs>game.awayLegs; tickerItems.push(`✓ Spiel ${game.number}: ${homeWon?game.home.name:game.away.name} gewinnt ${homeWon?game.homeLegs:game.awayLegs}:${homeWon?game.awayLegs:game.homeLegs}`); }
     const ticker=document.createElement('div'); ticker.className='match-highlight-ticker'; ticker.setAttribute('aria-label','Highlights dieser Begegnung');
@@ -1609,7 +1635,7 @@ function initDarts() {
     const header=document.createElement('section'); header.className=`native-match-summary match-page-hero ${match.kind || ''}`;
     const metaRow=document.createElement('div'); metaRow.className='match-page-meta';
     const meta=document.createElement('span'); appendTeamCodes(meta,(match.barverTeams || [match.barverTeam]).filter(Boolean)); meta.append(` · ${matchLocation(match)} · ${competitionLabel(match)} · ${match.round?.name || ''} · ${matchDate(match)}`);
-    const freshness=document.createElement('b'); freshness.textContent=`${match.kind==='live'?'● LIVE':match.kind==='final'?'ENDSTAND':'GEPLANT'} · ${data.stale?'letzter verfügbarer Stand':'mit 3K abgeglichen'}`; metaRow.append(meta,freshness);
+    const freshness=document.createElement('b'); freshness.textContent=`${match.kind==='live'?'● LIVE':match.kind==='final'?'ENDSTAND':match.kind==='pending'?'VORLÄUFIG BEENDET · Bestätigung durch den Veranstalter ausstehend':'GEPLANT'} · ${data.stale?'letzter verfügbarer Stand':'mit 3K abgeglichen'}`; metaRow.append(meta,freshness);
     const matchup=document.createElement('div'); matchup.className='native-match-score large';
     const home=clubNameNode(match.home || 'Heim'); const score=document.createElement('b'); score.textContent=match.score || 'vs'; const away=clubNameNode(match.away || 'Gast'); matchup.append(home,score,away);
     const progress=document.createElement('small'); progress.textContent=`${finished.length} von ${(data.games || []).length || 12} Partien beendet`;
@@ -1756,7 +1782,7 @@ function initDarts() {
       const home=document.createElement('span'); home.textContent=item.home;
       const score=document.createElement('b'); score.textContent=item.score || '–';
       const away=document.createElement('span'); away.textContent=item.away;
-      const state=document.createElement('small'); state.textContent=item.kind==='final'?'Endstand':item.kind==='live'?'Live':tickerTime(item);
+      const state=document.createElement('small'); state.textContent=item.kind==='final'?'Endstand':item.kind==='live'?'Live':item.kind==='pending'?'Vorläufig beendet · Bestätigung ausstehend':tickerTime(item);
       link.append(home,score,away,state); games.append(link);
     }
     inside('[data-role="matches"]').replaceChildren(games.childNodes.length ? games : Object.assign(document.createElement('p'),{className:'panel-loading',textContent:'Keine Begegnungen an diesem Spieltag.'}));

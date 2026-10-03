@@ -74,7 +74,7 @@ def _participant(match: dict, side: str) -> tuple[int | None, str]:
     return participant.get("id"), str(participant.get("displayName") or "Unbekannt")
 
 
-def _ticker_item(match: dict, phase: int, round_id: int) -> dict:
+def _ticker_item(match: dict, phase: int, round_id: int, now: datetime | None = None) -> dict:
     home_id, home = _participant(match, "Home")
     away_id, away = _participant(match, "Guest")
     home_score, away_score = match.get("setsHome"), match.get("setsAway")
@@ -95,6 +95,13 @@ def _ticker_item(match: dict, phase: int, round_id: int) -> dict:
     else:
         text = f"{home} gegen {away}"
         kind, sort_time = "upcoming", planned
+    # A past scheduled time is not evidence of a result. Stop advertising an old
+    # unreported match as live/upcoming, but do not invent a winner or end score.
+    if now and planned and kind != "final":
+        scheduled = planned if planned.tzinfo else planned.replace(tzinfo=timezone.utc)
+        if (now - scheduled).total_seconds() > 8 * 3600:
+            kind = "pending"
+            text = f"{home} gegen {away} · Vorläufig beendet – Bestätigung ausstehend"
     match_id = int(match.get("id") or 0)
     event = int(match.get("eventId") or 0)
     return {
@@ -123,8 +130,8 @@ def _barver_code(item: dict, league: dict) -> str | None:
     return league["teams"].get(item.get("homeTeamId")) or league["teams"].get(item.get("awayTeamId"))
 
 
-def _season_match(match: dict, league: dict, round_info: dict) -> dict:
-    item = _ticker_item(match, league["phase"], int(round_info.get("id") or 0))
+def _season_match(match: dict, league: dict, round_info: dict, now: datetime | None = None) -> dict:
+    item = _ticker_item(match, league["phase"], int(round_info.get("id") or 0), now)
     barver_sides = {}
     if item.get("homeTeamId") in league["teams"]:
         barver_sides[league["teams"][item["homeTeamId"]]] = "home"
@@ -500,7 +507,12 @@ def _leg_events(payload: list[dict], match: dict, team_name: str = "") -> list[d
 
 def _load(now: datetime) -> dict:
     session = requests.Session()
-    session.headers["User-Agent"] = "ClubIQ-Darts/1.0 (+https://barverdarts.clubiq.party/)"
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json, text/plain, */*",
+        "Origin": "https://portal.3k-darts.com",
+        "Referer": "https://portal.3k-darts.com/",
+    })
     items: dict[int, dict] = {}
     for league in LEAGUES:
         phase_url = f"{API}/{league['event']}/phase/{league['phase']}"
@@ -515,7 +527,7 @@ def _load(now: datetime) -> dict:
                 home_id, _ = _participant(match, "Home")
                 away_id, _ = _participant(match, "Guest")
                 if (home_id in league["teams"] or away_id in league["teams"]) and home_id and away_id and not match.get("byeHome") and not match.get("byeAway"):
-                    item = _ticker_item(match, league["phase"], round_id)
+                    item = _ticker_item(match, league["phase"], round_id, now)
                     sides = {}
                     if home_id in league["teams"]:
                         sides[league["teams"][home_id]] = "home"
@@ -540,7 +552,8 @@ def _load(now: datetime) -> dict:
     live = sorted((item for item in values if item["kind"] == "live"), key=lambda item: item["updatedAt"] or "", reverse=True)
     upcoming = sorted((item for item in values if item["kind"] == "upcoming"), key=lambda item: item["plannedAt"] or "")
     finals = sorted((item for item in values if item["kind"] == "final"), key=lambda item: item["updatedAt"] or "", reverse=True)
-    ordered = live + upcoming + finals
+    pending = [item for item in values if item["kind"] == "pending"]
+    ordered = live + upcoming + pending + finals
     return {"available": True, "stale": False, "updatedAt": now.isoformat(), "items": ordered[:12]}
 
 
@@ -573,7 +586,12 @@ def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now:
     requested_round_id = round_id
     now = now or datetime.now(timezone.utc)
     session = requests.Session()
-    session.headers["User-Agent"] = "ClubIQ-Darts/1.0 (+https://barverdarts.clubiq.party/)"
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json, text/plain, */*",
+        "Origin": "https://portal.3k-darts.com",
+        "Referer": "https://portal.3k-darts.com/",
+    })
     phase_url = f"{API}/{league['event']}/phase/{league['phase']}"
     try:
         phase_response = session.get(phase_url, timeout=(3, 8))
@@ -597,7 +615,7 @@ def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now:
         round_response.raise_for_status()
         all_matches = _json(round_response).get("matches") or []
         raw_matches = [match for match in all_matches if not match.get("byeHome") and not match.get("byeAway")]
-        matches = [_ticker_item(match, league["phase"], round_id) for match in raw_matches]
+        matches = [_ticker_item(match, league["phase"], round_id, now) for match in raw_matches]
         events = []
         barver_matches = []
         for raw_match, item in zip(raw_matches, matches):
@@ -666,7 +684,12 @@ def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now:
 def _public_get(url: str):
     response = requests.get(
         url,
-        headers={"User-Agent": "ClubIQ-Darts/1.0 (+https://barverdarts.clubiq.party/)"},
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/json, text/plain, */*",
+            "Origin": "https://portal.3k-darts.com",
+            "Referer": "https://portal.3k-darts.com/",
+        },
         timeout=(3, 10),
     )
     response.raise_for_status()
@@ -884,7 +907,7 @@ def _load_league_season(league: dict, now: datetime) -> dict:
             home_id, _ = _participant(raw_match, "Home")
             away_id, _ = _participant(raw_match, "Guest")
             if home_id in league["teams"] or away_id in league["teams"]:
-                public_matches.append(_season_match(raw_match, league, round_info))
+                public_matches.append(_season_match(raw_match, league, round_info, now))
 
     public_matches.sort(key=lambda item: (item.get("plannedAt") or item.get("updatedAt") or "", item["id"]))
     loaded_rounds = [
@@ -960,7 +983,7 @@ def _load_season(now: datetime) -> dict:
         for team_id, code in league["teams"].items():
             matches = [item for item in all_matches if code in (item.get("barverTeams") or [])]
             results = [item for item in matches if item["kind"] == "final"]
-            upcoming = [item for item in matches if item["kind"] != "final"]
+            upcoming = [item for item in matches if item["kind"] in {"upcoming", "live"}]
             standing = standings_by_id.get(team_id) or {}
             profile = profiles.get(code) or {}
             teams.append({
