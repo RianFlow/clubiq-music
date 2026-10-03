@@ -107,15 +107,20 @@ def _round(job):
             "groups": group_models(payload, phase, round_id)}
 
 
-def _live(match, database=5):
+def _live_snapshot(event_id, database=5):
+    """Return the active 3K scorer rows for one tournament event, keyed by backend match id."""
     try:
-        games = normalize_rest(_get(f"{LIVE}/match/{database}/0/{match['id']}"))
-        match["live"] = next((game for game in games if game["active"] and not game["finished"]), None)
-        if match["live"] and match["live"]["board"]:
-            match["board"] = match["live"]["board"]
+        games = normalize_rest(_get(f"{LIVE}/match/{database}/0/{event_id}"))
     except (requests.RequestException, ValueError, TypeError):
-        pass  # Keep the official score; never invent leg points.
-    return match
+        return {}
+    result = {}
+    for game in games:
+        if not game.get("active") or game.get("finished"):
+            continue
+        match_key = str(game.get("matchKey") or "")
+        if match_key.isdigit():
+            result[int(match_key)] = game
+    return result
 
 
 def _load(source=SOURCE):
@@ -139,8 +144,16 @@ def _load(source=SOURCE):
         for result in pool.map(_round, jobs):
             rows.update({match["id"]: match for match in result["matches"]})
             groups.extend(result["groups"])
-        live_matches = [match for match in rows.values() if match["kind"] == "live"]
-        list(pool.map(lambda match: _live(match, event["database"]), live_matches))
+    live_by_match = _live_snapshot(event["id"], event["database"])
+    for match_id, live in live_by_match.items():
+        match = rows.get(match_id)
+        if not match:
+            continue
+        match["live"] = live
+        match["kind"] = "live"
+        if live.get("board"):
+            match["board"] = live["board"]
+    live_matches = [match for match in rows.values() if match["kind"] == "live"]
     return {"event": event, "groups": groups,
             "participants": players, "matches": list(rows.values()), "source": canonical,
             "updatedAt": datetime.now(timezone.utc).isoformat(), "stale": False,

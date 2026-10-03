@@ -26,7 +26,7 @@ class TournamentTests(unittest.TestCase):
             if url.endswith('/round/3'):
                 return {'matches': [{'id': i, 'statusCd': 'ACTIVE', 'board': str(i), 'participantHome': {'displayName': 'A'}, 'participantGuest': {'displayName': 'B'}} for i in range(1, 25)]}
             return {'event': {'id': 22536, 'dbId': 5}, 'phases': [{'id': 2}]}
-        with patch.object(feed, '_get', side_effect=get), patch.object(feed, '_live', side_effect=lambda m, database: m):
+        with patch.object(feed, '_get', side_effect=get), patch.object(feed, '_live_snapshot', return_value={}):
             data = feed.get_tournament()
         self.assertEqual(len(data['matches']), 24)
         feed._attempt = 0
@@ -34,6 +34,22 @@ class TournamentTests(unittest.TestCase):
             fallback = feed.get_tournament()
         self.assertTrue(fallback['stale'])
         self.assertEqual(len(fallback['matches']), 24)
+
+    def test_event_live_snapshot_maps_match_key_and_keeps_points_and_darts(self):
+        payload = {"data": [{
+            "id": 7874885, "matchKey": "4064263", "groupKey": "22536", "database": "5",
+            "board": "5", "status": 1, "statusActive": True, "statusFinished": False,
+            "currentplayerIndex": 0, "lastUpdate": "2026-10-03T14:10:06",
+            "matchPlayers": [
+                {"id": 1, "index": 0, "playerName": "Arne Könker", "points": 320, "darts": 12, "legs": 1},
+                {"id": 2, "index": 1, "playerName": "Daniel Klapproth", "points": 410, "darts": 9, "legs": 0},
+            ],
+        }]}
+        with patch.object(feed, '_get', return_value=payload):
+            snapshot = feed._live_snapshot(22536, 5)
+        self.assertEqual(snapshot[4064263]["home"]["points"], 320)
+        self.assertEqual(snapshot[4064263]["home"]["darts"], 12)
+        self.assertEqual(snapshot[4064263]["board"], "5")
 
     def test_byes_and_final_scores(self):
         self.assertIsNone(feed.match_model({'id': 2, 'byeHome': True}))
