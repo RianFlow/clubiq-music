@@ -2,7 +2,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
 const root=path.resolve(__dirname,'..');let empty=false,fail=false;
 let setting={event:{name:'DEMO · Barver Open',date:'2026-10-03T11:00:00Z'},source:'https://portal.3k-darts.com/frontend/events/5/event/22536/participants'};
-const payload=()=>({event:setting.event,participants:[{name:'<script>Spielerin</script>'}],groups:empty?[]:[{id:'1',name:'Gruppe A',entries:Array.from({length:12},(_,i)=>({rank:`${i+1}.`,name:`Teilnehmer ${i+1}`,played:4,wins:2,pointsFor:4,pointsAgainst:4,legsFor:6,legsAgainst:6}))},{id:'2',name:'Gruppe B',entries:[{rank:'1.',name:'<script>Safe</script>',played:2,wins:1}]}],scheduleReady:!empty,stale:false,updatedAt:new Date().toISOString(),matches:empty?[]:Array.from({length:25},(_,i)=>({id:i+1,kind:'live',board:String(i+1),home:`Spieler ${i+1}`,away:'Gast',homeLegs:1,awayLegs:2,live:{currentPlayerIndex:0,home:{points:320,legs:1,count180:0,highFinish:0},guest:{points:410,legs:2,count180:0,highFinish:0}}}))});
+const payload=()=>({event:setting.event,participants:[{name:'<script>Spielerin</script>'}],groups:empty?[]:[{id:'1',name:'Gruppe A',entries:Array.from({length:12},(_,i)=>({rank:`${i+1}.`,name:`Teilnehmer ${i+1}`,played:4,wins:2,pointsFor:4,pointsAgainst:4,legsFor:6,legsAgainst:6}))},{id:'2',name:'Gruppe B',entries:[{rank:'1.',name:'<script>Safe</script>',played:2,wins:1}]}],scheduleReady:!empty,stale:false,updatedAt:new Date().toISOString(),matches:empty?[]:Array.from({length:25},(_,i)=>({id:i+1,kind:'live',board:String(i+1),home:`Spieler ${i+1}`,away:'Gast',homeLegs:1,awayLegs:2,live:{currentPlayerIndex:0,home:{points:320,darts:12,legs:1,count180:0,highFinish:0},guest:{points:410,darts:9,legs:2,count180:0,highFinish:0}}}))});
 const json=(res,data,status=200)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(data));};
 const server=http.createServer((req,res)=>{
   const url=new URL(req.url,'http://local'),p=url.pathname;
@@ -34,7 +34,7 @@ const server=http.createServer((req,res)=>{
   const{chromium}=require('playwright'),browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHANNEL?{channel:process.env.PLAYWRIGHT_CHANNEL}:{})});
   try{
     const page=await browser.newPage({viewport:{width:1920,height:1080}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
-    await page.clock.install();await page.goto(`${origin}/turnier?tv=1`);await page.getByText('320',{exact:true}).first().waitFor();
+    await page.clock.install();await page.goto(`${origin}/turnier?tv=1`);await page.getByText('320',{exact:true}).first().waitFor();await page.getByText('12 Darts',{exact:true}).first().waitFor();
     assert.equal(await page.locator('.board').count(),8);assert.equal(await page.locator('#pageCount').innerText(),'1 / 4');
     assert.equal(await page.locator('#groupTable tbody tr').count(),8);await page.click('#groupNext');assert.equal(await page.locator('#groupTable tbody tr').count(),4);
     await page.click('#groupNext');assert.equal(await page.locator('#groupTable h2').innerText(),'Gruppe B');assert.equal(await page.locator('#groupTable script').count(),0);
