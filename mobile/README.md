@@ -58,6 +58,14 @@ Dateien bzw. Server-/CI-Secrets – niemals ins Repository oder in den Chat.
 
 ## Grenzen dieser Vorschau
 
+Beim Antippen einer Begegnung erscheinen sofort alle laufenden Boards mit Spielern,
+Punkten im aktuellen Leg, Legstand, Average, letztem Wurf und Markierung „Am Wurf“.
+Live-Daten aktualisieren sich im Vordergrund alle 15 Sekunden, der Spielbericht alle
+60 Sekunden. Ein langsamer/fehlender Spielbericht blockiert die Live-Anzeige nicht.
+Bei Verbindungsfehlern bleibt der letzte Stand mit Hinweis sichtbar; veraltete Boards
+werden nicht als frisch live ausgegeben. Ohne öffentliche 3K-Live-Daten können keine
+Punkte erfunden oder angezeigt werden.
+
 Noch keine eigene Turnieransicht oder detaillierte Tabellen/Spielerstatistiken in der App;
 Turnier und rechtliche Seiten öffnen gezielt im Systembrowser. Noch keine Spieler-Abos,
 kein echter Zustellverlauf, keine native Offline-/Hintergrund-Pushprüfung. Die vorbereitete

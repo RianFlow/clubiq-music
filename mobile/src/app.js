@@ -3,11 +3,11 @@ import {App} from '@capacitor/app';
 import {Browser} from '@capacitor/browser';
 import {Preferences} from '@capacitor/preferences';
 import {PushNotifications} from '@capacitor/push-notifications';
-import {API_ORIGIN,TYPES,apiUrl,publicLink,cleanPreferences,matchesFor,sections,roleRank,notificationTarget} from './model.js';
+import {API_ORIGIN,TYPES,apiUrl,publicLink,cleanPreferences,matchesFor,sections,roleRank,notificationTarget,liveBoardView} from './model.js';
 import {createNativePush} from './native-push.js';
 const q=s=>document.querySelector(s),native=Capacitor.isNativePlatform();
 let state={season:{matches:[],teams:[]},live:{groups:[]},highlights:{items:[]},profiles:{players:{}}},cacheTimes={},failures={},preferences=cleanPreferences(),view='home',team='',busy=false,foreground=true;
-let detailSequence=0,toastTimer;
+let detailSequence=0,toastTimer,selectedMatch=null;
 function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);if(cls)n.className=cls;return n;}
 function button(text,action,cls='card'){const n=node('button',text,cls);n.type='button';n.addEventListener('click',action);return n;}
 function date(value){const d=new Date(value);return Number.isNaN(d.valueOf())?'Termin noch offen':d.toLocaleString('de-DE',{timeZone:'Europe/Berlin',weekday:'short',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}
@@ -64,12 +64,51 @@ function render(){
 async function refresh(onlyLive=false){
   if(busy||!foreground)return;busy=true;q('#refresh').disabled=true;
   const jobs=onlyLive?['live']:['season','live','highlights','profiles'];
-  await Promise.all(jobs.map(async key=>{try{const payload=await get('/api/v1/darts/'+(key==='profiles'?'player-profiles':key));if(!payload||typeof payload!=='object')throw new Error('Ungültige Daten');state[key]=payload;cacheTimes[key]=Date.now();failures[key]=false;await store('snapshot-'+key,{payload,savedAt:cacheTimes[key]});render();}catch(_){failures[key]=true;}}));busy=false;q('#refresh').disabled=false;render();
+  await Promise.all(jobs.map(async key=>{try{const payload=await get('/api/v1/darts/'+(key==='profiles'?'player-profiles':key));if(!payload||typeof payload!=='object')throw new Error('Ungültige Daten');state[key]=payload;cacheTimes[key]=Date.now();failures[key]=false;await store('snapshot-'+key,{payload,savedAt:cacheTimes[key]});render();updateMatchLive();}catch(_){failures[key]=true;}}));busy=false;q('#refresh').disabled=false;render();updateMatchLive();if(!onlyLive&&selectedMatch)loadMatchReport(selectedMatch);
 }
-function dialog(title){const root=q('#detailContent');root.replaceChildren(node('h2',title));if(!q('#detail').open)q('#detail').showModal();return root;}
-async function openMatch(id){
-  const ticket=++detailSequence,m=matchesFor(state.season,state.live).find(x=>x.id===id),root=dialog(m?m.home+' gegen '+m.away:'Begegnung');root.append(node('p','Spielbericht und Statistiken können einige Sekunden dauern.','muted'));
-  try{const report=await get('/api/v1/darts/matches/'+id);if(ticket!==detailSequence||!q('#detail').open)return;root.replaceChildren(node('h2',m?m.home+' gegen '+m.away:'Spielbericht'));for(const board of m?.boards||[])root.append(node('p',`${board.home?.name||'Heim'} ${board.home?.points??'–'} : ${board.guest?.points??'–'} ${board.guest?.name||'Gast'} · Im Leg`));for(const game of report.games||[]){const card=node('article',undefined,'card');card.append(node('small',game.block||'Partie'),node('h3',`${game.home?.name||'Heim'} ${game.homeLegs??'–'} : ${game.awayLegs??'–'} ${game.away?.name||'Gast'}`),node('p',`Average ${game.home?.average??'–'} : ${game.away?.average??'–'}`,'muted'));root.append(card);}if(!(report.games||[]).length)root.append(node('p','Spielbericht noch nicht veröffentlicht.'));}catch(_){if(ticket===detailSequence)root.replaceChildren(node('h2','Spielbericht gerade nicht erreichbar'),node('p','Bitte später erneut versuchen.'));}
+function dialog(title){selectedMatch=null;const root=q('#detailContent');root.replaceChildren(node('h2',title));if(!q('#detail').open)q('#detail').showModal();return root;}
+function updateMatchLive(){
+  const detail=selectedMatch;if(!detail||!q('#detail').open)return;
+  const match=matchesFor(state.season,state.live).find(m=>m.id===detail.id);
+  const unavailable=!!failures.live||Date.now()-(cacheTimes.live||0)>45000||!!match?.liveStale;
+  detail.score.textContent=match?.score||'–';
+  detail.label.textContent=match?.kind==='final'?'Endstand':match?.kind==='pending'?'Vorläufig beendet · Bestätigung ausstehend':'Gesamtstand';
+  const boards=(match?.boards||[]).map(board=>liveBoardView(board,Date.now(),unavailable));
+  const fragment=document.createDocumentFragment();
+  fragment.append(node('h3',boards.length?`${boards.length===1?'Laufende Partie':`${boards.length} laufende Partien`}`:'Live-Partien'));
+  fragment.append(node('p',unavailable?'Live-Verbindung unterbrochen · letzter bekannter Stand · erneuter Versuch automatisch':'Automatische Aktualisierung alle 15 Sekunden.','muted live-note'));
+  for(const board of boards){
+    const card=node('article',undefined,'live-board'),head=node('div',undefined,'board-heading');
+    head.append(node('strong','Board '+board.board),node('span',board.stale?'LETZTER STAND':'LIVE','badge '+(board.stale?'':'live')));card.append(head);
+    if(board.mode)card.append(node('small',board.mode));
+    card.append(node('small','Punkte im aktuellen Leg','points-label'));
+    for(const player of board.players){
+      const row=node('div',undefined,'live-player'+(player.throwing?' throwing':'')),copy=node('div');
+      copy.append(node('strong',player.name));if(player.throwing)copy.append(node('small','● Am Wurf'));
+      copy.append(node('small',`Average ${player.average??'–'} · Letzter Wurf ${player.lastScore??'–'}`));
+      row.append(copy,node('strong',player.points===0?'CHECK':player.points??'–','live-points'));card.append(row);
+    }
+    card.append(node('div',`Legs ${board.players[0].legs??'–'} : ${board.players[1].legs??'–'}`,'live-legs'));fragment.append(card);
+  }
+  if(!boards.length)fragment.append(node('p',match?.kind==='final'?'Diese Begegnung ist beendet.':match?.kind==='pending'?'Keine aktuellen Live-Daten. Die offizielle Bestätigung steht noch aus.':'Noch keine laufende Partie von 3K gemeldet.','empty'));
+  detail.live.replaceChildren(fragment);
+}
+async function loadMatchReport(detail){
+  if(detail.loading||selectedMatch!==detail||!q('#detail').open)return;detail.loading=true;
+  try{const report=await get('/api/v1/darts/matches/'+detail.id);if(selectedMatch!==detail||detail.ticket!==detailSequence||!q('#detail').open)return;
+    const fragment=document.createDocumentFragment();fragment.append(node('h3','Spielbericht & Statistiken'));
+    for(const game of report.games||[]){const card=node('article',undefined,'card');card.append(node('small',game.block||'Partie'),node('h3',`${game.home?.name||'Heim'} ${game.homeLegs??'–'} : ${game.awayLegs??'–'} ${game.away?.name||'Gast'}`),node('p',`Average ${game.home?.average??'–'} : ${game.away?.average??'–'}`,'muted'));fragment.append(card);}
+    if(!(report.games||[]).length)fragment.append(node('p','Spielbericht noch nicht veröffentlicht.','muted'));
+    detail.report.replaceChildren(fragment);detail.loaded=true;
+  }catch(_){if(selectedMatch===detail&&q('#detail').open){if(!detail.loaded)detail.report.replaceChildren(node('p','Spielbericht gerade nicht erreichbar. Die Live-Anzeige darüber läuft unabhängig weiter.','muted'));else if(!detail.report.querySelector('.report-warning'))detail.report.prepend(node('p','Statistiken: letzter bekannter Stand · erneuter Versuch automatisch.','muted report-warning'));}}
+  finally{detail.loading=false;}
+}
+function openMatch(id){
+  const ticket=++detailSequence,m=matchesFor(state.season,state.live).find(x=>x.id===id),root=dialog(m?m.home+' gegen '+m.away:'Begegnung');
+  const summary=node('div',undefined,'match-summary'),label=node('span','Gesamtstand'),score=node('strong','–','score');summary.append(label,score);
+  const live=node('section',undefined,'match-live'),report=node('section',undefined,'match-report');live.setAttribute('aria-label','Live-Spielstand');
+  report.append(node('p','Spielbericht und Statistiken werden geladen; das kann einige Sekunden dauern.','muted'));root.append(summary,button('Spielstand aktualisieren',()=>refresh(),'detail-refresh'),live,report);
+  selectedMatch={id,ticket,live,report,label,score,loading:false,loaded:false};updateMatchLive();loadMatchReport(selectedMatch);refresh(true);
 }
 function openTeam(code){
   ++detailSequence;const selected=(state.season.teams||[]).find(t=>t.code===code),root=dialog('SV Barver Darts '+code);root.append(node('p',selected?.league?.name||'Mannschaftsdaten werden geladen.','muted'));const roster=[...(selected?.roster||[])].sort((a,b)=>roleRank(a)-roleRank(b)||String(a.name).localeCompare(String(b.name),'de'));
@@ -83,7 +122,7 @@ function openPlayer(member,profile){
 const push=createNativePush({plugin:PushNotifications,transport:null,platform:Capacitor.getPlatform(),onStatus:()=>{},onReceived:n=>toast((n.title||'Barver Darts')+' · '+(n.body||'')),onOpen:n=>{const id=notificationTarget(n.data);if(id)openMatch(id);}});
 void push;
 for(const b of document.querySelectorAll('nav button'))b.addEventListener('click',()=>{view=b.dataset.view;render();window.scrollTo(0,0);});
-q('#refresh').addEventListener('click',()=>refresh());q('#closeDetail').addEventListener('click',()=>{detailSequence++;q('#detail').close();});
+q('#refresh').addEventListener('click',()=>refresh());q('#closeDetail').addEventListener('click',()=>{detailSequence++;selectedMatch=null;q('#detail').close();});q('#detail').addEventListener('close',()=>{detailSequence++;selectedMatch=null;});
 window.addEventListener('online',()=>refresh());document.addEventListener('visibilitychange',()=>{foreground=!document.hidden;if(foreground)refresh();});
 if(native){q('#preview').textContent='VORABVERSION · Native Pushzustellung noch nicht eingerichtet';App.addListener('appStateChange',({isActive})=>{foreground=isActive;if(isActive)refresh();});App.addListener('backButton',()=>{if(q('#detail').open){detailSequence++;q('#detail').close();}else if(view!=='home'){view='home';render();}else App.minimizeApp();});}
 async function start(){preferences=cleanPreferences(await read('preferences',{}));team=preferences.favorite;for(const key of Object.keys(state)){const cached=await read('snapshot-'+key,null);if(cached?.payload&&typeof cached.payload==='object'){state[key]=cached.payload;cacheTimes[key]=Number(cached.savedAt)||0;}}render();refresh();setInterval(()=>refresh(true),15000);setInterval(()=>refresh(),60000);}

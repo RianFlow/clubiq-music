@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {apiUrl,publicLink,cleanPreferences,activeBoards,matchesFor,sections,roleRank,notificationTarget} from '../src/model.js';
+import {apiUrl,publicLink,cleanPreferences,activeBoards,matchesFor,sections,roleRank,notificationTarget,liveBoardView} from '../src/model.js';
 test('only public read endpoints and public links',()=>{
   assert.match(apiUrl('/api/v1/darts/matches/1280528'),/^https:\/\/barverdarts/);
   for(const path of ['/api/v1/darts/admin/players','/api/v1/darts/push/subscribe','https://evil.test','/api/v1/darts/season?admin=1'])assert.throws(()=>apiUrl(path));
@@ -31,4 +31,20 @@ test('captain before deputy and player',()=>{
 test('push navigation accepts match IDs only',()=>{
   assert.equal(notificationTarget({matchId:'1280528',url:'/darts-admin'}),1280528);
   for(const value of [-1,0,1.5,'admin',undefined])assert.equal(notificationTarget({matchId:value}),null);
+});
+test('live detail shows players, points, legs and current thrower, including zero',()=>{
+  const now=Date.now(),board={board:'2',currentPlayerIndex:0,lastUpdateNs:now*1e6,home:{name:'Jannik',points:320,legs:2,average:61.5,lastScore:180},guest:{name:'Gast',points:410,legs:1,lastScore:0}};
+  const view=liveBoardView(board,now);
+  assert.equal(view.players[0].throwing,true);assert.equal(view.players[1].throwing,false);
+  assert.deepEqual(view.players.map(p=>p.points),[320,410]);assert.deepEqual(view.players.map(p=>p.legs),[2,1]);
+  assert.equal(view.players[0].average,61.5);assert.equal(view.players[1].lastScore,0);
+  assert.equal(liveBoardView({...board,home:{points:0,legs:0}},now).players[0].points,0);
+  for(const b of [{...board,stale:true},{...board,lastUpdateNs:(now-61000)*1e6}]){assert.equal(liveBoardView(b,now).stale,true);assert.equal(liveBoardView(b,now).players[0].throwing,false);}
+  assert.equal(liveBoardView(board,now,true).players[0].throwing,false);
+});
+test('latest parallel board gives team score, never override an official final',()=>{
+  const now=Date.now(),boards=[{active:true,lastUpdateNs:(now-1000)*1e6,teamScoreHome:3,teamScoreGuest:2},{active:true,lastUpdateNs:now*1e6,teamScoreHome:4,teamScoreGuest:2}];
+  const season={matches:[{id:1,kind:'live',score:'2:2'}]},live={groups:[{groupKey:'1',stale:true,matches:boards}]};
+  const m=matchesFor(season,live,'',now)[0];assert.equal(m.score,'4:2');assert.equal(m.boards.length,2);assert.equal(m.liveStale,true);
+  const final=matchesFor({matches:[{id:1,kind:'final',score:'8:4'}]},live,'',now)[0];assert.equal(final.score,'8:4');assert.equal(final.boards.length,0);
 });

@@ -17,9 +17,21 @@ export function activeBoards(group,now=Date.now()){
 export function matchesFor(season,live,team='',now=Date.now()){
   return(season.matches||[]).filter(m=>!team||(m.barverTeams||[m.barverTeam]).includes(team)).map(m=>{
     const group=(live.groups||[]).find(g=>Number(g.groupKey)===m.id);
-    const boards=group?activeBoards(group,now):[];
-    return {...m,boards,kind:m.kind==='final'?'final':boards.length?'live':m.kind};
+    const boards=group&&m.kind!=='final'?activeBoards(group,now):[];
+    const latest=[...boards].sort((a,b)=>Number(b.lastUpdateNs)-Number(a.lastUpdateNs))[0];
+    const score=Number.isInteger(latest?.teamScoreHome)&&Number.isInteger(latest?.teamScoreGuest)?`${latest.teamScoreHome}:${latest.teamScoreGuest}`:m.score;
+    return {...m,score,boards,liveStale:!!group?.stale,kind:m.kind==='final'?'final':boards.length?'live':m.kind};
   }).sort((a,b)=>String(a.plannedAt||'').localeCompare(String(b.plannedAt||'')));
+}
+export function liveBoardView(board,now=Date.now(),unavailable=false){
+  const stamp=Number(board.lastUpdateNs)/1e6;
+  const stale=unavailable||!!board.stale||!Number.isFinite(stamp)||now-stamp>60000||stamp>now;
+  const value=n=>Number.isInteger(n)&&n>=0?n:null;
+  return {board:board.board||'–',stale,mode:board.mode||'',players:[board.home,board.guest].map((player,index)=>({
+    name:player?.name|| (index===0?'Heim':'Gast'),points:value(player?.points),legs:value(player?.legs),
+    average:Number.isFinite(player?.average)?player.average:null,lastScore:value(player?.lastScore),
+    throwing:!stale&&board.currentPlayerIndex===index,
+  }))};
 }
 export function sections(matches,now=new Date()){
   const day=d=>new Date(d).toLocaleDateString('sv-SE',{timeZone:'Europe/Berlin'});
