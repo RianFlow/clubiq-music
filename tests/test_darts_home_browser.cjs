@@ -10,7 +10,7 @@ const matches=[
   {id:904,barverTeam:'C',home:'Demo-Team C',away:'SV Barver Darts C',kind:'final',score:'4:8',eventId:1445,plannedAt:day(-2)},
 ];
 if(process.argv.includes('--quiet'))for(const match of matches)if(match.kind==='live'){match.kind='upcoming';delete match.score;}
-const teams=['A','B','C','D'].map((code,i)=>({code,name:`SV Barver Darts ${code}`,league:{name:code==='D'?'Kreisklasse 11':'Kreisligen 04'},record:{},matches:matches.filter(m=>m.barverTeam===code),roster:[{id:89027+i,name:code==='A'?'Jannik Kläning':`Demo-Spieler ${code}`,role:'Kapitän'}]}));
+const teams=['A','B','C','D'].map((code,i)=>({code,name:`SV Barver Darts ${code}`,league:{name:code==='D'?'Kreisklasse 11':'Kreisligen 04'},record:{},matches:matches.filter(m=>m.barverTeam===code),roster:[{id:89027+i,name:code==='A'?'Jannik Kläning':`Demo-Spieler ${code}`,role:'Kapitän'}],venue:{name:'Testspielstätte',street:'Teststraße 1',postalCode:'49453',city:'Barver'}}));
 teams[1].roster=[{id:89029,name:'Patrick Lammers',role:'Kapitän'}];
 let fail=false;
 const server=http.createServer((req,res)=>{
@@ -21,12 +21,14 @@ const server=http.createServer((req,res)=>{
     if(p==='/api/v1/darts/presence') data={online:7,windowSeconds:120,demo:true};
     if(p.endsWith('/ticker')) data={items:matches,updatedAt:now(),stale:false};
     if(p.endsWith('/season')) data={matches,teams,updatedAt:now(),specialEvents:[{id:500,name:'Bezirkspokal',badge:'POKAL',matchCount:1}]};
-    if(p.endsWith('/center')) data={league:{key:url.searchParams.get('league'),short:'DEMO'},selectedRound:{id:1,name:'Spieltag 1'},rounds:[{id:1,name:'Spieltag 1'}],standings:[{id:1,rank:1,name:'Demo-Team',played:3,wins:2,draws:1,losses:0,pointsFor:5,pointsAgainst:1,setsFor:24,setsAgainst:12,legsFor:70,legsAgainst:41}],updatedAt:now(),barverMatches:matches.filter(m=>m.kind==='live'),pushEvents:matches.filter(m=>m.kind==='live').flatMap(m=>[1,2].map(i=>({type:'live_game',matchId:m.id,homeName:i===1?'Jannik Beispiel':'Spieler Zwei',awayName:`Gast ${i}`,homeRemaining:i===1?320:201,awayRemaining:410,homeLegs:2,awayLegs:1,currentSide:'home'})))};
+    if(p.endsWith('/center')) data={league:{key:url.searchParams.get('league'),short:'DEMO'},selectedRound:{id:1,name:'Spieltag 1'},rounds:[{id:1,name:'Spieltag 1'}],standings:[{id:1,rank:1,name:'Demo-Team',played:3,wins:2,draws:1,losses:0,pointsFor:5,pointsAgainst:1,setsFor:24,setsAgainst:12,legsFor:70,legsAgainst:41}],updatedAt:now(),barverMatches:matches.filter(m=>m.kind==='live'),pushEvents:matches.filter(m=>m.kind==='live').flatMap(m=>[1,2].map(i=>({type:'live_game',matchId:m.id,homeName:i===1?'Jannik Kläning':'Spieler Zwei',awayName:`Gast ${i}`,homeRemaining:i===1?320:201,awayRemaining:410,homeLegs:2,awayLegs:1,currentSide:'home'})))};
+    if(p==='/api/v1/darts/matches/901')data={match:matches[0],games:[{number:1,status:'FINISH',block:'Einzel',home:{name:'Jannik Kläning',average:45},away:{name:'Gast',average:40},homeLegs:3,awayLegs:1}],liveGames:[],performances:[],sourceUrl:'https://portal.3k-darts.com/'};
     if(p.endsWith('/highlights')) data={items:[{type:'180',matchId:904,title:'180! Demo-Spieler C',body:'Barver C · Rückblick',occurredAt:day(-2)}]};
     if(p.endsWith('/config')) data={available:false};
     if(p.endsWith('/status')) data={configured:false};
     if(p.endsWith('/members')) data={members:['Patrick Lammers','Erika Beispiel']};
-    if(p==='/api/v1/darts/events') data={events:[{id:1,title:'11. Barver Dart Open',description:'Einzel und Doppel in Barver',image:'/pics/events/barver-dart-open-2026.webp',active:true,priority:100},{id:2,title:'Vereinsabend',description:'Zweite Veranstaltung',active:true},{id:3,title:'Entwurf',active:false}]};
+    if(p==='/api/v1/darts/events'||p==='/api/v1/darts/appointments') data={events:[{id:1,title:'11. Barver Dart Open',description:'Einzel und Doppel in Barver',image:'/pics/events/barver-dart-open-2026.webp',active:true,priority:100},{id:2,title:'Vereinsabend',description:'Zweite Veranstaltung',calendarDate:day(3).slice(0,10),location:'Testvereinsheim',active:true},{id:3,title:'Entwurf',active:false}]};
+    if(p==='/api/v1/darts/appointments')data.events=data.events.map(e=>e.id===2?{...e,startsAt:day(9)}:e);
     if(p==='/api/v1/darts/social-links') data={links:[{id:1,platform:'whatsapp',label:'WhatsApp-Kanal',href:'https://whatsapp.com/channel/0029Vb1TkYQ5K3zONLbu0C0l',active:true},{id:2,platform:'instagram',label:'Instagram · SV Barver Darts',href:'https://www.instagram.com/svbarverdarts/',teaser:'Bilder aus dem Verein',showInBanner:true,active:true},{id:3,platform:'facebook',label:'Ausgeblendeter Kanal',href:'https://www.facebook.com/',active:false}]};
     if(p==='/api/v1/darts/sponsors') data={displaySeconds:12,sponsors:[{id:1,name:'Testpartner',type:'main',placements:['top','inline']}]};
     if(p.endsWith('/player-profiles')) {data=JSON.parse(fs.readFileSync(path.join(root,'static/darts-players.json'),'utf8'));data.players['89029'].personal.throwingHand='right';}
@@ -52,8 +54,9 @@ const server=http.createServer((req,res)=>{
   const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHANNEL?{channel:process.env.PLAYWRIGHT_CHANNEL}:{})});
   try {
     const context=await browser.newContext({viewport:{width:1440,height:1080},serviceWorkers:'block'});
-    const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+    const page=await context.newPage(),errors=[];page.on('pageerror',e=>{errors.push(e.message);console.error('Page error:',e.message);});
     await page.goto(`${origin}/darts`);
+    assert.equal(await page.locator('#scheduleDetails').evaluate(n=>n.open),false);await page.locator('#scheduleDetails').evaluate(n=>n.open=true);
     await page.getByText('7 online · Demo',{exact:true}).waitFor();
     await page.evaluate(()=>document.fonts.ready);
     assert.equal(await page.evaluate(()=>document.fonts.check('16px Inter')),true);
@@ -70,12 +73,15 @@ const server=http.createServer((req,res)=>{
     assert.equal(await page.getByRole('link',{name:/Voting/i}).count(),0);
     assert.equal(await page.locator('.personal-settings #pushToggle').count(),1);
     await page.locator('#homeSchedule .team-profile-match').first().waitFor();
+    await page.locator('#nextAppointmentsList .appointment-card').first().waitFor();assert.ok(await page.locator('.calendar-button').count()>0);await page.locator('#nextAppointmentsList').getByRole('heading',{name:'Vereinsabend'}).waitFor();assert.ok(await page.locator('#nextAppointmentsList').getByRole('link',{name:'Route öffnen'}).count()>0);
+    const downloadPromise=page.waitForEvent('download');await page.locator('#nextAppointmentsList .calendar-button').first().click();const calendarDownload=await downloadPromise;assert.match(calendarDownload.suggestedFilename(),/barver-.*\.ics/);
     await page.locator('#clubEventTitle').getByText('11. Barver Dart Open',{exact:true}).waitFor();
     await page.click('#nextClubEvent');assert.equal(await page.locator('#clubEventTitle').textContent(),'Vereinsabend');
     await page.click('#previousClubEvent');assert.equal(await page.locator('#clubEventCount').innerText(),'1 / 2');
     await page.locator('#socialLinksList a').first().waitFor();assert.equal(await page.locator('#socialLinksList svg').count(),2);await page.locator('#socialLinks').getByText('Neueste Infos',{exact:true}).waitFor();assert.match(await page.locator('#socialLinksList a[data-platform=whatsapp]').getAttribute('href'),/whatsapp.com\/channel/);
     await page.locator('#socialLinks').getByText('Bilder aus dem Verein',{exact:true}).waitFor();assert.equal(await page.locator('#socialLinksList a[data-platform=instagram]').getAttribute('href'),'https://www.instagram.com/svbarverdarts/');assert.equal(await page.locator('#socialLinksList a[data-platform=facebook]').count(),0);
     await page.locator('#todayGrid .today-live-game').nth(1).waitFor();
+    await page.locator('#todayGrid').getByRole('button',{name:'Spielerprofil von Jannik Kläning öffnen'}).first().click();await page.locator('#playerDialog').getByRole('button',{name:'Zurück zum Spielbericht'}).click();await page.locator('#matchDialog').waitFor();await page.getByRole('tab',{name:'Einzelpartien'}).click();await page.locator('#matchDialog').getByRole('button',{name:'Spielerprofil von Jannik Kläning öffnen'}).click();await page.locator('#playerDialog').getByRole('button',{name:'Zurück zum Spielbericht'}).click();await page.click('#closeMatch');
     assert.equal(await page.locator('#matchCenterGrid .match-center-card').count(),4);
     assert.equal(await page.locator('#matchCenterGrid .present-team-roster').count(),4);
     assert.equal(await page.locator('#teamGrid .present-team-roster').count(),4);
@@ -108,16 +114,18 @@ const server=http.createServer((req,res)=>{
     await page.locator('#moreNavigation summary').click();await page.click('#personalSettingsToggle');
     await page.locator('#pushPlayers input[value="Jannik Kläning"]').waitFor();
     await page.waitForFunction(()=>document.querySelectorAll('#notificationHistory article').length===5);assert.equal(await page.locator('#notificationHistory article').last().locator('strong').innerText(),'Meldung 5');assert.equal(await page.locator('#socialPromoBanner').count(),0);assert.equal(await page.locator('#socialLinks a').count(),2);
+    await page.selectOption('#myFavoriteTeam','A');assert.equal(await page.inputValue('#favoriteTeam'),'A');assert.match(await page.locator('#myTeamSummary').innerText(),/SV Barver Darts A/);
     for(const input of await page.locator('#pushTeams input').all()) await input.uncheck();
     await page.locator('#pushPlayers input[value="Jannik Kläning"]').check();
     await page.locator('#pushTypes input[value="leg"]').uncheck();
     await page.locator('#preferencesForm button[type="submit"]').click();
     assert.match(await page.locator('#preferencesStatus').innerText(),/Gespeichert/);
-    await page.reload();
+    await page.reload();await page.locator('#scheduleDetails').evaluate(n=>n.open=true);
     await page.locator('#homeSchedule .team-profile-match').first().waitFor();
     await page.locator('#moreNavigation summary').click();await page.click('#personalSettingsToggle');
     await page.locator('#pushPlayers input[value="Jannik Kläning"]').waitFor();
     assert.equal(await page.locator('#pushPlayers input[value="Jannik Kläning"]').isChecked(),true);
+    assert.equal(await page.inputValue('#myFavoriteTeam'),'A');assert.equal(await page.inputValue('#favoriteTeam'),'A');assert.match(await page.locator('#nextAppointmentsNote').innerText(),/Barver A/);
     assert.equal(await page.locator('#pushTeams input:checked').count(),0);
     assert.equal(await page.locator('#pushTypes input[value="leg"]').isChecked(),false);
     await page.locator('#personalSettings summary').click();
@@ -140,7 +148,7 @@ const server=http.createServer((req,res)=>{
       await page.setViewportSize({width:1440,height:1080});
     }
     await page.click('#themeToggle');
-    await page.screenshot({path:path.join(root,'outputs/darts-home-desktop.png'),fullPage:true});
+    await page.locator('#scheduleDetails').evaluate(n=>n.open=false);await page.screenshot({path:path.join(root,'outputs/darts-home-desktop.png'),fullPage:true});
     await page.setViewportSize({width:390,height:844});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'mobile horizontal overflow');
     await page.screenshot({path:path.join(root,'outputs/darts-home-mobile.png'),fullPage:true});
@@ -214,7 +222,7 @@ const server=http.createServer((req,res)=>{
     await quiet.locator('#sponsorInline .sponsor-banner').waitFor();
     assert.equal(await quiet.locator('.home-schedule-panel #sponsorInline').count(),1,'inline sponsor belongs below the schedule, not beside the top sponsor');
     assert.equal(await quiet.locator('#sponsorTop').isVisible(),true);
-    assert.equal(await quiet.locator('#sponsorInline').evaluate(node=>node.previousElementSibling.id), 'homeSchedule');
+    assert.equal(await quiet.locator('#sponsorInline').evaluate(node=>node.previousElementSibling.id), 'scheduleDetails');
     await quiet.locator('#clubEventPoster').click();
     assert.equal(await quiet.locator('#clubPosterDialog').evaluate(node=>node.open),true);
     assert.match(await quiet.locator('#clubPosterFull').getAttribute('src'),/barver-dart-open-2026.webp/);

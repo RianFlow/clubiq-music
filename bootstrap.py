@@ -359,6 +359,7 @@ CREATE TABLE IF NOT EXISTS darts_events (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CHECK (starts_at IS NULL OR ends_at IS NULL OR starts_at <= ends_at)
 );
+ALTER TABLE darts_events ADD COLUMN IF NOT EXISTS calendar_date DATE;
 CREATE INDEX IF NOT EXISTS idx_darts_events_active_priority
 ON darts_events(active, priority DESC, id);
 

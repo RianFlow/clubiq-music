@@ -87,11 +87,23 @@ class DartsContentTests(unittest.TestCase):
             if getattr(route, "path", "").startswith("/api/v1/darts/admin/"):
                 self.assertIn(main.require_darts_admin, [dep.call for dep in route.dependant.dependencies])
 
+    def test_event_calendar_day_is_separate_from_banner_visibility(self):
+        update = main.DartsEventUpdate(title="Turnier", calendar_date="2026-11-14", active=False)
+        value = main._validated_darts_event(update)
+        self.assertEqual(value["calendar_date"], main.date(2026, 11, 14))
+        self.assertIsNone(value["starts_at"])
+        with self.assertRaises(ValidationError):
+            main.DartsEventUpdate(title="Turnier", calendar_date="2026-02-30")
+        row = [4, "", "", "Turnier", "", "", "", "", "", None, None, 0, False, None, 0, True, main.date(2026, 11, 14)]
+        self.assertEqual(main._event_dict(row)["calendarDate"], "2026-11-14")
+
     def test_event_https_timestamp_and_whitespace_validation(self):
         good = main.DartsEventUpdate(title="Open", website="https://example.org/event",
                                      starts_at=datetime.fromisoformat("2026-10-01T10:00:00+02:00"),
                                      ends_at=datetime.fromisoformat("2026-10-01T22:00:00+02:00"))
+        good.calendar_date = main.date(2026, 10, 24)
         parsed = main._validated_darts_event(good)
+        self.assertEqual(parsed["calendar_date"], main.date(2026, 10, 24))
         self.assertEqual(parsed["starts_at"].utcoffset().total_seconds(), 0)
         with self.assertRaises(HTTPException):
             main._validated_darts_event(main.DartsEventUpdate(title="Open", active=True))

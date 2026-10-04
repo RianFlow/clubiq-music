@@ -11,10 +11,11 @@
   <link rel="preload" href="/pics/sv-barver-darts-tight-512.webp" as="image" type="image/webp">
   <link rel="stylesheet" href="/static/darts.css?v=20261002-home4">
   <link rel="stylesheet" href="/static/darts-broadcast.css?v=20261004-alias1">
-  <link rel="stylesheet" href="/static/darts-theme.css?v=20261004-clear1">
+  <link rel="stylesheet" href="/static/darts-theme.css?v=20261004-experience1">
   <script defer src="/static/darts-broadcast.js?v=20261004-alias1"></script>
   <script defer src="/static/darts-social-icons.js?v=20261004-clear1"></script>
-  <script defer src="/static/darts.js?v=20261004-team-a1"></script>
+  <script defer src="/static/darts-experience.js?v=20261004-experience1"></script>
+  <script defer src="/static/darts.js?v=20261004-experience1"></script>
 <link rel="stylesheet" href="/static/darts-typography.css?v=20261004-type1"></head>
 <body>
   <header class="darts-header">
@@ -35,6 +36,7 @@
   </header>
   <details id="personalSettings" class="personal-settings">
     <summary>Meine Darts</summary>
+    <label>Meine Lieblingsmannschaft<select id="myFavoriteTeam"><option value="all">Alle Mannschaften</option><option value="A">Barver A</option><option value="B">Barver B</option><option value="C">Barver C</option><option value="D">Barver D</option></select></label><div id="myTeamSummary" class="my-team-summary"></div>
     <div class="personal-push-actions"><button id="pushToggle" class="push-toggle" type="button" aria-pressed="false">Benachrichtigungen aktivieren</button><span id="pushHealth" class="push-health" role="status" hidden></span></div>
     <label class="broadcast-preference"><input id="broadcastEnabled" type="checkbox" checked><span><strong>Live-Highlights einblenden</strong><small>Zeigt besondere Würfe und Ergebnisse unserer Mannschaften. Deine Auswahl wird auf diesem Gerät gespeichert.</small></span></label>
     <form id="preferencesForm">
@@ -64,6 +66,7 @@
   </section>
   <aside id="sponsorTop" class="sponsor-slot sponsor-slot-top" data-placement="top" aria-label="Werbepartner" hidden></aside>
   <main>
+    <section id="nextAppointments" class="next-appointments" aria-labelledby="nextAppointmentsHeading"><div class="next-appointments-head"><div><p class="eyebrow">Spiele und Vereinstermine</p><h2 id="nextAppointmentsHeading">Das steht als Nächstes an</h2></div><span id="nextAppointmentsNote">Termine werden geladen …</span></div><div id="nextAppointmentsList" class="next-appointments-list"></div></section>
     <section class="intro">
       <div class="intro-copy"><p class="eyebrow">SV Barver Darts</p><h1>BARVER<br><span>DARTS</span></h1><p><strong>Saison 2026 / 2027</strong> · Vier Mannschaften mit Spielplänen, Ergebnissen und Bestleistungen.</p></div>
       <div class="intro-visual" aria-hidden="true"><span class="intro-watermark">BARVER</span><span class="club-logo intro-club-logo"></span><span class="intro-badge">A · B · C · D</span></div>
@@ -112,7 +115,7 @@
           <label>Datum<input id="homeDate" type="date"></label><button id="resetHomeFilters" type="button">Filter zurücksetzen</button>
         </div>
         </details>
-        <div id="homeSchedule" class="home-schedule"></div>
+        <details id="scheduleDetails" class="schedule-details"><summary>Weitere Spiele und letzte Ergebnisse</summary><div id="homeSchedule" class="home-schedule"></div></details>
       </section>
     </section>
     <section id="leaguePanel" class="sports-panel" aria-labelledby="leagueHeading" hidden>
