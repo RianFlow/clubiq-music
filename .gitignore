@@ -13,3 +13,4 @@ cloudflared.deb
 backups/
 secrets/
 *-firebase-adminsdk-*.json
+docker-compose.override.yml

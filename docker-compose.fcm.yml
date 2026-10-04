@@ -1,0 +1,14 @@
+# Optional Android-push configuration. The private key stays outside the checkout.
+# On the Darts VPS this file is installed as docker-compose.override.yml so normal
+# future docker compose updates retain the read-only mount.
+services:
+  web:
+    environment:
+      DARTS_FCM_CREDENTIALS: /run/secrets/darts_fcm.json
+    volumes:
+      - type: bind
+        source: ${DARTS_FCM_KEY_FILE:-/home/ubuntu/.config/clubiq/fcm-service-account.json}
+        target: /run/secrets/darts_fcm.json
+        read_only: true
+        bind:
+          create_host_path: false

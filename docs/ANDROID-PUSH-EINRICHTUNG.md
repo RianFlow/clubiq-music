@@ -23,6 +23,10 @@ iOS/APNs ist in diesem Schritt nicht eingerichtet.
    `DARTS_FCM_CREDENTIALS` auf den **Pfad im Container** setzen. Der unprivilegierte
    Containerbenutzer (UID 10001) muss die Datei lesen können. Ohne diesen Schritt
    bleibt die Aktivierung gesperrt. Die Datei darf nicht in das Docker-Image kopiert werden.
+   Die Vorlage `docker-compose.fcm.yml` bindet die Datei schreibgeschützt ein. Auf dem
+   Darts-VPS liegt der Schlüssel unter `/home/ubuntu/.config/clubiq/fcm-service-account.json`;
+   die Vorlage wird dort als ignorierte `docker-compose.override.yml` installiert,
+   damit auch spätere normale Updates die Push-Konfiguration beibehalten.
 6. Backend bauen/installieren und prüfen: `/api/v1/darts/push/native/config` muss
    `available: true` melden. Das zeigt die verfügbare Konfiguration, noch keine
    erfolgreiche Zustellung.
