@@ -1309,16 +1309,16 @@ function initDarts() {
     for (const result of record.form || []) { const chip=document.createElement('b'); chip.className=result==='S'?'win':result==='N'?'loss':'draw'; chip.textContent=result; form.append(chip); }
     if (!(record.form || []).length) { const empty=document.createElement('small'); empty.textContent='Noch keine Ergebnisse'; form.append(empty); }
     hero.append(identity,form);
-    const teamPhoto=team.code==='B' ? document.createElement('figure') : null;
+    const teamPhoto=['A','B'].includes(team.code) ? document.createElement('figure') : null;
     if (teamPhoto) {
       teamPhoto.className='team-group-photo';
       const wordmark=document.createElement('span'); wordmark.className='team-group-wordmark';
       const clubName=document.createElement('small'); clubName.textContent='SV BARVER DARTS';
-      const teamName=document.createElement('strong'); teamName.textContent='BARVER B';
+      const teamName=document.createElement('strong'); teamName.textContent=`BARVER ${team.code}`;
       wordmark.append(clubName,teamName);
       const crest=document.createElement('img'); crest.className='team-group-crest'; crest.src='/pics/sv-barver-darts-tight-512.webp'; crest.alt=''; crest.width=340; crest.height=340; crest.loading='lazy'; crest.decoding='async';
-      const image=document.createElement('img'); image.className='team-group-players'; image.src='/pics/teams/barver-b-team-cutout.webp?v=20260927-2'; image.alt='Freigestelltes Mannschaftsfoto SV Barver Darts B'; image.width=1600; image.height=738; image.loading='lazy'; image.decoding='async';
-      const caption=document.createElement('figcaption'); caption.textContent='SV Barver Darts B · Mannschaft 2026 / 2027';
+      const image=document.createElement('img'); image.className='team-group-players'; image.src=team.code==='A'?'/pics/teams/barver-a-team-cutout.png?v=20261004-upper1':'/pics/teams/barver-b-team-cutout.webp?v=20260927-2'; image.alt=`Mannschaftsfoto SV Barver Darts ${team.code}`; image.width=team.code==='A'?1846:1600; image.height=team.code==='A'?852:738; image.loading='lazy'; image.decoding='async';
+      const caption=document.createElement('figcaption'); caption.textContent=`SV Barver Darts ${team.code} · Mannschaft 2026 / 2027`;
       teamPhoto.append(wordmark,crest,image,caption);
     }
     const stats=document.createElement('section'); stats.className='team-profile-stats';
