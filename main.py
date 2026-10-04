@@ -11,7 +11,7 @@ import re
 import secrets
 import socket
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
 from typing import Annotated
@@ -709,6 +709,7 @@ class DartsEventUpdate(BaseModel):
     title: str = Field(min_length=1, max_length=100)
     kicker: str | None = Field(default=None, max_length=50)
     description: str | None = Field(default=None, max_length=600)
+    calendar_date: date | None = None
     date_label: str | None = Field(default=None, max_length=100)
     location: str | None = Field(default=None, max_length=120)
     website: str | None = Field(default=None, max_length=500)
@@ -1133,7 +1134,7 @@ def _validated_darts_event(update: DartsEventUpdate) -> dict:
         "title": title,
         "kicker": _clean_profile_text(update.kicker),
         "description": _clean_profile_text(update.description),
-        "date_label": _clean_profile_text(update.date_label),
+        "date_label": _clean_profile_text(update.date_label), "calendar_date": update.calendar_date,
         "location": _clean_profile_text(update.location),
         "website": _https_url(update.website, "Webseite"),
         "button_label": _clean_profile_text(update.button_label),
@@ -1155,13 +1156,13 @@ def _event_dict(row, admin: bool = False) -> dict:
         "description": row[4] or "", "date": row[5] or "", "dateLabel": row[5] or "",
         "location": row[6] or "", "href": row[7] or "", "buttonLabel": row[8] or "",
         "startsAt": row[9], "endsAt": row[10], "priority": int(row[11] or 0),
-        "active": bool(row[15]), "image": image, "hasImage": bool(row[12] or row[13]),
+        "calendarDate": str(row[16]) if len(row)>16 and row[16] else "", "active": bool(row[15]), "image": image, "hasImage": bool(row[12] or row[13]),
     }
 
 
 _DARTS_EVENT_SELECT = """SELECT id, slug, kicker, title, description, date_label, location,
     website, button_label, starts_at, ends_at, priority, (image_data IS NOT NULL), image_path,
-    image_version, active FROM darts_events"""
+    image_version, active, calendar_date FROM darts_events"""
 
 
 def _darts_events(public_only: bool) -> list[dict]:
@@ -1196,6 +1197,15 @@ def darts_events():
                     headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=300"})
 
 
+@app.get("/api/v1/darts/appointments")
+def darts_appointments():
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(f"{_DARTS_EVENT_SELECT} WHERE active=TRUE AND calendar_date >= (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Berlin')::date ORDER BY calendar_date, priority DESC, id;")
+        events = [_event_dict(row) for row in cur.fetchall()]
+    return Response(content=json.dumps({"events": events}, ensure_ascii=False, default=str), media_type="application/json",
+                    headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=300"})
+
+
 @app.get("/api/v1/darts/social-links")
 def darts_social_links():
     return Response(content=json.dumps({"links": _darts_social_links(True)}, ensure_ascii=False, default=str), media_type="application/json",
@@ -1211,9 +1221,9 @@ def darts_admin_events():
 def darts_admin_create_event(update: DartsEventUpdate):
     v = _validated_darts_event(update)
     with db_connect() as conn, conn.cursor() as cur:
-        cur.execute("""INSERT INTO darts_events (title,kicker,description,date_label,location,website,button_label,starts_at,ends_at,priority,active)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id;""",
-            (v["title"],v["kicker"],v["description"],v["date_label"],v["location"],v["website"],v["button_label"],v["starts_at"],v["ends_at"],v["priority"],v["active"]))
+        cur.execute("""INSERT INTO darts_events (title,kicker,description,date_label,location,website,button_label,starts_at,ends_at,priority,active,calendar_date)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id;""",
+            (v["title"],v["kicker"],v["description"],v["date_label"],v["location"],v["website"],v["button_label"],v["starts_at"],v["ends_at"],v["priority"],v["active"],v["calendar_date"]))
         event_id = int(cur.fetchone()[0]); conn.commit()
     return {"status": "success", "id": event_id}
 
@@ -1223,8 +1233,8 @@ def darts_admin_update_event(event_id: int, update: DartsEventUpdate):
     v = _validated_darts_event(update)
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute("""UPDATE darts_events SET title=%s,kicker=%s,description=%s,date_label=%s,location=%s,website=%s,button_label=%s,
-            starts_at=%s,ends_at=%s,priority=%s,active=%s,updated_at=CURRENT_TIMESTAMP WHERE id=%s;""",
-            (v["title"],v["kicker"],v["description"],v["date_label"],v["location"],v["website"],v["button_label"],v["starts_at"],v["ends_at"],v["priority"],v["active"],event_id))
+            starts_at=%s,ends_at=%s,priority=%s,active=%s,calendar_date=%s,updated_at=CURRENT_TIMESTAMP WHERE id=%s;""",
+            (v["title"],v["kicker"],v["description"],v["date_label"],v["location"],v["website"],v["button_label"],v["starts_at"],v["ends_at"],v["priority"],v["active"],v["calendar_date"],event_id))
         if cur.rowcount != 1: raise HTTPException(404, "Veranstaltung nicht gefunden.")
         conn.commit()
     return {"status": "success", "id": event_id}

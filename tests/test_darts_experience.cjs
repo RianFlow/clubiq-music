@@ -1,0 +1,16 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs'),vm=require('node:vm');const context={Intl,Date,TextEncoder,module:{exports:{}}};vm.runInNewContext(fs.readFileSync('static/darts-experience.js','utf8'),context);const {berlinTime,nextTraining,calendar,agenda}=context.module.exports;
+assert.equal(berlinTime('2026-07-07'),'2026-07-07T17:30:00.000Z');
+assert.equal(berlinTime('2026-11-03'),'2026-11-03T18:30:00.000Z');
+assert.equal(nextTraining(Date.parse('2026-10-06T18:00:00Z')).start,'2026-10-08T17:30:00.000Z');
+const now=Date.parse('2026-10-04T12:00:00Z');
+const selected=agenda([{id:1,kind:'upcoming',barverTeam:'A',home:'Barver A',away:'Gast',plannedAt:'2026-10-07T18:00:00Z'},{id:2,kind:'upcoming',barverTeam:'B',plannedAt:'2026-10-05T18:00:00Z'},{id:3,kind:'final',barverTeam:'A',plannedAt:'2026-10-09T18:00:00Z'}],[{id:4,title:'Turnier',calendarDate:'2026-10-05'},{id:5,title:'Banner ohne Veranstaltungstag',startsAt:'2026-10-05T12:00:00Z'}],'A',now);
+assert.deepEqual(Array.from(selected,i=>i.id),['event-4','training-2026-10-06','match-1']);
+const ics=calendar({id:'match-1',title:'Barver A, B; Test\nBEGIN:VEVENT',start:'2026-07-07T17:30:00Z',location:'Straße '+ 'ä'.repeat(100)},new Date(now));
+assert.match(ics,/DTSTART:20260707T173000Z/);
+assert.match(ics,/SUMMARY:Barver A\\, B\\; Test\\nBEGIN:VEVENT/);
+assert.equal(ics.split('\r\n').filter(l=>l==='BEGIN:VEVENT').length,1);
+for(const line of ics.split('\r\n'))assert.ok(Buffer.byteLength(line)<=75,'calendar line exceeds byte limit');
+const allDay=calendar({id:'event-1',title:'Turnier',start:'2026-12-31',allDay:true},new Date(now));
+assert.match(allDay,/DTSTART;VALUE=DATE:20261231/);assert.match(allDay,/DTEND;VALUE=DATE:20270101/);
+console.log('Darts experience: Berlin summer/winter times, upcoming appointments, favorites and safe calendar exports OK');

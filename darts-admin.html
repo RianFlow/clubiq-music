@@ -10,7 +10,7 @@
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
   <link rel="stylesheet" href="/static/darts-admin.css?v=20261004-clear1">
   <script defer src="/static/darts-social-icons.js?v=20261004-clear1"></script>
-  <script defer src="/static/darts-admin.js?v=20261004-clear1"></script>
+  <script defer src="/static/darts-admin.js?v=20261004-experience1"></script>
 <link rel="stylesheet" href="/static/darts-typography.css?v=20261004-type1"></head>
 <body>
   <header class="admin-header">
@@ -109,7 +109,7 @@
               <label>Titel<input id="eventTitle" maxlength="100" required></label><label>Kurztitel<input id="eventKicker" maxlength="50"></label>
               <label class="wide">Beschreibung<textarea id="eventDescription" maxlength="600" rows="4"></textarea></label><label>Datum / Anzeige<input id="eventDate" maxlength="100" placeholder="z. B. Samstag, 15. August"></label><label>Ort<input id="eventLocation" maxlength="120"></label>
               <label class="wide">Webseite<input id="eventHref" type="url" maxlength="500" placeholder="https://…"></label><label>Button-Text<input id="eventButtonLabel" maxlength="40" placeholder="Mehr erfahren"></label><label>Priorität<input id="eventPriority" type="number" min="-1000" max="1000" value="0"></label>
-              <label>Banner sichtbar ab<input id="eventStartsAt" type="datetime-local"></label><label>Banner ausblenden ab<input id="eventEndsAt" type="datetime-local"></label>
+              <label>Kalenderdatum<input id="eventCalendarDate" type="date"><small>Der tatsächliche Veranstaltungstag. Wird als ganztägiger Termin im Kalender gespeichert.</small></label><label>Banner sichtbar ab<input id="eventStartsAt" type="datetime-local"></label><label>Banner ausblenden ab<input id="eventEndsAt" type="datetime-local"></label>
             </div>
             <label class="publish-switch"><input id="eventActive" type="checkbox"><span><strong>Veranstaltung veröffentlichen</strong><small>Zum Veröffentlichen ein Ende festlegen. Danach wird das Banner automatisch ausgeblendet. Ohne Beginn erscheint es sofort.</small></span></label>
             <div class="form-actions"><button type="submit">Veranstaltung speichern</button><button id="deleteEvent" type="button" class="secondary danger">Veranstaltung löschen</button><a href="/darts" target="_blank" rel="noopener">Öffentliche Seite ansehen</a></div><p id="eventFormStatus" role="status" hidden></p>

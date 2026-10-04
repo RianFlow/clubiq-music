@@ -38,6 +38,7 @@ jobs:
           node tests/test_darts.cjs
           node tests/test_darts_home.cjs
           node tests/test_darts_history.cjs
+          node tests/test_darts_experience.cjs
       - name: Getrennte Musikbereiche im Browser prüfen
         run: |
           npm install --prefix "$RUNNER_TEMP/music-browser-tests" --no-audit --no-fund --package-lock=false playwright@1.62.1
