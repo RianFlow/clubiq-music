@@ -28,9 +28,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from db_config import connection_kwargs
+from darts_ranking import get_darts_ranking
 from darts_feed import DartsFeedUnavailable, get_darts_center, get_darts_feed, get_darts_match, get_darts_player_stats, get_darts_season
 from darts_live import darts_live_hub
-from darts_tournament import get_tournament, preview_tournament, SOURCE as DEFAULT_TOURNAMENT_SOURCE
+from darts_tournament import get_tournament, get_series_tournament, preview_tournament, SOURCE as DEFAULT_TOURNAMENT_SOURCE
 from darts_push import barver_push_candidates, push_payload, valid_push_endpoint, valid_push_key, subscription_matches, PUSH_EVENT_TYPES
 from radio_directory import DirectoryUnavailable, get_station, search_stations
 from radio_logos import CACHE_SECONDS, FAILURE_SECONDS, cached_logo
@@ -860,9 +861,15 @@ def tournament_display():
 
 
 @app.get("/api/v1/darts/tournament")
-def tournament_feed(response: Response):
+def tournament_feed(response: Response, event_id: int | None = None):
     response.headers["Cache-Control"] = "no-store"
     try:
+        if event_id is not None:
+            ranking = get_darts_ranking()
+            event = next((item for item in ranking["events"] if item["id"] == event_id), None)
+            if event is None:
+                raise HTTPException(status_code=404, detail="Dieses Turnier gehört nicht zur DBD-Rangliste.")
+            return get_series_tournament(event["sourceUrl"])
         return get_tournament(_tournament_setting()["source"])
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -981,6 +988,14 @@ def darts_center(league: str = "kl04", round_id: int | None = None):
         return get_darts_center(league, round_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except DartsFeedUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/v1/darts/ranking")
+def darts_ranking():
+    try:
+        return get_darts_ranking()
     except DartsFeedUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 

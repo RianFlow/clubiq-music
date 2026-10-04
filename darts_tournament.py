@@ -178,3 +178,30 @@ def get_tournament(source=SOURCE):
                 raise RuntimeError("Turnierdaten vorübergehend nicht erreichbar") from exc
             _cache = {**_cache, "stale": True}
         return _cache
+
+
+_series_cache = {}
+_series_lock = Lock()
+
+
+def get_series_tournament(source):
+    """Keep independently selected ranking rounds separate from the admin default."""
+    key = tournament_source(source)[:2]
+    with _series_lock:
+        cached = _series_cache.get(key)
+        now = time.monotonic()
+        if cached and now - cached[0] < 15:
+            if cached[1] is None:
+                raise RuntimeError("Turnierdaten vorübergehend nicht erreichbar")
+            return cached[1]
+        try:
+            result = _load(source)
+        except (requests.RequestException, ValueError, TypeError, KeyError, AttributeError) as exc:
+            result = {**cached[1], "stale": True} if cached and cached[1] else None
+            if result is None:
+                _series_cache[key] = (now, None)
+                raise RuntimeError("Turnierdaten vorübergehend nicht erreichbar") from exc
+        if len(_series_cache) >= 32 and key not in _series_cache:
+            del _series_cache[min(_series_cache, key=lambda item: _series_cache[item][0])]
+        _series_cache[key] = (now, result)
+        return result

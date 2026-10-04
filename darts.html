@@ -11,11 +11,11 @@
   <link rel="preload" href="/pics/sv-barver-darts-tight-512.webp" as="image" type="image/webp">
   <link rel="stylesheet" href="/static/darts.css?v=20261002-home4">
   <link rel="stylesheet" href="/static/darts-broadcast.css?v=20261004-alias1">
-  <link rel="stylesheet" href="/static/darts-theme.css?v=20261004-experience1">
+  <link rel="stylesheet" href="/static/darts-theme.css?v=20261005-dbd-ranking">
   <script defer src="/static/darts-broadcast.js?v=20261004-alias1"></script>
   <script defer src="/static/darts-social-icons.js?v=20261004-clear1"></script>
   <script defer src="/static/darts-experience.js?v=20261004-experience1"></script>
-  <script defer src="/static/darts.js?v=20261005-away-venues"></script>
+  <script defer src="/static/darts.js?v=20261005-dbd-ranking"></script>
 <link rel="stylesheet" href="/static/darts-typography.css?v=20261004-type1"></head>
 <body>
   <header class="darts-header">
@@ -27,6 +27,7 @@
         <div class="more-navigation-menu">
           <a class="tournament-menu-link" href="/turnier">Turniere live ↗</a>
           <button id="membersView" type="button">Mitglieder</button>
+          <button id="rankingView" type="button">DBD Rangliste</button>
           <button id="trainingView" type="button">Training</button>
           <button id="personalSettingsToggle" type="button">Meine Darts</button>
         </div>
@@ -168,6 +169,15 @@
       <div class="team-tools"><button id="reloadActivity" type="button">Aktualisieren</button><a class="external" href="https://portal.3k-darts.com/frontend/events/5/mandant/1931" target="_blank" rel="noopener noreferrer">Bei 3K öffnen ↗</a></div>
       <div id="activityFrame" class="frame-wrap"><div class="placeholder"><strong>Offizielle Veranstalterübersicht</strong><p>Beim Öffnen von „Aktuelles“ werden die neuesten Einträge von SV Barver direkt bei 3K geladen.</p></div></div>
       <p id="activityNote" class="frame-note">Die Übersicht wird von 3K gepflegt. Neue dort veröffentlichte Veranstaltungen erscheinen hier ohne neuen Link in ClubIQ.</p>
+    </section>
+    <section id="rankingPanel" class="sports-panel" aria-labelledby="rankingHeading" hidden>
+      <div class="team-head"><span class="team-letter">R</span><div><h2 id="rankingHeading">DBD Rangliste 2026</h2><p>Die gemeinsame Turnierserie von Barver, Diepholz und Drebber.</p></div></div>
+      <div class="team-tools"><button id="reloadRanking" type="button">Aktualisieren</button><a class="external" href="https://portal.3k-darts.com/frontend/events/5/ranking/1931/series/1282/list" target="_blank" rel="noopener noreferrer">Gesamtwertung bei 3K ↗</a></div>
+      <p id="rankingStatus" role="status">Rangliste wird beim Öffnen geladen.</p>
+      <div class="ranking-controls"><label>Spieler suchen<input id="rankingSearch" type="search" placeholder="Name eingeben" autocomplete="off"></label><label>Punkte einer Runde<select id="rankingRound"><option value="">Alle Runden</option></select></label></div>
+      <p class="subtle">Platz und Gesamtpunkte entsprechen der offiziellen 3K-Gesamtwertung. Die Rundenauswahl zeigt zusätzlich die Punkte dieser Runde.</p>
+      <div class="ranking-table-wrap" tabindex="0" role="region" aria-label="DBD-Gesamtwertung"><table class="ranking-table"><thead><tr><th scope="col">Platz</th><th scope="col">Spieler</th><th scope="col">Punkte</th><th scope="col">Teilnahmen</th><th scope="col">Ø Punkte</th><th id="rankingRoundHeading" scope="col" hidden>Rundenpunkte</th></tr></thead><tbody id="rankingRows"></tbody></table></div>
+      <h3>Turnierrunden</h3><p id="rankingNext"></p><div id="rankingEvents" class="next-appointments-list"></div>
     </section>
     <section id="trainingPanel" class="team-card" aria-labelledby="trainingHeading" hidden>
       <div class="team-head"><span class="team-letter">T</span><div><h2 id="trainingHeading">Vereinstraining</h2><p id="trainingLabel">Training 22.09.2026</p></div></div>

@@ -20,6 +20,7 @@ const server=http.createServer((req,res)=>{
     let data={};
     if(p==='/api/v1/darts/presence') data={online:7,windowSeconds:120,demo:true};
     if(p.endsWith('/ticker')) data={items:matches,updatedAt:now(),stale:false};
+    if(p.endsWith('/ranking')) data={name:'DBD Rangliste 2026',updatedAt:now(),events:[{id:30458,name:'DBD 9. Runde',start:day(-2),city:'Diepholz',sourceUrl:'https://portal.3k-darts.com/frontend/events/5/event/30458/participants'}],rows:[{rank:3,name:'Jannik Kläning',points:122,appearances:6,average:20.3,rounds:[{id:30458,points:0,rated:true}]},{rank:1,name:'<script>Test</script>',points:128,appearances:7,average:18.3,rounds:[]}]};
     if(p.endsWith('/season')) data={matches,teams,updatedAt:now(),specialEvents:[{id:500,name:'Bezirkspokal',badge:'POKAL',matchCount:1}]};
     if(p.endsWith('/center')) data={league:{key:url.searchParams.get('league'),short:'DEMO'},selectedRound:{id:1,name:'Spieltag 1'},rounds:[{id:1,name:'Spieltag 1'}],standings:[{id:1,rank:1,name:'Demo-Team',played:3,wins:2,draws:1,losses:0,pointsFor:5,pointsAgainst:1,setsFor:24,setsAgainst:12,legsFor:70,legsAgainst:41}],updatedAt:now(),barverMatches:matches.filter(m=>m.kind==='live'),pushEvents:matches.filter(m=>m.kind==='live').flatMap(m=>[1,2].map(i=>({type:'live_game',matchId:m.id,homeName:i===1?'Jannik Kläning':'Spieler Zwei',awayName:`Gast ${i}`,homeRemaining:i===1?320:201,awayRemaining:410,homeLegs:2,awayLegs:1,currentSide:'home'})))};
     if(p==='/api/v1/darts/matches/901')data={match:matches[0],games:[{number:1,status:'FINISH',block:'Einzel',home:{name:'Jannik Kläning',average:45},away:{name:'Gast',average:40},homeLegs:3,awayLegs:1}],liveGames:[],performances:[],sourceUrl:'https://portal.3k-darts.com/'};
@@ -238,6 +239,10 @@ const server=http.createServer((req,res)=>{
     await quiet.setViewportSize({width:1440,height:1000});
     await quiet.screenshot({path:path.join(root,'outputs/darts-home-quiet-desktop.png'),fullPage:true});
     await quiet.close();
+    await page.locator('#moreNavigation summary').click();await page.click('#rankingView');await page.locator('#rankingRows tr').first().waitFor();
+    assert.equal(await page.locator('#rankingRows tr').count(),2);assert.equal(await page.locator('#rankingRows script').count(),0);
+    await page.fill('#rankingSearch','Jannik');assert.equal(await page.locator('#rankingRows tr').count(),1);await page.selectOption('#rankingRound','30458');assert.equal(await page.locator('#rankingRows tr td').last().innerText(),'0');
+    assert.equal(await page.locator('#rankingEvents a[href="/turnier?event=30458"]').count(),1);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     assert.deepEqual(errors,[]);
     console.log('Browser: homepage, two boards, favorites, filters, saved player/type preferences, reconnect, mobile OK');
   } finally {await browser.close();server.close();}
