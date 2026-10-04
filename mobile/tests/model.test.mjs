@@ -8,7 +8,8 @@ test('only public read endpoints and public links',()=>{
   assert.equal(publicLink('/turnier?tv=1'),'https://barverdarts.clubiq.party/turnier?tv=1');
 });
 test('preferences whitelist and preserve opt-out',()=>{
-  assert.deepEqual(cleanPreferences({favorite:'Z',teams:['A','A','Z'],eventTypes:[]}),{favorite:'',teams:['A'],eventTypes:[]});
+  assert.deepEqual(cleanPreferences({favorite:'Z',teams:['A','A','Z'],eventTypes:[]}),{favorite:'',teams:['A'],players:[],eventTypes:[]});
+  assert.deepEqual(cleanPreferences({players:[' Jannik ','Jannik',null,'','x'.repeat(101)]}).players,['Jannik']);
 });
 test('every simultaneous fresh board appears, never empty/old/retired watchers',()=>{
   const now=Date.now(),board={active:true,finished:false,lastUpdateNs:now*1e6};

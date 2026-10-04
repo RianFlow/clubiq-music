@@ -4,15 +4,16 @@
 
 Separate, lokal gebündelte Capacitor-Oberfläche für Android und iOS. Kein eingebetteter
 Verwaltungszugang und keine administrative API. Die produktive Website bleibt unverändert.
-**Noch keine installierbare, signierte APK/IPA, keine Store-Veröffentlichung und keine native Pushzustellung.**
+**Android-Test-APK lokal gebaut. Keine Store-Veröffentlichung/IPA; echte native Pushzustellung noch nicht eingerichtet oder am Handy bestätigt.**
 
 - Startseite, Spiele, vier Mannschaften, Kader und persönliche Spielerangaben.
 - Alle gleichzeitig aktiven Boards mit Leg-Punkten, Spielbericht mit Averages.
-- Lieblingsmannschaft, vorbereitete Ereignisauswahl, öffentliche Highlights.
+- Lieblingsmannschaft, Team-/Spieler-/Ereignisauswahl, öffentliche Highlights.
 - Lokaler letzter bekannter Datenstand; automatische erneute Versuche im Vordergrund.
 - Öffentliche Daten ausschließlich vom bestehenden ClubIQ-Server. Kein direkter 3K-Abruf pro Gerät.
 - Eigene lokale Oberfläche statt beliebiger fremder Webseiten in einer privilegierten WebView.
-- Native Push-Empfangs-/Registrierungshooks vorbereitet, aber bewusst nicht aktiviert.
+- Android-Push-Anbindung, Aktivierung/Abmeldung, Testmeldung und lokaler Empfangsverlauf implementiert;
+  ohne Firebase-Datei und Serverkonfiguration bewusst gesperrt.
 
 ## Lokal starten
 
@@ -64,22 +65,22 @@ App-ID vor Anmeldung in den Stores verbindlich festlegen: aktuell `party.clubiq.
 Die erzeugten nativen Projekte sind vorläufig lokale Artefakte. Sobald native Anpassungen verbindlich
 sind, diese ohne Signaturdateien/Firebase-Dateien gezielt ins Repository übernehmen.
 
-## Nächster Schritt: echte native Pushzustellung
+## Android-Push einrichten
 
-1. Entwicklerkonten durch den Verein anlegen; Identität, Gebühren und rechtliche Angaben selbst bestätigen.
-2. Android: Firebase-Projekt/App, `google-services.json`, serverseitige FCM-v1-Zugangsdaten.
-3. iOS: Push-Capability, APNs-Schlüssel/Team-/Key-ID, Signing und AppDelegate-Callbacks gemäß Capacitor.
-4. Server: eigene native Geräte-Abos mit widerrufbarer Geräteauthentifizierung, APNs-/FCM-Sender,
-   persistente Versandwarteschlange, kurze Gültigkeit, Wiederholungsversuche, Deduplizierung,
-   Entfernung ungültiger Tokens, Team-/Spieler-/Ereignisfilter und sichere Testmeldung.
-   Bestehende Erkennung aus `darts_live`/`darts_push` wiederverwenden; Web-Push nicht ersetzen.
-5. Den vorbereiteten Client-Transport anschließen und Abowünsche an den Server synchronisieren.
-   Keine Freigabeanzeige nur aufgrund einer Betriebssystem-Erlaubnis.
-6. Auf echten Geräten bei geöffneter, geschlossener und gesperrter App testen; Datenschutzangaben
-   und Store-Unterlagen vervollständigen. Versandannahme ist keine garantierte Anzeige am Gerät.
+Die vollständige Einrichtung steht in [ANDROID-PUSH-EINRICHTUNG.md](../docs/ANDROID-PUSH-EINRICHTUNG.md).
+Firebase-App-Datei lokal ablegen, private Server-Zugangsdaten getrennt einbinden,
+Backend installieren und APK neu bauen. Dafür ist noch kein Play-Store-Entwicklerkonto nötig.
+Eine vorhandene Test-APK ohne Firebase-Konfiguration aktiviert Push nicht nachträglich.
 
-`createNativePush` bleibt ohne konfigurierten Transport gesperrt. Es werden aktuell keine
-Gerätetokens abgefragt oder übertragen. Die gespeicherte Ereignisauswahl ist noch kein Server-Abo.
+Der Transport verwendet ausschließlich vier eigene öffentliche Native-Push-Endpunkte;
+Geräteänderungen benötigen einen zufälligen 256-Bit-Geräteschlüssel. Die Aktivierung
+fragt erst nach Android-Erlaubnis, wenn App und Server konfiguriert sind. Der Server
+nutzt dieselben Sportereignisse wie Web-Push, mit eigener dauerhafter Versandwarteschlange.
+„Angemeldet“ heißt Registrierung bestätigt, nicht Zustellung am Handy garantiert.
+Die Testmeldung ist auf das eigene angemeldete Gerät begrenzt.
+
+Ohne Firebase-Konfiguration werden keine Gerätetokens abgefragt oder übertragen.
+Für iOS fehlen noch APNs-Zugang, Signing, native Konfiguration und Gerätetests.
 Apple-/Firebase-Privatschlüssel und Signaturdateien gehören ausschließlich in geschützte lokale
 Dateien bzw. Server-/CI-Secrets – niemals ins Repository oder in den Chat.
 
@@ -94,8 +95,9 @@ werden nicht als frisch live ausgegeben. Ohne öffentliche 3K-Live-Daten können
 Punkte erfunden oder angezeigt werden.
 
 Noch keine eigene Turnieransicht oder detaillierte Tabellen/Spielerstatistiken in der App;
-Turnier und rechtliche Seiten öffnen gezielt im Systembrowser. Noch keine Spieler-Abos,
-kein echter Zustellverlauf, keine native Offline-/Hintergrund-Pushprüfung. Die vorbereitete
+Turnier und rechtliche Seiten öffnen gezielt im Systembrowser. Der lokale Meldungsverlauf
+enthält nur in der geöffneten App empfangene oder angetippte Meldungen, nicht jede
+ungeöffnete Hintergrundmeldung. Keine bestätigte Pushzustellung ohne Firebase und Gerätetest. Die vorbereitete
 App ist eine erste Grundlage und ersetzt nicht die vollständigere Website.
 
 Offizielle Grundlagen:

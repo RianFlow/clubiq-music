@@ -19,3 +19,13 @@ test('server registration failures never show active',async()=>{
 test('denied permission never registers',async()=>{
   const f=fixture();f.plugin.requestPermissions=async()=>({receive:'denied'});await createNativePush(f.options).enable();assert.deepEqual(f.states,['denied']);assert.deepEqual(f.calls,[]);
 });
+test('disable while registration is in flight never reactivates and removes late subscription',async()=>{
+  const f=fixture();let complete;f.transport.subscribe=()=>new Promise(resolve=>{complete=resolve;});f.transport.unsubscribe=async()=>f.calls.push('unsubscribe');
+  const push=createNativePush(f.options);await push.enable();const pending=f.listeners.registration({value:'token'});await push.disable();complete();await pending;
+  assert(!f.states.includes('active'));assert.equal(f.calls.filter(x=>x==='unsubscribe').length,2);
+});
+test('preferences sync re-registers and test uses owned token',async()=>{
+  const f=fixture();f.transport.test=async({token})=>f.calls.push('test-'+token);const push=createNativePush(f.options);
+  await assert.rejects(push.test());await push.enable();await f.listeners.registration({value:'token'});await push.sync();await push.test();
+  assert.equal(f.calls.filter(x=>x==='subscribe').length,2);assert(f.calls.includes('test-token'));
+});

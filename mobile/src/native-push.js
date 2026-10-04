@@ -1,15 +1,16 @@
-// Native transport is deliberately not enabled until a server-side APNs/FCM
-// registration and delivery service is configured. Never confuse permission with delivery.
-export function createNativePush({plugin,transport,onReceived,onOpen,onStatus,platform}){
-  let ready=false,handles=[],token=null;
+// Gate native registration on configured server delivery. Permission is not delivery.
+export function createNativePush({plugin,transport,onReceived,onOpen,onStatus,platform,initialToken=null}){
+  let ready=false,handles=[],token=initialToken,enabled=false,generation=0;
   async function prepare(){
     if(ready)return;
     handles.push(await plugin.addListener('registration',async result=>{
+      if(!enabled)return;
+      const current=generation;
       token=result.value;
-      try{await transport.subscribe({platform,token});onStatus('active');}catch(_){onStatus('registration_failed');}
+      try{await transport.subscribe({platform,token});if(enabled&&current===generation)onStatus('active');else await transport.unsubscribe({platform,token:result.value});}catch(_){if(enabled&&current===generation)onStatus('registration_failed');}
     }));
-    handles.push(await plugin.addListener('registrationError',()=>onStatus('registration_failed')));
-    handles.push(await plugin.addListener('pushNotificationReceived',onReceived));
+    handles.push(await plugin.addListener('registrationError',()=>{if(enabled)onStatus('registration_failed');}));
+    handles.push(await plugin.addListener('pushNotificationReceived',n=>{if(enabled)onReceived(n);}));
     handles.push(await plugin.addListener('pushNotificationActionPerformed',action=>onOpen(action.notification)));
     ready=true;
   }
@@ -20,10 +21,13 @@ export function createNativePush({plugin,transport,onReceived,onOpen,onStatus,pl
       let permission=await plugin.checkPermissions();
       if(['prompt','prompt-with-rationale'].includes(permission.receive))permission=await plugin.requestPermissions();
       if(permission.receive!=='granted'){onStatus('denied');return;}
+      enabled=true;generation++;
       if(platform==='android')await plugin.createChannel({id:'barver-sport',name:'Barver Darts',description:'Spielstände und Highlights',importance:4,visibility:1,vibration:true});
-      onStatus('registering');await plugin.register();
+      onStatus('registering');try{await plugin.register();}catch(error){onStatus('registration_failed');throw error;}
     },
-    async disable(){if(token)await transport.unsubscribe({platform,token});await plugin.unregister();token=null;onStatus('off');},
+    async sync(){if(!enabled||!token)return;const current=generation;try{await transport.subscribe({platform,token});if(enabled&&current===generation)onStatus('active');}catch(_){if(enabled&&current===generation)onStatus('registration_failed');}},
+    async test(){if(!enabled||!token)throw new Error('Bitte zuerst Pushmeldungen aktivieren.');await transport.test({platform,token});},
+    async disable(){enabled=false;generation++;if(token)await transport.unsubscribe({platform,token});await plugin.unregister();token=null;onStatus('off');},
     async dispose(){for(const handle of handles)await handle.remove();handles=[];ready=false;}
   };
 }

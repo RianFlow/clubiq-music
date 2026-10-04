@@ -11,3 +11,5 @@ cloudflared
 cloudflared.deb
 *.sql.gz
 backups/
+secrets/
+*-firebase-adminsdk-*.json

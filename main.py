@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
+from typing import Annotated
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -54,6 +55,51 @@ MAX_SOUNDBOARD_BYTES = 3 * 1024 * 1024
 DARTS_VAPID_PUBLIC_KEY = os.getenv("DARTS_VAPID_PUBLIC_KEY", "").strip()
 DARTS_VAPID_PRIVATE_KEY = os.getenv("DARTS_VAPID_PRIVATE_KEY", "").strip()
 DARTS_VAPID_SUBJECT = os.getenv("DARTS_VAPID_SUBJECT", "https://barverdarts.clubiq.party").strip()
+DARTS_FCM_CREDENTIALS = os.getenv("DARTS_FCM_CREDENTIALS", "").strip()
+_firebase_admin_app = None
+_firebase_admin_lock = Lock()
+_native_push_status = {"sent": 0, "failed": 0, "lastError": None}
+
+try:
+    import firebase_admin
+    from firebase_admin import credentials as firebase_credentials, messaging as firebase_messaging
+except ImportError:  # FCM remains optional for local/dev installs.
+    firebase_admin = firebase_credentials = firebase_messaging = None
+
+
+def native_fcm_configured() -> bool:
+    return bool(DARTS_FCM_CREDENTIALS and firebase_admin and Path(DARTS_FCM_CREDENTIALS).is_file())
+
+
+def _native_fcm_send(token: str, payload: dict) -> None:
+    """Send one message; credential contents are only ever consumed by the SDK."""
+    global _firebase_admin_app
+    if not native_fcm_configured():
+        raise RuntimeError("FCM is not configured")
+    with _firebase_admin_lock:
+        if _firebase_admin_app is None:
+            _firebase_admin_app = firebase_admin.initialize_app(
+                firebase_credentials.Certificate(DARTS_FCM_CREDENTIALS),
+                options={"httpTimeout": 5},
+                name="clubiq-darts-native-push",
+            )
+    message = firebase_messaging.Message(
+        token=token,
+        notification=firebase_messaging.Notification(
+            title=str(payload.get("title") or "ClubIQ Darts")[:120],
+            body=str(payload.get("body") or "")[:240],
+        ),
+        data={key: str(payload.get(key) or "")[:500] for key in
+              ("url", "tag", "eventId", "matchId", "eventType", "team", "player")},
+        android=firebase_messaging.AndroidConfig(
+            priority="high", ttl=300,
+            notification=firebase_messaging.AndroidNotification(
+                tag=str(payload.get("tag") or "clubiq-darts")[:100],
+                channel_id="barver-sport",
+            ),
+        ),
+    )
+    firebase_messaging.send(message, app=_firebase_admin_app)
 
 try:
     from pywebpush import WebPushException, webpush
@@ -316,6 +362,26 @@ def _store_and_deliver_darts_events(detected: list[dict], stale: bool = False) -
                 new_events.append(event)
         cur.execute("SELECT endpoint, p256dh, auth, teams, players, event_types FROM darts_push_subscriptions WHERE enabled = TRUE;")
         subscriptions = cur.fetchall()
+        cur.execute("SELECT token_hash, teams, players, event_types FROM darts_native_push_subscriptions WHERE enabled = TRUE;")
+        native_subscriptions = cur.fetchall()
+        for event in new_events:
+            if not event.get("deliver"):
+                continue
+            for token_digest, teams, players, event_types in native_subscriptions:
+                if subscription_matches(event, teams or [], players or [], event_types or []):
+                    cur.execute(
+                        """INSERT INTO darts_native_push_outbox
+                           (event_id, token_hash, payload, expires_at)
+                           VALUES (%s, %s, %s::jsonb, CURRENT_TIMESTAMP + INTERVAL '5 minutes')
+                           ON CONFLICT (event_id, token_hash) DO NOTHING;""",
+                        (event["event_id"], token_digest, json.dumps({
+                            **json.loads(push_payload(event)), "eventId": event["event_id"],
+                            "matchId": str(event.get("match_id") or ""),
+                            "eventType": str(event.get("event_type") or ""),
+                            "team": str(event.get("team") or ""),
+                            "player": str(event.get("player") or ""),
+                        })),
+                    )
         conn.commit()
     expired, sent, failed = [], 0, 0
     for event in new_events:
@@ -345,6 +411,74 @@ def _store_and_deliver_darts_events(detected: list[dict], stale: bool = False) -
         "lastError": "3K liefert zwischengespeicherte Daten." if stale else None,
         "detected": len(detected), "sent": sent, "failed": failed,
     })
+
+
+def deliver_native_darts_push_outbox() -> None:
+    """Deliver only recent queued events, with bounded retries and no secret logging."""
+    if not native_fcm_configured():
+        return
+    try:
+        with db_connect() as conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM darts_native_push_outbox WHERE expires_at <= CURRENT_TIMESTAMP OR (sent_at IS NULL AND attempts >= 8);")
+            cur.execute("""SELECT o.id, o.token_hash, s.token, o.payload, o.attempts
+                          FROM darts_native_push_outbox o
+                          JOIN darts_native_push_subscriptions s ON s.token_hash=o.token_hash AND s.enabled=TRUE
+                          WHERE o.sent_at IS NULL AND o.expires_at>CURRENT_TIMESTAMP
+                            AND o.next_attempt_at<=CURRENT_TIMESTAMP AND o.attempts<8
+                          ORDER BY o.id LIMIT 5 FOR UPDATE OF o SKIP LOCKED;""")
+            rows = cur.fetchall()
+            for outbox_id, _, _, _, attempts in rows:
+                cur.execute("UPDATE darts_native_push_outbox SET attempts=attempts+1, next_attempt_at=CURRENT_TIMESTAMP + INTERVAL '60 seconds' WHERE id=%s;", (outbox_id,))
+            conn.commit()
+        for outbox_id, token_digest, token, payload, _attempts in rows:
+            try:
+                event_payload = payload if isinstance(payload, dict) else json.loads(payload)
+                with db_connect() as conn, conn.cursor() as cur:
+                    cur.execute("SELECT teams, players, event_types FROM darts_native_push_subscriptions WHERE token_hash=%s AND enabled=TRUE;", (token_digest,))
+                    current_filters = cur.fetchone()
+                is_test = event_payload.get("isTest") is True
+                if not current_filters or (not is_test and not subscription_matches({
+                    "team": event_payload.get("team"), "player": event_payload.get("player"),
+                    "event_type": event_payload.get("eventType"),
+                }, current_filters[0] or [], current_filters[1] or [], current_filters[2] or [])):
+                    with db_connect() as conn, conn.cursor() as cur:
+                        cur.execute("UPDATE darts_native_push_outbox SET sent_at=CURRENT_TIMESTAMP WHERE id=%s;", (outbox_id,))
+                        conn.commit()
+                    continue
+                _native_fcm_send(token, event_payload)
+                with db_connect() as conn, conn.cursor() as cur:
+                    cur.execute("UPDATE darts_native_push_outbox SET sent_at=CURRENT_TIMESTAMP WHERE id=%s;", (outbox_id,))
+                    conn.commit()
+                _native_push_status.update(sent=_native_push_status["sent"] + 1, lastError=None)
+            except Exception as exc:
+                if firebase_messaging and isinstance(exc, firebase_messaging.UnregisteredError):
+                    with db_connect() as conn, conn.cursor() as cur:
+                        cur.execute("UPDATE darts_native_push_subscriptions SET enabled=FALSE, updated_at=CURRENT_TIMESTAMP WHERE token_hash=%s;", (token_digest,))
+                        cur.execute("UPDATE darts_native_push_outbox SET sent_at=CURRENT_TIMESTAMP WHERE token_hash=%s AND sent_at IS NULL;", (token_digest,))
+                        conn.commit()
+                else:
+                    delay = min(1800, 15 * (2 ** min(_attempts, 7)))
+                    with db_connect() as conn, conn.cursor() as cur:
+                        cur.execute("UPDATE darts_native_push_outbox SET next_attempt_at=CURRENT_TIMESTAMP + (%s * INTERVAL '1 second') WHERE id=%s AND sent_at IS NULL;", (delay, outbox_id))
+                        conn.commit()
+                _native_push_status.update(failed=_native_push_status["failed"] + 1, lastError=type(exc).__name__)
+                print(f"[DARTS FCM] Zustellung fehlgeschlagen ({type(exc).__name__}).")
+    except psycopg.Error as exc:
+        _native_push_status["lastError"] = type(exc).__name__
+        print(f"[DARTS FCM] Outbox nicht erreichbar ({type(exc).__name__}).")
+
+
+def cleanup_native_darts_push() -> None:
+    """Bound abandoned rate-limit and subscription records even when FCM is off."""
+    try:
+        with db_connect() as conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM darts_native_push_rate_limits WHERE window_started_at < CURRENT_TIMESTAMP - INTERVAL '1 day';")
+            cur.execute("DELETE FROM darts_native_push_outbox WHERE expires_at <= CURRENT_TIMESTAMP;")
+            cur.execute("DELETE FROM darts_native_push_outbox o USING darts_native_push_subscriptions s WHERE o.token_hash=s.token_hash AND s.updated_at < CURRENT_TIMESTAMP - INTERVAL '90 days';")
+            cur.execute("DELETE FROM darts_native_push_subscriptions WHERE updated_at < CURRENT_TIMESTAMP - INTERVAL '90 days';")
+            conn.commit()
+    except psycopg.Error as exc:
+        print(f"[DARTS FCM] Cleanup nicht möglich ({type(exc).__name__}).")
 
 
 def poll_darts_push_events() -> None:
@@ -420,6 +554,8 @@ async def lifespan(_: FastAPI):
     scheduler.add_job(close_expired_cycles, "interval", minutes=1)
     scheduler.add_job(collect_playback_history, "interval", seconds=30, max_instances=1, next_run_time=datetime.now(timezone.utc))
     scheduler.add_job(poll_darts_push_events, "interval", seconds=45, max_instances=1, next_run_time=datetime.now(timezone.utc))
+    scheduler.add_job(deliver_native_darts_push_outbox, "interval", seconds=10, max_instances=1, coalesce=True)
+    scheduler.add_job(cleanup_native_darts_push, "interval", hours=24, max_instances=1, coalesce=True)
     scheduler.add_job(sync_darts_live_groups, "interval", seconds=10, max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(seconds=2))
     scheduler.add_job(deliver_darts_live_events, "interval", seconds=2, max_instances=1, coalesce=True)
     scheduler.add_job(warm_darts_season, "interval", minutes=9, max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(seconds=12))
@@ -495,6 +631,15 @@ class DartsPushSubscribe(BaseModel):
 
 class DartsPushUnsubscribe(BaseModel):
     endpoint: str = Field(min_length=20, max_length=2048)
+
+
+class DartsNativePushRequest(BaseModel):
+    platform: str = Field(pattern=r"^android$")
+    token: str = Field(min_length=100, max_length=4096, pattern=r"^[A-Za-z0-9:_-]+$")
+    deviceSecret: str = Field(pattern=r"^[a-fA-F0-9]{64}$")
+    teams: list[str] = Field(default_factory=lambda: ["A", "B", "C", "D"], max_length=4)
+    players: list[Annotated[str, Field(min_length=1, max_length=100)]] = Field(default_factory=list, max_length=100)
+    eventTypes: list[str] = Field(default_factory=lambda: sorted(PUSH_EVENT_TYPES), max_length=5)
 
 
 class DartsPresenceHeartbeat(BaseModel):
@@ -1631,6 +1776,125 @@ def darts_push_config():
         "available": bool(DARTS_VAPID_PUBLIC_KEY and DARTS_VAPID_PRIVATE_KEY and webpush),
         "publicKey": DARTS_VAPID_PUBLIC_KEY,
     }
+
+
+@app.get("/api/v1/darts/push/native/config")
+def darts_native_push_config():
+    return {"available": native_fcm_configured(), "eventTypes": sorted(PUSH_EVENT_TYPES),
+            "teams": ["A", "B", "C", "D"], "players": []}
+
+
+def _native_push_filters(payload: DartsNativePushRequest) -> tuple[list[str], list[str], list[str]]:
+    teams = sorted(set(payload.teams))
+    players = sorted({name.strip() for name in payload.players})
+    event_types = sorted(set(payload.eventTypes))
+    if any(team not in {"A", "B", "C", "D"} for team in teams):
+        raise HTTPException(status_code=422, detail="Ungültige Mannschaftsauswahl.")
+    if (any(not name or len(name) > 100 for name in players)
+            or any(kind not in PUSH_EVENT_TYPES for kind in event_types)):
+        raise HTTPException(status_code=422, detail="Ungültige Meldungsauswahl.")
+    return teams, players, event_types
+
+
+def _native_push_hashes(payload: DartsNativePushRequest) -> tuple[str, str]:
+    return token_hash(payload.token), token_hash(payload.deviceSecret.lower())
+
+
+def _native_push_rate_limit(request: Request, action: str, maximum: int = 120) -> None:
+    client_address = request.client.host if request.client else "unknown"
+    client_digest = token_hash(client_address)
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("""INSERT INTO darts_native_push_rate_limits
+                    (client_hash, action, window_started_at, hits)
+                    VALUES (%s,%s,CURRENT_TIMESTAMP,1)
+                    ON CONFLICT (client_hash, action) DO UPDATE SET
+                      window_started_at=CASE
+                        WHEN darts_native_push_rate_limits.window_started_at <= CURRENT_TIMESTAMP - INTERVAL '1 minute'
+                        THEN CURRENT_TIMESTAMP ELSE darts_native_push_rate_limits.window_started_at END,
+                      hits=CASE
+                        WHEN darts_native_push_rate_limits.window_started_at <= CURRENT_TIMESTAMP - INTERVAL '1 minute'
+                        THEN 1 ELSE darts_native_push_rate_limits.hits + 1 END
+                    RETURNING hits;""", (client_digest, action))
+        hits = cur.fetchone()[0]
+        conn.commit()
+    if hits > maximum:
+        raise HTTPException(status_code=429, detail="Zu viele Push-Anfragen. Bitte später erneut versuchen.")
+
+
+@app.post("/api/v1/darts/push/native/subscribe", status_code=201)
+def darts_native_push_subscribe(payload: DartsNativePushRequest, request: Request,
+                                x_clubiq_push: str | None = Header(default=None)):
+    _native_push_rate_limit(request, "subscribe")
+    require_push_intent(x_clubiq_push)
+    if not native_fcm_configured():
+        raise HTTPException(status_code=503, detail="Native Push ist noch nicht eingerichtet.")
+    teams, players, event_types = _native_push_filters(payload)
+    token_digest, secret_digest = _native_push_hashes(payload)
+    try:
+        with db_connect() as conn, conn.cursor() as cur:
+            cur.execute("SELECT id, token_hash FROM darts_native_push_subscriptions WHERE secret_hash=%s FOR UPDATE;", (secret_digest,))
+            owned = cur.fetchone()
+            if owned:
+                if owned[1] != token_digest:
+                    cur.execute("DELETE FROM darts_native_push_outbox WHERE token_hash=%s;", (owned[1],))
+                cur.execute("""UPDATE darts_native_push_subscriptions
+                    SET token=%s, token_hash=%s, teams=%s::jsonb, players=%s::jsonb,
+                        event_types=%s::jsonb, enabled=TRUE, updated_at=CURRENT_TIMESTAMP
+                    WHERE id=%s;""",
+                    (payload.token, token_digest, json.dumps(teams), json.dumps(players), json.dumps(event_types), owned[0]))
+            else:
+                cur.execute("SELECT 1 FROM darts_native_push_subscriptions WHERE token_hash=%s;", (token_digest,))
+                if cur.fetchone():
+                    raise HTTPException(status_code=403, detail="Dieses Gerät ist bereits registriert.")
+                cur.execute("""INSERT INTO darts_native_push_subscriptions
+                    (token, token_hash, secret_hash, teams, players, event_types)
+                    VALUES (%s,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb);""",
+                    (payload.token, token_digest, secret_digest, json.dumps(teams), json.dumps(players), json.dumps(event_types)))
+            conn.commit()
+    except psycopg.errors.UniqueViolation as exc:
+        raise HTTPException(status_code=409, detail="Geräteregistrierung kollidiert; bitte erneut versuchen.") from exc
+    return {"ok": True}
+
+
+@app.post("/api/v1/darts/push/native/unsubscribe")
+def darts_native_push_unsubscribe(payload: DartsNativePushRequest, request: Request,
+                                  x_clubiq_push: str | None = Header(default=None)):
+    _native_push_rate_limit(request, "unsubscribe")
+    require_push_intent(x_clubiq_push)
+    token_digest, secret_digest = _native_push_hashes(payload)
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM darts_native_push_subscriptions WHERE token_hash=%s AND secret_hash=%s;", (token_digest, secret_digest))
+        conn.commit()
+    return {"ok": True}
+
+
+@app.post("/api/v1/darts/push/native/test")
+def darts_native_push_test(payload: DartsNativePushRequest, request: Request,
+                           x_clubiq_push: str | None = Header(default=None)):
+    _native_push_rate_limit(request, "test", maximum=20)
+    require_push_intent(x_clubiq_push)
+    if not native_fcm_configured():
+        raise HTTPException(status_code=503, detail="Native Push ist noch nicht eingerichtet.")
+    token_digest, secret_digest = _native_push_hashes(payload)
+    test_id = hashlib.sha256(("test|" + secrets.token_hex(16)).encode()).hexdigest()
+    test_payload = {"title": "ClubIQ Darts", "body": "Testmeldung – Push ist eingerichtet.",
+                    "url": "https://barverdarts.clubiq.party/", "tag": "clubiq-test",
+                    "eventId": test_id, "eventType": "test", "matchId": "", "team": "", "player": "", "isTest": True}
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("""UPDATE darts_native_push_subscriptions SET last_test_at=CURRENT_TIMESTAMP
+                    WHERE token_hash=%s AND secret_hash=%s AND enabled=TRUE
+                      AND (last_test_at IS NULL OR last_test_at < CURRENT_TIMESTAMP - INTERVAL '1 minute')
+                    RETURNING id;""", (token_digest, secret_digest))
+        if not cur.fetchone():
+            cur.execute("SELECT 1 FROM darts_native_push_subscriptions WHERE token_hash=%s AND secret_hash=%s AND enabled=TRUE;", (token_digest, secret_digest))
+            if cur.fetchone():
+                raise HTTPException(status_code=429, detail="Bitte eine Minute bis zum nächsten Test warten.")
+            raise HTTPException(status_code=403, detail="Geräteregistrierung nicht gefunden.")
+        cur.execute("""INSERT INTO darts_native_push_outbox(event_id, token_hash, payload, expires_at)
+                    VALUES (%s,%s,%s::jsonb,CURRENT_TIMESTAMP + INTERVAL '5 minutes');""",
+                    (test_id, token_digest, json.dumps(test_payload)))
+        conn.commit()
+    return {"ok": True, "queued": True}
 
 
 @app.get("/api/v1/darts/push/status")

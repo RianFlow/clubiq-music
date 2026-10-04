@@ -5,9 +5,34 @@ import {Preferences} from '@capacitor/preferences';
 import {PushNotifications} from '@capacitor/push-notifications';
 import {API_ORIGIN,TYPES,apiUrl,publicLink,cleanPreferences,matchesFor,sections,roleRank,notificationTarget,liveBoardView} from './model.js';
 import {createNativePush} from './native-push.js';
+import {createPushTransport,deviceSecret} from './push-transport.js';
 const q=s=>document.querySelector(s),native=Capacitor.isNativePlatform();
 let state={season:{matches:[],teams:[]},live:{groups:[]},highlights:{items:[]},profiles:{players:{}}},cacheTimes={},failures={},preferences=cleanPreferences(),view='home',team='',busy=false,foreground=true;
 let detailSequence=0,toastTimer,selectedMatch=null;
+let push=null,pushTransport=null,pushIdentity=null,pushState='off',pushReady=false,pushBusy=false,pushHistory=[],pushCheckBusy=false;
+const firebaseBundled=__ANDROID_FIREBASE_CONFIGURED__;
+async function savePushIdentity(value){await Preferences.set({key:'barver-app-push-device',value:JSON.stringify(value)});}
+function pushStatus(value){pushState=value;if(value==='active'){pushIdentity.enabled=true;savePushIdentity(pushIdentity).catch(()=>toast('Push-Einstellung konnte nicht gespeichert werden.'));}if(view==='settings')render();}
+async function pushRequest(method,url,data){
+  if(!native||Capacitor.getPlatform()!=='android')throw new Error('Nur in der Android-App verfügbar.');
+  const result=await CapacitorHttp.request({method,url,headers:{Accept:'application/json','Content-Type':'application/json','X-ClubIQ-Push':'1'},data,connectTimeout:10000,readTimeout:15000});
+  if(result.status<200||result.status>=300)throw new Error(result.status===429?'Bitte kurz warten und erneut versuchen.':'Push-Server gerade nicht erreichbar oder noch nicht eingerichtet.');
+  return typeof result.data==='string'?JSON.parse(result.data):result.data;
+}
+async function checkPush(){
+  if(!pushTransport||pushCheckBusy||pushBusy)return;pushCheckBusy=true;
+  try{pushReady=await pushTransport.config();if(pushReady&&pushIdentity.token&&!pushIdentity.enabled)await push.disable();
+    else if(pushReady&&pushIdentity.enabled){const permission=await PushNotifications.checkPermissions();if(permission.receive==='granted'){if(pushState==='active')await push.sync();else await push.enable();}else pushStatus('denied');}
+  }catch(_){pushReady=false;if(pushIdentity.enabled)pushStatus('registration_failed');}
+  finally{pushCheckBusy=false;if(view==='settings')render();}
+}
+async function togglePush(){
+  if(pushBusy||!push)return;pushBusy=true;
+  try{if(pushIdentity.enabled){pushIdentity.enabled=false;await savePushIdentity(pushIdentity);await push.disable();}else{pushIdentity.enabled=true;await savePushIdentity(pushIdentity);await push.enable();}}
+  catch(error){pushStatus(pushIdentity.enabled?'registration_failed':'disable_failed');toast(error.message||'Push-Aktion fehlgeschlagen. Bitte erneut versuchen.');}
+  finally{pushBusy=false;if(view==='settings')render();}
+}
+async function saveSelection(){await store('preferences',preferences);if(push&&pushIdentity.enabled)await push.sync();}
 function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);if(cls)n.className=cls;return n;}
 function button(text,action,cls='card'){const n=node('button',text,cls);n.type='button';n.addEventListener('click',action);return n;}
 function date(value){const d=new Date(value);return Number.isNaN(d.valueOf())?'Termin noch offen':d.toLocaleString('de-DE',{timeZone:'Europe/Berlin',weekday:'short',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}
@@ -49,11 +74,20 @@ function moments(parent,limit=30){parent.append(node('h2','Momente zum Nachlesen
 function teams(parent){parent.append(node('h1','Unsere Mannschaften'));teamButtons(parent);parent.append(node('p','Mannschaft auswählen: Kader, Spielplan und letzte Ergebnisse.','muted'));}
 function settings(parent){
   parent.append(node('h1','Mein Darts'));const favorite=node('label',undefined,'filter');favorite.append(node('span','Lieblingsmannschaft'));const select=node('select');for(const code of ['','A','B','C','D']){const o=node('option',code?'Barver '+code:'Alle Teams');o.value=code;select.append(o);}select.value=preferences.favorite;select.addEventListener('change',async()=>{preferences.favorite=select.value;team=select.value;await store('preferences',preferences);});favorite.append(select);parent.append(favorite);
-  parent.append(node('h2','Meldungen vorbereiten'),node('p','Diese Auswahl wird auf deinem Gerät gespeichert. Die native Pushzustellung ist noch nicht eingerichtet.','muted'));
+  parent.append(node('h2','Deine Pushmeldungen'),node('p','Wähle Mannschaften, Spieler und die Momente, die dich interessieren.','muted'));
   for(const [key,title,options]of [['teams','Mannschaften',Object.fromEntries(['A','B','C','D'].map(c=>[c,'Barver '+c]))],['eventTypes','Ereignisse',TYPES]]){
-    parent.append(node('h3',title));const fields=node('div',undefined,'fields');for(const [value,label]of Object.entries(options)){const row=node('label'),box=node('input');box.type='checkbox';box.checked=preferences[key].includes(value);box.addEventListener('change',async()=>{preferences[key]=box.checked?[...new Set([...preferences[key],value])]:preferences[key].filter(x=>x!==value);await store('preferences',preferences);});row.append(box,node('span',label));fields.append(row);}parent.append(fields,node('p',''));
+    parent.append(node('h3',title));const fields=node('div',undefined,'fields');for(const [value,label]of Object.entries(options)){const row=node('label'),box=node('input');box.type='checkbox';box.checked=preferences[key].includes(value);box.addEventListener('change',async()=>{preferences[key]=box.checked?[...new Set([...preferences[key],value])]:preferences[key].filter(x=>x!==value);await saveSelection();});row.append(box,node('span',label));fields.append(row);}parent.append(fields,node('p',''));
   }
-  const activate=button('Native Pushmeldungen · noch nicht eingerichtet',()=>{},'card');activate.disabled=true;parent.append(activate,node('p','Noch keine Zustellbestätigung: Der Verlauf unten zeigt öffentliche Sportmomente, nicht empfangene Pushmeldungen.','muted'));moments(parent);
+  parent.append(node('h3','Einzelne Spieler'),node('p','Zusätzlich zu den Mannschaften abonnieren. Für Meldungen nur zu einzelnen Spielern: alle Mannschaften abwählen.','muted'));
+  const playerFields=node('div',undefined,'fields');const names=[...new Set([...(state.season.teams||[]).flatMap(t=>(t.roster||[]).map(p=>p.name)),...preferences.players])].filter(Boolean).sort((a,b)=>a.localeCompare(b,'de'));
+  for(const name of names){const row=node('label'),box=node('input');box.type='checkbox';box.checked=preferences.players.includes(name);box.addEventListener('change',async()=>{preferences.players=box.checked?[...preferences.players,name]:preferences.players.filter(p=>p!==name);await saveSelection();});row.append(box,node('span',name));playerFields.append(row);}parent.append(playerFields);
+  const configured=native&&Capacitor.getPlatform()==='android'&&firebaseBundled&&pushReady;
+  const messages={active:'Gerät am Push-Server angemeldet. Die Anzeige hängt auch von deinen Android-Einstellungen ab.',registering:'Gerät wird angemeldet …',denied:'Android erlaubt derzeit keine Benachrichtigungen. Bitte in den App-Einstellungen freigeben.',registration_failed:'Anmeldung oder Abgleich fehlgeschlagen · automatischer neuer Versuch im Vordergrund.',disable_failed:'Abmeldung nicht bestätigt. Bitte erneut versuchen.',off:'Pushmeldungen sind ausgeschaltet.'};
+  const activate=button(pushIdentity?.enabled?'Pushmeldungen deaktivieren':pushState==='disable_failed'?'Abmeldung erneut versuchen':'Pushmeldungen aktivieren',()=>pushState==='disable_failed'?push.disable().catch(()=>toast('Abmeldung noch nicht möglich.')):togglePush());
+  activate.disabled=!configured||pushBusy;parent.append(activate,node('p',!native?'Pushmeldungen aktivierst du in der installierten Android-App.':!firebaseBundled?'Für diese Test-APK fehlt noch die Firebase-App-Konfiguration.':!pushReady?'Der Push-Server ist noch nicht eingerichtet oder nicht erreichbar.':messages[pushState]||messages.off,'muted'));
+  if(pushState==='active'){const test=button('Testnachricht senden',async()=>{test.disabled=true;try{await push.test();toast('Testnachricht beim Server angefordert. Bitte auch bei gesperrtem Handy prüfen.');}catch(error){toast(error.message);}finally{test.disabled=false;}});parent.append(test);}
+  parent.append(node('h2','In der App empfangen'),node('p','Hier stehen Meldungen, die die App geöffnet empfangen oder die du angetippt hast. Kein vollständiger Zustellnachweis.','muted'));
+  for(const item of pushHistory){const card=button('',()=>{const id=notificationTarget(item.data);if(id)openMatch(id);});card.append(node('strong',item.title),node('p',item.body),node('small',date(item.at)));parent.append(card);}if(!pushHistory.length)parent.append(node('p','Noch keine empfangenen Meldungen.','empty'));moments(parent);
   parent.append(node('h2','Über Barver Darts'),button('Impressum',()=>external('/impressum')),button('Datenschutz',()=>external('/datenschutz')));
 }
 function render(){
@@ -117,13 +151,18 @@ function openTeam(code){
 function openPlayer(member,profile){
   ++detailSequence;const root=dialog(member.name);if(profile.alias)root.append(node('p','„'+profile.alias+'“'));for(const [key,title]of [['darts','Darts'],['weightGrams','Gewicht'],['favoritePdcPlayer','Lieblingsspieler'],['favoriteFinish','Lieblingsfinish'],['finishRoute','Weg zum Finish'],['walkOnSong','Einlaufmusik']])if(profile.personal?.[key])root.append(node('h3',title),node('p',String(profile.personal[key])+(key==='weightGrams'?' g':'')));if(!Object.keys(profile.personal||{}).length)root.append(node('p','Persönliche Angaben werden noch ergänzt.','muted'));
 }
-// Hooks ready for a future configured APNs/FCM server. No tokens are requested,
-// stored or transmitted in this first preview, and no false active state is shown.
-const push=createNativePush({plugin:PushNotifications,transport:null,platform:Capacitor.getPlatform(),onStatus:()=>{},onReceived:n=>toast((n.title||'Barver Darts')+' · '+(n.body||'')),onOpen:n=>{const id=notificationTarget(n.data);if(id)openMatch(id);}});
-void push;
+function rememberPush(n){const id=String(n.data?.eventId||n.id||'');if(id&&pushHistory.some(h=>h.id===id))return;pushHistory.unshift({id,title:String(n.title||'Barver Darts').slice(0,200),body:String(n.body||'').slice(0,600),data:{matchId:notificationTarget(n.data)},at:Date.now()});pushHistory=pushHistory.slice(0,50);store('push-history',pushHistory);if(view==='settings')render();}
+async function initPush(){
+  pushHistory=await read('push-history',[]);if(!Array.isArray(pushHistory))pushHistory=[];
+  if(!native||Capacitor.getPlatform()!=='android'||!firebaseBundled)return;
+  pushIdentity=await read('push-device',null);if(!/^[a-f0-9]{64}$/.test(pushIdentity?.secret||'')){pushIdentity={secret:deviceSecret(),token:null,enabled:false};await savePushIdentity(pushIdentity);}
+  pushTransport=createPushTransport({request:pushRequest,identity:pushIdentity,selection:()=>({teams:preferences.teams,players:preferences.players,eventTypes:preferences.eventTypes}),saveIdentity:savePushIdentity});
+  push=createNativePush({plugin:PushNotifications,transport:pushTransport,platform:'android',initialToken:pushIdentity.token,onStatus:pushStatus,onReceived:n=>{rememberPush(n);toast((n.title||'Barver Darts')+' · '+(n.body||''));},onOpen:n=>{rememberPush(n);const id=notificationTarget(n.data);if(id)openMatch(id);}});
+  await checkPush();
+}
 for(const b of document.querySelectorAll('nav button'))b.addEventListener('click',()=>{view=b.dataset.view;render();window.scrollTo(0,0);});
 q('#refresh').addEventListener('click',()=>refresh());q('#closeDetail').addEventListener('click',()=>{detailSequence++;selectedMatch=null;q('#detail').close();});q('#detail').addEventListener('close',()=>{detailSequence++;selectedMatch=null;});
 window.addEventListener('online',()=>refresh());document.addEventListener('visibilitychange',()=>{foreground=!document.hidden;if(foreground)refresh();});
-if(native){q('#preview').textContent='VORABVERSION · Native Pushzustellung noch nicht eingerichtet';App.addListener('appStateChange',({isActive})=>{foreground=isActive;if(isActive)refresh();});App.addListener('backButton',()=>{if(q('#detail').open){detailSequence++;q('#detail').close();}else if(view!=='home'){view='home';render();}else App.minimizeApp();});}
-async function start(){preferences=cleanPreferences(await read('preferences',{}));team=preferences.favorite;for(const key of Object.keys(state)){const cached=await read('snapshot-'+key,null);if(cached?.payload&&typeof cached.payload==='object'){state[key]=cached.payload;cacheTimes[key]=Number(cached.savedAt)||0;}}render();refresh();setInterval(()=>refresh(true),15000);setInterval(()=>refresh(),60000);}
+if(native){q('#preview').textContent='ANDROID-TESTVERSION';App.addListener('appStateChange',({isActive})=>{foreground=isActive;if(isActive){refresh();checkPush();}});App.addListener('backButton',()=>{if(q('#detail').open){detailSequence++;q('#detail').close();}else if(view!=='home'){view='home';render();}else App.minimizeApp();});}
+async function start(){preferences=cleanPreferences(await read('preferences',{}));team=preferences.favorite;for(const key of Object.keys(state)){const cached=await read('snapshot-'+key,null);if(cached?.payload&&typeof cached.payload==='object'){state[key]=cached.payload;cacheTimes[key]=Number(cached.savedAt)||0;}}render();refresh();initPush().catch(()=>toast('Push-Einstellungen konnten nicht geladen werden.'));setInterval(()=>refresh(true),15000);setInterval(()=>{refresh();if(foreground)checkPush();},60000);}
 start();

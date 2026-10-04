@@ -206,6 +206,42 @@ CREATE INDEX IF NOT EXISTS idx_darts_events_time ON darts_push_events(occurred_a
 CREATE INDEX IF NOT EXISTS idx_darts_push_subscriptions_enabled
 ON darts_push_subscriptions(enabled);
 
+CREATE TABLE IF NOT EXISTS darts_native_push_subscriptions (
+    id BIGSERIAL PRIMARY KEY,
+    token TEXT NOT NULL,
+    token_hash CHAR(64) NOT NULL UNIQUE,
+    secret_hash CHAR(64) NOT NULL UNIQUE,
+    teams JSONB NOT NULL DEFAULT '["A","B","C","D"]'::jsonb,
+    players JSONB NOT NULL DEFAULT '[]'::jsonb,
+    event_types JSONB NOT NULL DEFAULT '["180","high_finish","leg","game","match"]'::jsonb,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    last_test_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_darts_native_push_enabled ON darts_native_push_subscriptions(enabled);
+CREATE TABLE IF NOT EXISTS darts_native_push_outbox (
+    id BIGSERIAL PRIMARY KEY,
+    event_id CHAR(64) NOT NULL,
+    token_hash CHAR(64) NOT NULL,
+    payload JSONB NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMPTZ NOT NULL,
+    sent_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(event_id, token_hash)
+);
+CREATE INDEX IF NOT EXISTS idx_darts_native_outbox_due
+ON darts_native_push_outbox(next_attempt_at, id) WHERE sent_at IS NULL;
+CREATE TABLE IF NOT EXISTS darts_native_push_rate_limits (
+    client_hash CHAR(64) NOT NULL,
+    action VARCHAR(20) NOT NULL,
+    window_started_at TIMESTAMPTZ NOT NULL,
+    hits INTEGER NOT NULL,
+    PRIMARY KEY (client_hash, action)
+);
+
 CREATE TABLE IF NOT EXISTS darts_player_profiles (
     player_id BIGINT PRIMARY KEY,
     display_name VARCHAR(100),

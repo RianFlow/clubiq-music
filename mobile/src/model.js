@@ -8,7 +8,7 @@ export function publicLink(path){
   return url.href;
 }
 export function cleanPreferences(value={}){
-  return {favorite:['A','B','C','D'].includes(value.favorite)?value.favorite:'',teams:[...new Set((Array.isArray(value.teams)?value.teams:['A','B','C','D']).filter(x=>['A','B','C','D'].includes(x)))],eventTypes:[...new Set((Array.isArray(value.eventTypes)?value.eventTypes:Object.keys(TYPES)).filter(x=>Object.hasOwn(TYPES,x)))]};
+  return {favorite:['A','B','C','D'].includes(value.favorite)?value.favorite:'',teams:[...new Set((Array.isArray(value.teams)?value.teams:['A','B','C','D']).filter(x=>['A','B','C','D'].includes(x)))],players:[...new Set((Array.isArray(value.players)?value.players:[]).filter(x=>typeof x==='string'&&x.trim()&&x.length<=100).map(x=>x.trim()))].slice(0,50),eventTypes:[...new Set((Array.isArray(value.eventTypes)?value.eventTypes:Object.keys(TYPES)).filter(x=>Object.hasOwn(TYPES,x)))]};
 }
 export function activeBoards(group,now=Date.now()){
   if(group.retired||group.finished)return [];
