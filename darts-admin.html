@@ -8,9 +8,10 @@
   <title>ClubIQ · Dartsverwaltung</title>
   <link rel="icon" href="/pics/logo.png">
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
-  <link rel="stylesheet" href="/static/darts-admin.css?v=20261004-colors1">
-  <script defer src="/static/darts-admin.js?v=20261004-colors1"></script>
-</head>
+  <link rel="stylesheet" href="/static/darts-admin.css?v=20261004-social1">
+  <script defer src="/static/darts-social-icons.js?v=20261004-social1"></script>
+  <script defer src="/static/darts-admin.js?v=20261004-social1"></script>
+<link rel="stylesheet" href="/static/darts-typography.css?v=20261004-type1"></head>
 <body>
   <header class="admin-header">
     <a href="/darts" class="brand"><img src="/pics/logo.png" alt=""><span>ClubIQ <b>Dartsverwaltung</b></span></a>
@@ -69,6 +70,7 @@
             <label>Alias<input id="alias" maxlength="50"></label>
             <label>3K-Spielernummer<input id="playerNumber" maxlength="12" pattern="[A-Za-z0-9]*" placeholder="z. B. Q8V4"></label>
             <label>Ansprache<select id="gender"><option value="">Keine Angabe</option><option value="male">Spieler</option><option value="female">Spielerin</option><option value="diverse">Neutrale Form</option></select></label>
+            <label>Wurfhand<select id="throwingHand"><option value="">Keine Angabe</option><option value="right">Rechtshänder</option><option value="left">Linkshänder</option></select></label>
             <label>Darts<input id="darts" maxlength="80" placeholder="z. B. 95K von Aspinall"></label>
             <label>Gewicht in Gramm<input id="weightGrams" type="number" min="10" max="60" step="0.1"></label>
             <label>PDC-Lieblingsspieler<input id="favoritePdcPlayer" maxlength="80"></label>
@@ -121,8 +123,8 @@
           <section id="socialEditorEmpty" class="editor-card empty-state"><strong>Wähle links einen Social-Link aus.</strong><span>Oder lege einen neuen Link an.</span></section>
           <form id="socialForm" class="editor-card" hidden>
             <div class="profile-heading"><div class="social-icon-preview">↗</div><div><p class="eyebrow">Social Media</p><h2 id="socialHeading">Neuer Link</h2><span id="socialMeta">Noch nicht gespeichert</span></div></div><input id="socialId" type="hidden">
-            <div class="form-grid"><label>Plattform<select id="socialPlatform" required><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="whatsapp">WhatsApp</option><option value="youtube">YouTube</option><option value="tiktok">TikTok</option><option value="x">X</option><option value="website">Webseite</option></select></label><label>Anzeigename<input id="socialLabel" maxlength="80" required placeholder="z. B. SV Barver auf Instagram"></label><label class="wide">HTTPS-Link<input id="socialHref" type="url" maxlength="500" placeholder="https://…" required></label><label>Priorität<input id="socialPriority" type="number" min="-1000" max="1000" value="0"></label></div>
-            <label class="publish-switch"><input id="socialActive" type="checkbox"><span><strong>Link veröffentlichen</strong><small>Neue Links starten immer als unveröffentlichter Entwurf.</small></span></label><div class="form-actions"><button type="submit">Link speichern</button><button id="deleteSocial" type="button" class="secondary danger">Link löschen</button><a href="/darts" target="_blank" rel="noopener">Öffentliche Seite ansehen</a></div><p id="socialFormStatus" role="status" hidden></p>
+            <div class="form-grid"><label>Plattform<select id="socialPlatform" required><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="whatsapp">WhatsApp</option><option value="youtube">YouTube</option><option value="tiktok">TikTok</option><option value="x">X</option><option value="website">Webseite</option></select></label><label>Anzeigename<input id="socialLabel" maxlength="80" required placeholder="z. B. SV Barver auf Instagram"></label><label class="wide">HTTPS-Link<input id="socialHref" type="url" maxlength="500" placeholder="https://…" required></label><label class="wide">Hinweistext für Banner<input id="socialTeaser" maxlength="80" placeholder="Neueste Infos"></label><label>Priorität<input id="socialPriority" type="number" min="-1000" max="1000" value="0"></label></div>
+            <label class="publish-switch"><input id="socialActive" type="checkbox"><span><strong>Link veröffentlichen</strong><small>Hinterlegte Kanäle werden standardmäßig auf der Website beworben. Hier kannst du sie ausblenden.</small></span></label><label class="publish-switch"><input id="socialShowInBanner" type="checkbox"><span><strong>Zusätzlich im Infobanner bewerben</strong><small>Zeigt den Kanal mit Icon und deinem Hinweistext. Nur veröffentlichte Links erscheinen.</small></span></label><div class="form-actions"><button type="submit">Link speichern</button><button id="deleteSocial" type="button" class="secondary danger">Link löschen</button><a href="/darts" target="_blank" rel="noopener">Öffentliche Seite ansehen</a></div><p id="socialFormStatus" role="status" hidden></p>
           </form>
         </div>
       </section>

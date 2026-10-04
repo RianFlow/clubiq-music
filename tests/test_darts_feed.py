@@ -212,6 +212,8 @@ class DartsFeedTests(unittest.TestCase):
         }
 
         def fake_get(url):
+            if url.endswith("/phase/0/round/0/table"):
+                return {}
             if url.endswith("/phase/888"):
                 return {"rounds": rounds}
             if url.endswith("/round/1"):
@@ -285,3 +287,20 @@ class DartsFeedTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OfficialStandingsTests(unittest.TestCase):
+    def test_official_totals_are_whitelisted_with_missing_values_not_zero(self):
+        from darts_feed import _official_standings, _league_standings
+        raw = {"participantId":174110, "participantName":"Barver A", "participantRankingPos":2,
+               "matchCount":3,"win":2,"tie":1,"lost":0,"points1":5.0,"points2":1.0,
+               "sets1":24,"sets2":12,"legs1":70,"legs2":41,"participant":{"email":"private"}}
+        rows = _official_standings({"tableEntries":[{"tableEntries":[raw]}]}, {174110})
+        self.assertEqual(rows[0]['pointsFor'],5.0)
+        self.assertEqual(rows[0]['played'],3)
+        self.assertTrue(rows[0]['barver'])
+        self.assertNotIn('private',str(rows))
+        del raw['points1']
+        self.assertIsNone(_official_standings({"tableEntries":[{"tableEntries":[raw]}]},set())[0]['pointsFor'])
+        with patch('darts_feed._public_get',side_effect=requests.Timeout):
+            self.assertEqual(_league_standings({'event':1,'teams':{}},[]),[])

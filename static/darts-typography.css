@@ -1,0 +1,9 @@
+@font-face { font-family:'Inter'; src:url('/static/fonts/InterVariable.woff2') format('woff2'); font-style:normal; font-weight:100 900; font-display:swap; }
+:root { --club-font:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif; --sports-display:var(--club-font); }
+html,body,body * { font-family:var(--club-font) !important; font-optical-sizing:auto; }
+:is(h1,h2,h3,h4,.intro h1,.sports-panel-head h2,.darts-roster-player,.darts-roster-team) { line-height:1.12 !important; letter-spacing:-.025em; }
+:is(table,.today-live-score,.native-match-score,.score,.remaining) { font-variant-numeric:tabular-nums; }
+.darts-roster-player { font-size:clamp(2rem,5.5vw,5rem); }
+.darts-roster-team { font-size:clamp(2.3rem,6vw,5.5rem); }
+.intro h1 { font-size:clamp(2.8rem,6vw,5.5rem); }
+@media(max-width:520px) { .intro h1 { font-size:clamp(2.1rem,10vw,3rem); } .brand span { line-height:1; } }

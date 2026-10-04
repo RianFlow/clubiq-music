@@ -21,15 +21,15 @@ const server=http.createServer((req,res)=>{
     if(p==='/api/v1/darts/presence') data={online:7,windowSeconds:120,demo:true};
     if(p.endsWith('/ticker')) data={items:matches,updatedAt:now(),stale:false};
     if(p.endsWith('/season')) data={matches,teams,updatedAt:now(),specialEvents:[{id:500,name:'Bezirkspokal',badge:'POKAL',matchCount:1}]};
-    if(p.endsWith('/center')) data={league:{key:url.searchParams.get('league')},updatedAt:now(),barverMatches:matches.filter(m=>m.kind==='live'),pushEvents:matches.filter(m=>m.kind==='live').flatMap(m=>[1,2].map(i=>({type:'live_game',matchId:m.id,homeName:i===1?'Jannik Beispiel':'Spieler Zwei',awayName:`Gast ${i}`,homeRemaining:i===1?320:201,awayRemaining:410,homeLegs:2,awayLegs:1,currentSide:'home'})))};
+    if(p.endsWith('/center')) data={league:{key:url.searchParams.get('league'),short:'DEMO'},selectedRound:{id:1,name:'Spieltag 1'},rounds:[{id:1,name:'Spieltag 1'}],standings:[{id:1,rank:1,name:'Demo-Team',played:3,wins:2,draws:1,losses:0,pointsFor:5,pointsAgainst:1,setsFor:24,setsAgainst:12,legsFor:70,legsAgainst:41}],updatedAt:now(),barverMatches:matches.filter(m=>m.kind==='live'),pushEvents:matches.filter(m=>m.kind==='live').flatMap(m=>[1,2].map(i=>({type:'live_game',matchId:m.id,homeName:i===1?'Jannik Beispiel':'Spieler Zwei',awayName:`Gast ${i}`,homeRemaining:i===1?320:201,awayRemaining:410,homeLegs:2,awayLegs:1,currentSide:'home'})))};
     if(p.endsWith('/highlights')) data={items:[{type:'180',matchId:904,title:'180! Demo-Spieler C',body:'Barver C · Rückblick',occurredAt:day(-2)}]};
     if(p.endsWith('/config')) data={available:false};
     if(p.endsWith('/status')) data={configured:false};
     if(p.endsWith('/members')) data={members:['Patrick Lammers','Erika Beispiel']};
     if(p==='/api/v1/darts/events') data={events:[{id:1,title:'11. Barver Dart Open',description:'Einzel und Doppel in Barver',image:'/pics/events/barver-dart-open-2026.webp',active:true,priority:100},{id:2,title:'Vereinsabend',description:'Zweite Veranstaltung',active:true},{id:3,title:'Entwurf',active:false}]};
-    if(p==='/api/v1/darts/social-links') data={links:[{id:1,platform:'whatsapp',label:'WhatsApp-Kanal',href:'https://whatsapp.com/channel/0029Vb1TkYQ5K3zONLbu0C0l',active:true}]};
+    if(p==='/api/v1/darts/social-links') data={links:[{id:1,platform:'whatsapp',label:'WhatsApp-Kanal',href:'https://whatsapp.com/channel/0029Vb1TkYQ5K3zONLbu0C0l',active:true},{id:2,platform:'instagram',label:'Instagram · SV Barver Darts',href:'https://www.instagram.com/svbarverdarts/',teaser:'Bilder aus dem Verein',showInBanner:true,active:true},{id:3,platform:'facebook',label:'Ausgeblendeter Kanal',href:'https://www.facebook.com/',active:false}]};
     if(p==='/api/v1/darts/sponsors') data={displaySeconds:12,sponsors:[{id:1,name:'Testpartner',type:'main',placements:['top','inline']}]};
-    if(p.endsWith('/player-profiles')) data=JSON.parse(fs.readFileSync(path.join(root,'static/darts-players.json'),'utf8'));
+    if(p.endsWith('/player-profiles')) {data=JSON.parse(fs.readFileSync(path.join(root,'static/darts-players.json'),'utf8'));data.players['89029'].personal.throwingHand='right';}
     res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(data));return;
   }
   const file=path.resolve(root,`.${p==='/'||p==='/darts'?'/darts.html':p}`);
@@ -55,13 +55,26 @@ const server=http.createServer((req,res)=>{
     const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(`${origin}/darts`);
     await page.getByText('7 online · Demo',{exact:true}).waitFor();
+    await page.evaluate(()=>document.fonts.ready);
+    assert.equal(await page.evaluate(()=>document.fonts.check('16px Inter')),true);
+    assert.match(await page.locator('h2').first().evaluate(node=>getComputedStyle(node).fontFamily),/Inter/);
+    await page.click('#leagueView');await page.locator('.league-standings-table').first().waitFor();
+    assert.match(await page.locator('.league-standings-table').first().innerText(),/Punkte/);
+    assert.match(await page.locator('.league-standings-table').first().innerText(),/5:1/);
+    await page.screenshot({path:path.join(root,'outputs/darts-standings-desktop.png'),fullPage:true});
+    await page.setViewportSize({width:390,height:844});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'standings mobile overflow');
+    await page.screenshot({path:path.join(root,'outputs/darts-standings-mobile.png'),fullPage:true});
+    await page.setViewportSize({width:1440,height:1080});await page.click('#todayView');
+
     assert.equal(await page.getByRole('link',{name:/Voting/i}).count(),0);
     assert.equal(await page.locator('.personal-settings #pushToggle').count(),1);
     await page.locator('#homeSchedule .team-profile-match').first().waitFor();
     await page.locator('#clubEventTitle').getByText('11. Barver Dart Open',{exact:true}).waitFor();
     await page.click('#nextClubEvent');assert.equal(await page.locator('#clubEventTitle').textContent(),'Vereinsabend');
     await page.click('#previousClubEvent');assert.equal(await page.locator('#clubEventCount').innerText(),'1 / 2');
-    await page.locator('#socialLinksList a').waitFor();assert.match(await page.locator('#socialLinksList a').getAttribute('href'),/whatsapp.com\/channel/);
+    await page.locator('#socialLinksList a').first().waitFor();assert.equal(await page.locator('#socialLinksList svg').count(),2);await page.locator('#socialPromoBanner').getByText('Neueste Infos',{exact:true}).waitFor();assert.match(await page.locator('#socialLinksList a[data-platform=whatsapp]').getAttribute('href'),/whatsapp.com\/channel/);
+    await page.locator('#socialPromoBanner').getByText('Bilder aus dem Verein',{exact:true}).waitFor();assert.equal(await page.locator('#socialLinksList a[data-platform=instagram]').getAttribute('href'),'https://www.instagram.com/svbarverdarts/');assert.equal(await page.locator('#socialLinksList a[data-platform=facebook]').count(),0);
     await page.locator('#todayGrid .today-live-game').nth(1).waitFor();
     assert.equal(await page.locator('#matchCenterGrid .match-center-card').count(),4);
     assert.equal(await page.locator('#matchCenterGrid .present-team-roster').count(),4);
@@ -154,6 +167,7 @@ const server=http.createServer((req,res)=>{
     await page.getByRole('button',{name:'Patrick Lammers, Profil öffnen'}).click();
     await page.getByText('95K von Aspinall',{exact:true}).waitFor();
     assert.match(await page.locator('#playerProfile').innerText(),/D16/);
+    assert.match(await page.locator('#playerProfile').innerText(),/Rechtshänder/);
     assert.match(await page.locator('#playerProfile').innerText(),/Lieblingsfinish/i);
     assert.doesNotMatch(await page.locator('#playerProfile').innerText(),/Lieblingsdoppel/i);
     assert.match(await page.locator('#playerProfile').innerText(),/Journey/);

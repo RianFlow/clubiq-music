@@ -664,6 +664,7 @@ class DartsPlayerProfileUpdate(BaseModel):
     player_number: str | None = Field(default=None, max_length=12, pattern=r"^[A-Za-z0-9]*$")
     alias: str | None = Field(default=None, max_length=50)
     gender: str | None = Field(default=None, pattern=r"^(female|male|diverse)?$")
+    throwing_hand: str | None = Field(default=None, pattern=r"^(left|right)?$")
     darts: str | None = Field(default=None, max_length=80)
     weight_grams: float | None = Field(default=None, ge=10, le=60)
     favorite_pdc_player: str | None = Field(default=None, max_length=80)
@@ -722,6 +723,8 @@ class DartsSocialLinkUpdate(BaseModel):
     platform: str = Field(pattern=r"^(whatsapp|instagram|facebook|youtube|tiktok|website|x)$")
     label: str = Field(min_length=1, max_length=80)
     website: str = Field(min_length=8, max_length=500)
+    teaser: str = Field(default="Neueste Infos", max_length=80)
+    show_in_banner: bool = True
     priority: int = Field(default=0, ge=-1000, le=1000)
     active: bool = True
 
@@ -1175,14 +1178,16 @@ def _validated_social_link(update: DartsSocialLinkUpdate) -> dict:
         raise HTTPException(status_code=422, detail="Das Link-Label darf nicht leer sein.")
     if not website:
         raise HTTPException(status_code=422, detail="Die Webseite darf nicht leer sein.")
-    return {"platform": update.platform, "label": label, "website": website, "priority": update.priority, "active": update.active}
+    return {"platform": update.platform, "label": label, "website": website, "priority": update.priority, "active": update.active,
+            "teaser": update.teaser.strip() or "Neueste Infos", "show_in_banner": update.show_in_banner}
 
 
 def _darts_social_links(public_only: bool) -> list[dict]:
     where = " WHERE active=TRUE" if public_only else ""
     with db_connect() as conn, conn.cursor() as cur:
-        cur.execute(f"SELECT id, platform, label, website, priority, active FROM darts_social_links{where} ORDER BY priority DESC, id;")
-        return [{"id": int(r[0]), "platform": r[1], "label": r[2], "href": r[3], "priority": int(r[4]), "active": bool(r[5])} for r in cur.fetchall()]
+        cur.execute(f"SELECT id, platform, label, website, priority, active, teaser, show_in_banner FROM darts_social_links{where} ORDER BY priority DESC, id;")
+        return [{"id": int(r[0]), "platform": r[1], "label": r[2], "href": r[3], "priority": int(r[4]), "active": bool(r[5]),
+                 "teaser": r[6], "showInBanner": bool(r[7])} for r in cur.fetchall()]
 
 
 @app.get("/api/v1/darts/events")
@@ -1284,7 +1289,7 @@ def darts_admin_social_links():
 def darts_admin_create_social_link(update: DartsSocialLinkUpdate):
     v = _validated_social_link(update)
     with db_connect() as conn, conn.cursor() as cur:
-        cur.execute("INSERT INTO darts_social_links(platform,label,website,priority,active) VALUES (%s,%s,%s,%s,%s) RETURNING id;", (v["platform"],v["label"],v["website"],v["priority"],v["active"]))
+        cur.execute("INSERT INTO darts_social_links(platform,label,website,priority,active,teaser,show_in_banner) VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id;", (v["platform"],v["label"],v["website"],v["priority"],v["active"],v["teaser"],v["show_in_banner"]))
         link_id = int(cur.fetchone()[0]); conn.commit()
     return {"status": "success", "id": link_id}
 
@@ -1293,7 +1298,7 @@ def darts_admin_create_social_link(update: DartsSocialLinkUpdate):
 def darts_admin_update_social_link(link_id: int, update: DartsSocialLinkUpdate):
     v = _validated_social_link(update)
     with db_connect() as conn, conn.cursor() as cur:
-        cur.execute("UPDATE darts_social_links SET platform=%s,label=%s,website=%s,priority=%s,active=%s,updated_at=CURRENT_TIMESTAMP WHERE id=%s;", (v["platform"],v["label"],v["website"],v["priority"],v["active"],link_id))
+        cur.execute("UPDATE darts_social_links SET platform=%s,label=%s,website=%s,priority=%s,active=%s,teaser=%s,show_in_banner=%s,updated_at=CURRENT_TIMESTAMP WHERE id=%s;", (v["platform"],v["label"],v["website"],v["priority"],v["active"],v["teaser"],v["show_in_banner"],link_id))
         if cur.rowcount != 1: raise HTTPException(404, "Social-Link nicht gefunden.")
         conn.commit()
     return {"status": "success", "id": link_id}
@@ -1326,6 +1331,7 @@ def _profile_from_row(row) -> tuple[str, dict]:
         "favoriteFinish": row[7] or "",
         "finishRoute": row[8] or "",
         "walkOnSong": row[9] or "",
+        "throwingHand": row[19] or "",
     }
     profile = {
         "playerNumber": row[1] or "",
@@ -1352,7 +1358,7 @@ def _darts_profile_rows() -> dict[str, dict]:
             SELECT player_id, player_number, alias, gender, darts, weight_grams,
                    favorite_pdc_player, favorite_finish, finish_route, walk_on_song,
                    image_data, image_media_type, image_version, published, created_at, updated_at,
-                   display_name, team_code, roster_role
+                   display_name, team_code, roster_role, throwing_hand
             FROM darts_player_profiles
             ORDER BY player_id;
             """
@@ -1655,14 +1661,15 @@ def darts_admin_update_player(player_id: int, update: DartsPlayerProfileUpdate):
         "finish_route": _clean_profile_text(update.finish_route),
         "walk_on_song": _clean_profile_text(update.walk_on_song),
         "published": update.published,
+        "throwing_hand": update.throwing_hand or None,
     }
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute(
             """
             INSERT INTO darts_player_profiles (
                 player_id, display_name, team_code, roster_role, player_number, alias, gender, darts, weight_grams,
-                favorite_pdc_player, favorite_finish, finish_route, walk_on_song, published
-            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                favorite_pdc_player, favorite_finish, finish_route, walk_on_song, published, throwing_hand
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (player_id) DO UPDATE SET
                 display_name=EXCLUDED.display_name,
                 team_code=EXCLUDED.team_code,
@@ -1674,6 +1681,7 @@ def darts_admin_update_player(player_id: int, update: DartsPlayerProfileUpdate):
                 favorite_finish=EXCLUDED.favorite_finish,
                 finish_route=EXCLUDED.finish_route,
                 walk_on_song=EXCLUDED.walk_on_song,
+                throwing_hand=EXCLUDED.throwing_hand,
                 published=EXCLUDED.published, updated_at=CURRENT_TIMESTAMP;
             """,
             (player_id, *values.values()),
