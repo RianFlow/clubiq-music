@@ -13,3 +13,8 @@ cloudflared
 cloudflared.deb
 backups
 *.sql.gz
+mobile
+outputs
+secrets
+*-firebase-adminsdk-*.json
+docker-compose.override.yml
