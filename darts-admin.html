@@ -8,9 +8,9 @@
   <title>ClubIQ · Dartsverwaltung</title>
   <link rel="icon" href="/pics/logo.png">
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
-  <link rel="stylesheet" href="/static/darts-admin.css?v=20261004-social1">
-  <script defer src="/static/darts-social-icons.js?v=20261004-social1"></script>
-  <script defer src="/static/darts-admin.js?v=20261004-social1"></script>
+  <link rel="stylesheet" href="/static/darts-admin.css?v=20261004-clear1">
+  <script defer src="/static/darts-social-icons.js?v=20261004-clear1"></script>
+  <script defer src="/static/darts-admin.js?v=20261004-clear1"></script>
 <link rel="stylesheet" href="/static/darts-typography.css?v=20261004-type1"></head>
 <body>
   <header class="admin-header">
@@ -36,7 +36,7 @@
         <button id="sponsorsAdminTab" type="button">Sponsoren</button>
         <button id="eventsAdminTab" type="button">Veranstaltungen</button>
         <button id="tournamentAdminTab" type="button">Turniere</button>
-        <button id="socialAdminTab" type="button">Social Media</button>
+        <button id="socialAdminTab" type="button">Vereinskanäle</button>
       </nav>
       <section id="playersAdminView">
         <div class="admin-intro">
@@ -117,14 +117,14 @@
         </div>
       </section>
       <section id="socialAdminView" hidden>
-        <div class="admin-intro"><div><p class="eyebrow">Kanäle & Links</p><h1>Social Media</h1><p>Offizielle Vereinsprofile und weitere Links verwalten.</p></div><span id="socialDataStatus" role="status">Social Links werden geladen …</span></div>
+        <div class="admin-intro"><div><p class="eyebrow">Kanäle & Links</p><h1>Vereinskanäle</h1><p>Offizielle Vereinsprofile und weitere Links verwalten.</p></div><span id="socialDataStatus" role="status">Vereinskanäle werden geladen …</span></div>
         <div class="admin-layout content-admin-layout">
           <aside class="player-browser"><button id="newSocial" type="button">+ Link anlegen</button><label>Link suchen<input id="socialSearch" type="search" placeholder="Plattform oder Name" autocomplete="off"></label><div id="socialList" class="player-list"></div></aside>
-          <section id="socialEditorEmpty" class="editor-card empty-state"><strong>Wähle links einen Social-Link aus.</strong><span>Oder lege einen neuen Link an.</span></section>
+          <section id="socialEditorEmpty" class="editor-card empty-state"><strong>Wähle links einen Link aus.</strong><span>Oder lege einen neuen Link an.</span></section>
           <form id="socialForm" class="editor-card" hidden>
-            <div class="profile-heading"><div class="social-icon-preview">↗</div><div><p class="eyebrow">Social Media</p><h2 id="socialHeading">Neuer Link</h2><span id="socialMeta">Noch nicht gespeichert</span></div></div><input id="socialId" type="hidden">
-            <div class="form-grid"><label>Plattform<select id="socialPlatform" required><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="whatsapp">WhatsApp</option><option value="youtube">YouTube</option><option value="tiktok">TikTok</option><option value="x">X</option><option value="website">Webseite</option></select></label><label>Anzeigename<input id="socialLabel" maxlength="80" required placeholder="z. B. SV Barver auf Instagram"></label><label class="wide">HTTPS-Link<input id="socialHref" type="url" maxlength="500" placeholder="https://…" required></label><label class="wide">Hinweistext für Banner<input id="socialTeaser" maxlength="80" placeholder="Neueste Infos"></label><label>Priorität<input id="socialPriority" type="number" min="-1000" max="1000" value="0"></label></div>
-            <label class="publish-switch"><input id="socialActive" type="checkbox"><span><strong>Link veröffentlichen</strong><small>Hinterlegte Kanäle werden standardmäßig auf der Website beworben. Hier kannst du sie ausblenden.</small></span></label><label class="publish-switch"><input id="socialShowInBanner" type="checkbox"><span><strong>Zusätzlich im Infobanner bewerben</strong><small>Zeigt den Kanal mit Icon und deinem Hinweistext. Nur veröffentlichte Links erscheinen.</small></span></label><div class="form-actions"><button type="submit">Link speichern</button><button id="deleteSocial" type="button" class="secondary danger">Link löschen</button><a href="/darts" target="_blank" rel="noopener">Öffentliche Seite ansehen</a></div><p id="socialFormStatus" role="status" hidden></p>
+            <div class="profile-heading"><div class="social-icon-preview">↗</div><div><p class="eyebrow">Vereinskanäle</p><h2 id="socialHeading">Neuer Link</h2><span id="socialMeta">Noch nicht gespeichert</span></div></div><input id="socialId" type="hidden">
+            <div class="form-grid"><label>Plattform<select id="socialPlatform" required><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="whatsapp">WhatsApp</option><option value="youtube">YouTube</option><option value="tiktok">TikTok</option><option value="x">X</option><option value="website">Webseite</option></select></label><label>Anzeigename<input id="socialLabel" maxlength="80" required placeholder="z. B. SV Barver auf Instagram"></label><label class="wide">Link (https://)<input id="socialHref" type="url" maxlength="500" placeholder="https://…" required></label><label class="wide">Hinweistext<input id="socialTeaser" maxlength="80" placeholder="Neueste Infos"></label><label>Priorität<input id="socialPriority" type="number" min="-1000" max="1000" value="0"></label></div>
+            <label class="publish-switch"><input id="socialActive" type="checkbox"><span><strong>Link veröffentlichen</strong><small>Hinterlegte Kanäle werden standardmäßig auf der Website beworben. Hier kannst du sie ausblenden.</small></span></label><label class="publish-switch"><input id="socialShowInBanner" type="checkbox"><span><strong>Hinweis beim Kanal anzeigen</strong><small>Zeigt deinen Hinweistext unter dem Kanalnamen.</small></span></label><div class="form-actions"><button type="submit">Link speichern</button><button id="deleteSocial" type="button" class="secondary danger">Link löschen</button><a href="/darts" target="_blank" rel="noopener">Öffentliche Seite ansehen</a></div><p id="socialFormStatus" role="status" hidden></p>
           </form>
         </div>
       </section>

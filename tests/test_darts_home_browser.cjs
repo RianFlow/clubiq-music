@@ -73,8 +73,8 @@ const server=http.createServer((req,res)=>{
     await page.locator('#clubEventTitle').getByText('11. Barver Dart Open',{exact:true}).waitFor();
     await page.click('#nextClubEvent');assert.equal(await page.locator('#clubEventTitle').textContent(),'Vereinsabend');
     await page.click('#previousClubEvent');assert.equal(await page.locator('#clubEventCount').innerText(),'1 / 2');
-    await page.locator('#socialLinksList a').first().waitFor();assert.equal(await page.locator('#socialLinksList svg').count(),2);await page.locator('#socialPromoBanner').getByText('Neueste Infos',{exact:true}).waitFor();assert.match(await page.locator('#socialLinksList a[data-platform=whatsapp]').getAttribute('href'),/whatsapp.com\/channel/);
-    await page.locator('#socialPromoBanner').getByText('Bilder aus dem Verein',{exact:true}).waitFor();assert.equal(await page.locator('#socialLinksList a[data-platform=instagram]').getAttribute('href'),'https://www.instagram.com/svbarverdarts/');assert.equal(await page.locator('#socialLinksList a[data-platform=facebook]').count(),0);
+    await page.locator('#socialLinksList a').first().waitFor();assert.equal(await page.locator('#socialLinksList svg').count(),2);await page.locator('#socialLinks').getByText('Neueste Infos',{exact:true}).waitFor();assert.match(await page.locator('#socialLinksList a[data-platform=whatsapp]').getAttribute('href'),/whatsapp.com\/channel/);
+    await page.locator('#socialLinks').getByText('Bilder aus dem Verein',{exact:true}).waitFor();assert.equal(await page.locator('#socialLinksList a[data-platform=instagram]').getAttribute('href'),'https://www.instagram.com/svbarverdarts/');assert.equal(await page.locator('#socialLinksList a[data-platform=facebook]').count(),0);
     await page.locator('#todayGrid .today-live-game').nth(1).waitFor();
     assert.equal(await page.locator('#matchCenterGrid .match-center-card').count(),4);
     assert.equal(await page.locator('#matchCenterGrid .present-team-roster').count(),4);
@@ -104,8 +104,10 @@ const server=http.createServer((req,res)=>{
     await page.selectOption('#homeLeague','1460');
     assert.equal(await page.locator('#homeSchedule .team-profile-match').count(),1);
     await page.click('#resetHomeFilters');
+    await page.evaluate(async()=>{const cache=await caches.open('clubiq-darts-notifications-v1');await cache.put('/__darts_notification_history__',new Response(JSON.stringify(Array.from({length:8},(_,i)=>({title:`Meldung ${i+1}`,body:'Testmeldung',receivedAt:new Date().toISOString()})))));});
     await page.locator('#moreNavigation summary').click();await page.click('#personalSettingsToggle');
     await page.locator('#pushPlayers input[value="Jannik Kläning"]').waitFor();
+    await page.waitForFunction(()=>document.querySelectorAll('#notificationHistory article').length===5);assert.equal(await page.locator('#notificationHistory article').last().locator('strong').innerText(),'Meldung 5');assert.equal(await page.locator('#socialPromoBanner').count(),0);assert.equal(await page.locator('#socialLinks a').count(),2);
     for(const input of await page.locator('#pushTeams input').all()) await input.uncheck();
     await page.locator('#pushPlayers input[value="Jannik Kläning"]').check();
     await page.locator('#pushTypes input[value="leg"]').uncheck();
