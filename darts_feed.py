@@ -418,6 +418,37 @@ def _standings(matches: list[dict], team_ids: set[int]) -> list[dict]:
     return sorted(entries.values(), key=lambda entry: (entry["rank"] is None, entry["rank"] or 999, entry["name"]))
 
 
+def _official_standings(payload: dict, team_ids: set[int]) -> list[dict]:
+    """Whitelist published 3K league totals; never copy participant metadata."""
+    rows = []
+    for group in payload.get("tableEntries") or []:
+        for entry in group.get("tableEntries") or []:
+            identifier = entry.get("participantId")
+            if not isinstance(identifier, int) or isinstance(identifier, bool):
+                continue
+            row = {"id": identifier, "name": str(entry.get("participantName") or "Unbekannt"),
+                   "rank": entry.get("participantRankingPos"), "barver": identifier in team_ids}
+            for public, source in (("played", "matchCount"), ("wins", "win"), ("draws", "tie"),
+                                   ("losses", "lost"), ("pointsFor", "points1"), ("pointsAgainst", "points2"),
+                                   ("setsFor", "sets1"), ("setsAgainst", "sets2"),
+                                   ("legsFor", "legs1"), ("legsAgainst", "legs2")):
+                value = entry.get(source)
+                row[public] = value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+            rows.append(row)
+    return rows
+
+
+def _league_standings(league: dict, matches: list[dict]) -> list[dict]:
+    try:
+        payload = _public_get(f"{API}/{league['event']}/phase/0/round/0/table")
+        rows = _official_standings(payload, set(league["teams"]))
+        if rows:
+            return rows
+    except (requests.RequestException, ValueError, KeyError, TypeError, AttributeError):
+        pass
+    return _standings(matches, set(league["teams"]))
+
+
 def _performance_events(payload: list[dict], match: dict) -> list[dict]:
     events = []
     for performance in payload:
@@ -660,7 +691,7 @@ def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now:
             "roundStatus": _round_status(allowed[round_id], raw_matches),
             "matches": matches,
             "barverMatches": barver_matches,
-            "standings": _standings(all_matches, league["teams"]),
+            "standings": _league_standings(league, all_matches),
             "events": [event for event in events if event["type"] != "leg"][:12],
             "pushEvents": events,
         }
@@ -922,7 +953,7 @@ def _load_league_season(league: dict, now: datetime) -> dict:
         "league": _league_public(league),
         "rounds": [_safe_round(item) for item in rounds],
         "selectedRound": _safe_round(selected) if selected else None,
-        "standings": _standings(selected_matches, set(league["teams"])),
+        "standings": _league_standings(league, selected_matches),
         "matches": public_matches,
         "degraded": degraded,
         "missingRoundIds": failed_round_ids,

@@ -268,6 +268,8 @@ CREATE TABLE IF NOT EXISTS darts_player_profiles (
 ALTER TABLE darts_player_profiles ADD COLUMN IF NOT EXISTS display_name VARCHAR(100);
 ALTER TABLE darts_player_profiles ADD COLUMN IF NOT EXISTS team_code VARCHAR(1);
 ALTER TABLE darts_player_profiles ADD COLUMN IF NOT EXISTS roster_role VARCHAR(50);
+ALTER TABLE darts_player_profiles ADD COLUMN IF NOT EXISTS throwing_hand VARCHAR(5)
+    CHECK (throwing_hand IN ('left', 'right'));
 CREATE INDEX IF NOT EXISTS idx_darts_player_profiles_published
 ON darts_player_profiles(published);
 
@@ -371,12 +373,23 @@ CREATE TABLE IF NOT EXISTS darts_social_links (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CHECK (platform IN ('whatsapp','instagram','facebook','youtube','tiktok','website','x'))
 );
+-- Social promotion preferences remain editable independently of events.
 CREATE INDEX IF NOT EXISTS idx_darts_social_links_active_priority
 ON darts_social_links(active, priority DESC, id);
+ALTER TABLE darts_social_links ADD COLUMN IF NOT EXISTS teaser VARCHAR(80) NOT NULL DEFAULT 'Neueste Infos';
+ALTER TABLE darts_social_links ADD COLUMN IF NOT EXISTS show_in_banner BOOLEAN NOT NULL DEFAULT TRUE;
 CREATE TABLE IF NOT EXISTS darts_content_seed_migrations (
     migration_key VARCHAR(100) PRIMARY KEY,
     applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM darts_content_seed_migrations WHERE migration_key='social-instagram-v1') THEN
+        INSERT INTO darts_social_links(platform,label,website,priority,active)
+        SELECT 'instagram','Instagram · SV Barver Darts','https://www.instagram.com/svbarverdarts/',80,TRUE
+        WHERE NOT EXISTS (SELECT 1 FROM darts_social_links WHERE platform='instagram');
+        INSERT INTO darts_content_seed_migrations(migration_key) VALUES ('social-instagram-v1');
+    END IF;
+END $$;
 """
 
 DEFAULTS_SQL = """

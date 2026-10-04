@@ -239,8 +239,8 @@
       }
       const copy = element('div', 'darts-roster-copy');
       copy.append(element('span', 'darts-roster-eyebrow', roster.name));
-      if (text(player.alias)) copy.append(element('span', 'darts-roster-alias', `„${text(player.alias, 60)}“`));
       copy.append(element('strong', 'darts-roster-player', text(player.name, 100)));
+      if (text(player.alias)) copy.append(element('span', 'darts-roster-alias', `„${text(player.alias, 60)}“`));
       if (text(player.role)) copy.append(element('span', 'darts-roster-role', text(player.role, 80)));
       const stats = [];
       if (Number.isFinite(player.average) && player.average > 0) stats.push(`Ø ${player.average.toLocaleString('de-DE')}`);

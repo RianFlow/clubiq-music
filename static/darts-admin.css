@@ -121,3 +121,5 @@ button,.file-button,.form-actions a,input,select,textarea { border-radius:8px; }
 :root:not([data-theme="dark"]) .banner-preview { background:#eaf1ef; }
 :is(button,a,summary):focus-visible { outline:3px solid var(--mint); outline-offset:3px; }
 @media(max-width:520px) { .brand { font-size:.85rem; gap:7px; } .brand img { width:32px; height:32px; } .admin-header-tools { gap:5px; } .admin-header-tools button { font-size:.75rem; padding:9px; } }
+
+.social-icon-preview .social-platform-icon { width:36px; height:36px; }

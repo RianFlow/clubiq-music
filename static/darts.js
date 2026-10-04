@@ -142,13 +142,14 @@ function dartsPlayerProfiles(config) {
     const numericFinish=typeof rawPersonal.favoriteFinish==='number' ? rawPersonal.favoriteFinish : Number.NaN;
     const personal={
       darts:cleanPersonalText(rawPersonal.darts,80),
+      throwingHand:['left','right'].includes(rawPersonal.throwingHand)?rawPersonal.throwingHand:null,
       weightGrams:Number.isFinite(numericWeight) && numericWeight>=10 && numericWeight<=60 ? Math.round(numericWeight*10)/10 : null,
       favoritePdcPlayer:cleanPersonalText(rawPersonal.favoritePdcPlayer,80),
       favoriteFinish:Number.isFinite(numericFinish) && numericFinish>=2 && numericFinish<=170 ? Math.round(numericFinish) : (cleanPersonalText(rawPersonal.favoriteFinish,30) || cleanPersonalText(rawPersonal.favoriteDouble,30) || null),
       finishRoute:cleanPersonalText(rawPersonal.finishRoute,80),
       walkOnSong:cleanPersonalText(rawPersonal.walkOnSong,100),
     };
-    const hasPersonal=personal.darts || personal.weightGrams!==null || personal.favoritePdcPlayer || personal.favoriteFinish!==null || personal.finishRoute || personal.walkOnSong;
+    const hasPersonal=personal.throwingHand || personal.darts || personal.weightGrams!==null || personal.favoritePdcPlayer || personal.favoriteFinish!==null || personal.finishRoute || personal.walkOnSong;
     const name=cleanPersonalText(item.name,100), team=/^[A-D]$/.test(item.team || '')?item.team:'', role=cleanPersonalText(item.role,50);
     result[id]={image,alias,average,playerNumber,...(name?{name}:{}),...(team?{team}:{}),...(role?{role}:{}),...(gender?{gender}:{}),...(hasPersonal?{personal}:{})};
   }
@@ -235,7 +236,7 @@ function dartsSocialLinks(config) {
     try {
       const url=new URL(item.href);
       if (url.protocol!=='https:'||url.username||url.password) return [];
-      return [{platform:item.platform,label:typeof item.label==='string'&&item.label.trim()?item.label.trim().slice(0,80):labels[item.platform],href:url.href,priority:Number.isInteger(item.priority)?item.priority:0}];
+      return [{teaser:typeof item.teaser==='string'&&item.teaser.trim()?item.teaser.trim().slice(0,80):'Neueste Infos',showInBanner:item.showInBanner!==false,platform:item.platform,label:typeof item.label==='string'&&item.label.trim()?item.label.trim().slice(0,80):labels[item.platform],href:url.href,priority:Number.isInteger(item.priority)?item.priority:0}];
     } catch (_) { return []; }
   }).sort((a,b)=>b.priority-a.priority||a.label.localeCompare(b.label,'de'));
 }
@@ -426,6 +427,7 @@ function initDarts() {
     .catch(()=>fetch('/static/darts-sponsors.json',{headers:{Accept:'application/json'}}).then(response=>response.ok?response.json():Promise.reject(new Error('sponsors unavailable'))))
     .then(config=>startSponsorRotation(dartsSponsors(config)))
     .catch(()=>document.querySelectorAll('.sponsor-slot').forEach(slot=>{ slot.hidden=true; slot.replaceChildren(); }));
+  let clubSocialLinks=[];
   function renderClubEvent(event) {
     const banner=q('#clubEventBanner');
     if (!event) { banner.hidden=true; return; }
@@ -435,7 +437,7 @@ function initDarts() {
     const meta=q('#clubEventMeta'); meta.replaceChildren();
     for (const value of [event.date,event.location].filter(Boolean)) { const span=document.createElement('span'); span.textContent=value; meta.append(span); }
     const link=q('#clubEventLink');
-    if (event.href) { link.href=event.href; link.textContent=event.buttonLabel; link.target='_blank'; link.rel='noopener noreferrer'; link.hidden=false; }
+    if (event.href) { link.href=event.href; link.textContent=event.buttonLabel; link.target='_blank'; link.rel='noopener noreferrer'; link.hidden=false;const channel=clubSocialLinks.find(item=>item.href===link.href);if(channel)link.prepend(window.DartsSocialIcons.create(channel.platform)); }
     else { link.removeAttribute('href'); link.hidden=true; }
     const image=q('#clubEventImage');
     const poster=q('#clubEventPoster');poster.hidden=!event.image;
@@ -478,9 +480,14 @@ function initDarts() {
   fetch('/api/v1/darts/social-links',{headers:{Accept:'application/json'},signal:AbortSignal.timeout(8000)})
     .then(response=>response.ok?response.json():Promise.reject(new Error('events unavailable')))
     .then(config=>{
-      const links=dartsSocialLinks(config),target=q('#socialLinksList');
-      target.replaceChildren(...links.map(item=>{const link=document.createElement('a');link.href=item.href;link.textContent=item.label;link.target='_blank';link.rel='noopener noreferrer';link.dataset.platform=item.platform;return link;}));
+      const links=dartsSocialLinks(config),target=q('#socialLinksList');clubSocialLinks=links;
+      target.replaceChildren(...links.map(item=>{const link=document.createElement('a');link.href=item.href;const label=document.createElement('span');label.textContent=item.label;link.append(window.DartsSocialIcons.create(item.platform),label);link.target='_blank';link.rel='noopener noreferrer';link.dataset.platform=item.platform;return link;}));
       q('#socialLinks').hidden=!links.length;
+      const promotions=links.filter(item=>item.showInBanner),promo=q('#socialPromoLinks');
+      promo.replaceChildren(...promotions.map(item=>{const link=document.createElement('a');link.href=item.href;link.target='_blank';link.rel='noopener noreferrer';link.dataset.platform=item.platform;const copy=document.createElement('span');const title=document.createElement('strong');title.textContent=item.teaser;const label=document.createElement('small');label.textContent=item.label;copy.append(title,label);link.append(window.DartsSocialIcons.create(item.platform),copy);return link;}));
+      q('#socialPromoBanner').hidden=!promotions.length;
+      const eventLink=q('#clubEventLink'),match=links.find(item=>item.href===eventLink.href);
+      if(match&&!eventLink.hidden&&!eventLink.querySelector('svg'))eventLink.prepend(window.DartsSocialIcons.create(match.platform));
     }).catch(()=>{});
   updateTvTeamControls();
   let playerProfiles={}, playerProfileBase={}, playerStatCache={};
@@ -1257,6 +1264,7 @@ function initDarts() {
     const personalIntro=document.createElement('p'); personalIntro.className='player-profile-copy'; personalIntro.textContent='Setup, Vorbilder und die persönlichen Favoriten am Oche.';
     const personalGrid=document.createElement('div'); personalGrid.className='player-personal-grid';
     const personalFacts=[
+      ['Wurfhand',({left:'Linkshänder',right:'Rechtshänder'})[personal.throwingHand] || 'Keine Angabe'],
       ['Darts',personal.darts || 'Noch offen'],
       ['Gewicht',personal.weightGrams===null || personal.weightGrams===undefined ? 'Noch offen' : `${personal.weightGrams.toLocaleString('de-DE',{maximumFractionDigits:1})} g`],
       ['PDC-Lieblingsspieler',personal.favoritePdcPlayer || 'Noch offen'],
@@ -1733,12 +1741,12 @@ function initDarts() {
     for (const button of q('#teamChoices').querySelectorAll('button')) button.setAttribute('aria-pressed',String(layout.selected.includes(button.dataset.team)));
   }
   const trainingKey = 'clubiq_darts_training';
-  const exampleTraining = 'https://portal.3k-darts.com/frontend/events/5/event/31849/phase/53660/group/403948';
+  const exampleTraining = 'https://portal.3k-darts.com/frontend/events/5/event/32260/participants';
   let training = dartsTraining(exampleTraining);
   try { const saved = localStorage.getItem(trainingKey); if (saved) training = dartsTraining(saved); } catch (_) { /* Keep the verified example; no external request. */ }
   function syncTraining() {
     q('#trainingUrl').value = training.source;
-    q('#trainingLabel').textContent = training.event === '31849' ? 'Beispiel: Training Doppel 10.09.' : `Training · 3K-Event ${training.event}`;
+    q('#trainingLabel').textContent = training.event === '32260' ? 'Training 22.09.2026' : `Training · 3K-Event ${training.event}`;
     q('#trainingMode').querySelector('[value="games"]').disabled = !training.games;
     if (!training[q('#trainingMode').value]) q('#trainingMode').value = 'participants';
     q('#trainingExternal').href = training[q('#trainingMode').value];
@@ -1787,14 +1795,22 @@ function initDarts() {
       link.append(home,score,away,state); games.append(link);
     }
     inside('[data-role="matches"]').replaceChildren(games.childNodes.length ? games : Object.assign(document.createElement('p'),{className:'panel-loading',textContent:'Keine Begegnungen an diesem Spieltag.'}));
-    const table=document.createDocumentFragment();
-    for (const entry of data.standings || []) {
-      const row=document.createElement('li'); if (entry.barver) row.className='barver';
-      const rank=document.createElement('b'); rank.textContent=entry.rank || '–';
-      const name=document.createElement('span'); name.textContent=entry.name;
-      row.append(rank,name); table.append(row);
+    const table=document.createElement('table');table.className='league-standings-table';
+    const caption=document.createElement('caption');caption.textContent='Offizielle 3K-Tabelle · aktueller Gesamtstand';table.append(caption);
+    const columns=[['Pl.','rank'],['Mannschaft','name'],['Punkte','points'],['Sp.','played'],['S','wins'],['U','draws'],['N','losses'],['Sets','sets'],['Legs','legs']];
+    const head=document.createElement('thead'),header=document.createElement('tr');
+    for(const [label] of columns){const th=document.createElement('th');th.scope='col';th.textContent=label;header.append(th);}head.append(header);table.append(head);
+    const body=document.createElement('tbody');
+    const number=value=>typeof value==='number'&&Number.isFinite(value)?value.toLocaleString('de-DE'):'–';
+    const pair=(left,right)=>typeof left==='number'&&typeof right==='number'?`${number(left)}:${number(right)}`:'–';
+    for(const entry of data.standings || []){
+      const row=document.createElement('tr');if(entry.barver)row.className='barver';
+      const values={...entry,points:pair(entry.pointsFor,entry.pointsAgainst),sets:pair(entry.setsFor,entry.setsAgainst),legs:pair(entry.legsFor,entry.legsAgainst)};
+      for(const [,key] of columns){const cell=document.createElement(key==='name'?'th':'td');if(key==='name')cell.scope='row';cell.textContent=key==='name'?entry.name:['points','sets','legs'].includes(key)?values[key]:number(values[key]);row.append(cell);}body.append(row);
     }
-    inside('[data-role="standings"]').replaceChildren(table.childNodes.length ? table : Object.assign(document.createElement('li'),{className:'panel-loading',textContent:'Noch keine Rangfolge verfügbar.'}));
+    table.append(body);
+    const root=inside('[data-role="standings"]');
+    root.replaceChildren(body.childNodes.length?table:Object.assign(document.createElement('p'),{className:'panel-loading',textContent:'Noch keine Tabelle verfügbar.'}));
     const eventList=document.createDocumentFragment();
     for (const item of data.events || []) {
       const event=document.createElement('div'); event.className=`darts-event ${item.type}`;

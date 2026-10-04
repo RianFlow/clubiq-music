@@ -154,3 +154,31 @@ class DartsContentTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ThrowingHandTests(unittest.TestCase):
+    def test_valid_choices_and_unspecified(self):
+        for hand in (None, '', 'left', 'right'):
+            self.assertEqual(main.DartsPlayerProfileUpdate(throwing_hand=hand).throwing_hand, hand)
+        with self.assertRaises(ValidationError):
+            main.DartsPlayerProfileUpdate(throwing_hand='invalid')
+
+    def test_profile_read_and_save_hand(self):
+        for hand in ('left', 'right', None):
+            row = [None] * 20
+            row[0] = 123
+            row[19] = hand
+            self.assertEqual(main._profile_from_row(row)[1]['personal']['throwingHand'], hand or '')
+            cursor = _Cursor()
+            cursor.params = []
+            original_execute = cursor.execute
+            def capture(sql, params=None):
+                original_execute(sql, params)
+                cursor.params.append(params)
+            cursor.execute = capture
+            conn = _Connection(cursor)
+            conn.commit = lambda: None
+            with patch.object(main, 'db_connect', return_value=conn):
+                main.darts_admin_update_player(123, main.DartsPlayerProfileUpdate(throwing_hand=hand))
+            self.assertIn('throwing_hand=EXCLUDED.throwing_hand', cursor.sql[0])
+            self.assertEqual(cursor.params[0][-1], hand)

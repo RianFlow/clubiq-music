@@ -65,7 +65,7 @@ assert.deepEqual(JSON.parse(JSON.stringify(dartsPlayerProfiles({players:{
 }}))),{
   '123':{image:'/pics/players/max.webp',alias:'The Test',average:61.3,playerNumber:'Q8V4',gender:'female'},
   '124':{image:'/pics/players/legacy.jpg',alias:'',average:null,playerNumber:''},
-  '125':{image:'',alias:'',average:null,playerNumber:'',personal:{darts:'Target Example',weightGrams:23,favoritePdcPlayer:'Luke Example',favoriteFinish:121,finishRoute:'T20 · 11 · Bull',walkOnSong:'Example Song'}},
+  '125':{image:'',alias:'',average:null,playerNumber:'',personal:{darts:'Target Example',throwingHand:null,weightGrams:23,favoritePdcPlayer:'Luke Example',favoriteFinish:121,finishRoute:'T20 · 11 · Bull',walkOnSong:'Example Song'}},
   '126':{image:'/api/v1/darts/players/126/photo?v=123',alias:'',average:null,playerNumber:''},
 });
 const dartsPlayerStats = vm.runInContext('dartsPlayerStats',context);
@@ -235,3 +235,8 @@ assert.match(backend,/@app\.get\("\/api\/v1\/darts\/members"\)/);
 assert.match(backend,/@app\.get\("\/api\/v1\/darts\/player-profiles"\)/);
 assert.match(backend,/@app\.get\("\/api\/v1\/darts\/admin\/players"/);
 console.log('Darts: four verified teams, strict links, wrong-league guard, opt-in embedding and no playback writes OK.');
+
+for(const hand of ['left','right']) {
+  assert.equal(dartsPlayerProfiles({players:{'123':{personal:{throwingHand:hand}}}})['123'].personal.throwingHand,hand);
+}
+assert.equal(dartsPlayerProfiles({players:{'123':{personal:{throwingHand:'invalid',darts:'Example'}}}})['123'].personal.throwingHand,null);
