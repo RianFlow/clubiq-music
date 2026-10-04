@@ -130,3 +130,16 @@ body:not(.tv-live) #todayPanel .club-event-banner::before { display:none; }
 body.tv-live .next-appointments { display:none; }
 @media(max-width:800px) { .next-appointments-list { grid-template-columns:1fr; } .next-appointments { padding:16px; } }
 @media(prefers-reduced-motion:reduce) { .score-updated { animation:none; } }
+
+/* Shared typography and theme colors for the official DBD ranking. */
+.ranking-controls{display:flex;flex-wrap:wrap;gap:1rem;margin:1rem 0}
+.ranking-controls label{display:grid;gap:.4rem;flex:1 1 220px;min-width:0}
+.ranking-controls input,.ranking-controls select{width:100%;min-width:0;box-sizing:border-box}
+.ranking-table-wrap{max-width:100%;overflow-x:auto;border-radius:12px}
+.ranking-table{width:100%;border-collapse:collapse;text-align:left}
+.ranking-table th,.ranking-table td{padding:.7rem .6rem;border-bottom:1px solid var(--line);white-space:nowrap}
+.ranking-table th{font-size:.85rem}
+.ranking-table td:nth-child(2){white-space:normal;min-width:130px}
+#rankingEvents{margin-top:1rem}
+#rankingEvents h4{margin:0;font-size:1rem}
+@media(max-width:600px){.ranking-table th,.ranking-table td{padding:.6rem .35rem;font-size:.82rem}.ranking-table td:nth-child(2){min-width:110px}}

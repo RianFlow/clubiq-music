@@ -1868,6 +1868,48 @@ function initDarts() {
       if (error.name!=='AbortError') message('Der 3K-Spieltag konnte gerade nicht geladen werden. Bitte noch einmal aktualisieren.');
     }
   }
+  let rankingData=null, rankingLoading=false;
+  const rankingNumber=value=>typeof value==='number'&&Number.isFinite(value)?new Intl.NumberFormat('de-DE',{maximumFractionDigits:1}).format(value):'–';
+  function renderRanking() {
+    if(!rankingData)return;
+    const search=q('#rankingSearch').value.trim().toLocaleLowerCase('de-DE'),roundId=Number(q('#rankingRound').value)||null;
+    q('#rankingRoundHeading').hidden=!roundId;
+    const fragment=document.createDocumentFragment();
+    for(const row of rankingData.rows||[]){
+      if(search&&!row.name.toLocaleLowerCase('de-DE').includes(search))continue;
+      const tr=document.createElement('tr');
+      for(const value of [rankingNumber(row.rank),row.name,rankingNumber(row.points),rankingNumber(row.appearances),rankingNumber(row.average)]){const cell=document.createElement('td');cell.textContent=value;tr.append(cell);}
+      if(roundId){const round=(row.rounds||[]).find(item=>item.id===roundId);const cell=document.createElement('td');cell.textContent=round?(rankingNumber(round.points)+(round.rated?'':' · nicht gewertet')):'–';tr.append(cell);}
+      fragment.append(tr);
+    }
+    if(!fragment.childNodes.length){const tr=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=roundId?6:5;cell.textContent='Keine Spieler für diese Suche gefunden.';tr.append(cell);fragment.append(tr);}
+    q('#rankingRows').replaceChildren(fragment);
+  }
+  async function loadRanking(force=false) {
+    if(rankingLoading||(!force&&rankingData&&Date.now()-rankingData.loadedAt<600000))return;
+    rankingLoading=true;q('#reloadRanking').disabled=true;q('#rankingStatus').textContent='DBD-Rangliste wird geladen …';
+    try {
+      const response=await fetch('/api/v1/darts/ranking');if(!response.ok)throw new Error('Rangliste nicht verfügbar');
+      rankingData={...await response.json(),loadedAt:Date.now()};
+      q('#rankingHeading').textContent=rankingData.name;
+      const selected=q('#rankingRound').value;const all=document.createElement('option');all.value='';all.textContent='Alle Runden';q('#rankingRound').replaceChildren(all);
+      const events=[...(rankingData.events||[])].sort((a,b)=>Date.parse(b.start)-Date.parse(a.start));
+      const fragment=document.createDocumentFragment();let hasFuture=false;
+      for(const event of events){
+        const option=document.createElement('option');option.value=event.id;option.textContent=event.name;q('#rankingRound').append(option);
+        const card=document.createElement('article');card.className='appointment-card';const title=document.createElement('h4');title.textContent=event.name;const date=document.createElement('p');const validDate=Number.isFinite(Date.parse(event.start));date.textContent=validDate?new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(event.start))+' Uhr':'Termin noch nicht hinterlegt';const location=document.createElement('p');location.textContent=event.city||'Ort noch nicht hinterlegt';const link=document.createElement('a');link.className='external';link.href=event.sourceUrl;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Ergebnisse bei 3K';const display=document.createElement('a');display.className='external';display.href=`/turnier?event=${event.id}`;display.textContent='In der Turnieranzeige öffnen';card.append(title,date,location,display,link);if(validDate&&Date.parse(event.start)>Date.now()){hasFuture=true;link.textContent='Turnier bei 3K öffnen';card.append(calendarButton({id:`dbd-${event.id}`,title:event.name,start:event.start,location:event.city}));}fragment.append(card);
+      }
+      if([...q('#rankingRound').options].some(option=>option.value===selected))q('#rankingRound').value=selected;
+      q('#rankingEvents').replaceChildren(fragment);q('#rankingNext').textContent=hasFuture?'Die veröffentlichten Termine und bisherigen Ergebnisse:':'Ein weiterer Termin ist in 3K noch nicht veröffentlicht. Hier findest du die bisherigen Runden.';
+      q('#rankingStatus').textContent=rankingData.stale?'3K ist gerade nicht erreichbar. Angezeigt wird der zuletzt geladene Stand.':`${rankingData.rows?.length||0} Spieler · ${events.length} Runden · Stand: ${new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(rankingData.updatedAt))} Uhr`;
+      renderRanking();
+    }catch(_){q('#rankingStatus').textContent='Die Rangliste konnte gerade nicht geladen werden. Bitte versuche es erneut oder öffne die Gesamtwertung bei 3K.';}
+    finally{rankingLoading=false;q('#reloadRanking').disabled=false;}
+  }
+  q('#rankingView').addEventListener('click',()=>{setSection('ranking');loadRanking();});
+  q('#reloadRanking').addEventListener('click',()=>loadRanking(true));
+  q('#rankingSearch').addEventListener('input',renderRanking);q('#rankingRound').addEventListener('change',renderRanking);
+  window.setInterval(()=>{if(!q('#rankingPanel').hidden)loadRanking();},60000);
   function setSection(section) {
     const teams = section === 'teams';
     grid.hidden = true; q('.intro').hidden = !teams;
@@ -1875,6 +1917,8 @@ function initDarts() {
     q('#seasonPanel').hidden = !teams;
     q('#activityPanel').hidden = section !== 'activity';
     q('#trainingPanel').hidden = section !== 'training';
+    q('#rankingPanel').hidden = section !== 'ranking';
+    q('#rankingView').setAttribute('aria-pressed',String(section==='ranking'));
     q('#todayPanel').hidden = section !== 'today';q('#nextAppointments').hidden=section!=='today';
     q('#leaguePanel').hidden = section !== 'league';
     q('#cupPanel').hidden = section !== 'cup';

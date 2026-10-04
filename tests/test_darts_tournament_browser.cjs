@@ -18,6 +18,8 @@ const server=http.createServer((req,res)=>{
       }
       return json(res,{players:[],sponsors:[],events:[],links:[]});
     }
+    if(p.endsWith('/ranking'))return json(res,{name:'DBD Rangliste 2026',events:[{id:30458,name:'DBD 9. Runde',start:'2026-09-19T12:00:00+02:00'}]});
+    if(p.endsWith('/tournament')&&url.searchParams.get('event_id')==='30458')return json(res,{...payload(),event:{name:'DBD 9. Runde',date:'2026-09-19'},source:'https://portal.3k-darts.com/frontend/events/5/event/30458/participants'});
     if(p.endsWith('/season'))return json(res,{teams:[],matches:[]});
     return json(res,payload(),fail?503:200);
   }
@@ -46,7 +48,8 @@ const server=http.createServer((req,res)=>{
     await page.selectOption('#view','participants');assert.equal(await page.locator('.board').innerText(),'<script>Spielerin</script>');assert.equal(await page.locator('.board script').count(),0);
     await page.selectOption('#tableMode','sidebar');await page.selectOption('#view','live');await page.setViewportSize({width:390,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
     await page.goto(`${origin}/turnier`);await page.locator('.board').first().waitFor();assert.equal(await page.locator('.board').count(),25);
-    fail=true;await page.evaluate(()=>window.dispatchEvent(new Event('online')));await page.getByText('Die letzten Daten bleiben sichtbar. Automatische Neuverbindung läuft.').waitFor();assert.equal(await page.locator('.board').count(),25);
+    await page.selectOption('#tournamentChoice','30458');await page.getByRole('heading',{name:'DBD 9. Runde',exact:true}).waitFor();assert.match(await page.locator('#tvLink').getAttribute('href'),/event=30458/);assert.match(page.url(),/event=30458/);await page.reload();await page.getByRole('heading',{name:'DBD 9. Runde',exact:true}).waitFor();assert.equal(setting.event.name,'DEMO · Barver Open');await page.selectOption('#tournamentChoice','');await page.getByRole('heading',{name:'DEMO · Barver Open',exact:true}).waitFor();
+    await page.waitForFunction(()=>!busy);fail=true;await page.evaluate(()=>window.dispatchEvent(new Event('online')));await page.getByText('Die letzten Daten bleiben sichtbar. Automatische Neuverbindung läuft.').waitFor();assert.equal(await page.locator('.board').count(),25);
     fail=false;empty=true;await page.reload();await page.getByText(/Die Gruppen und Paarungen sind noch nicht veröffentlicht/).waitFor();
     let liveRequests=0;page.on('request',r=>{if(r.url().includes('/api/'))liveRequests++;});await page.goto(`${origin}/turnier?tv=1&demo=tournament`);
     await page.getByText('DEMO · Keine echten Ergebnisse').waitFor();await page.locator('.board').first().waitFor();assert.equal(await page.locator('.board').count(),8);assert.equal(liveRequests,0);
