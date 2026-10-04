@@ -8,8 +8,8 @@ const server=http.createServer((req,res)=>{
   const url=new URL(req.url,'http://local'),p=url.pathname;
   if(p.startsWith('/api/')){
     if(p.includes('/admin/')){
-      if(req.headers['x-admin-password']!=='demo')return json(res,{detail:'Demo-Kennwort: demo'},401);
-      if(p==='/api/v1/music/admin/verify')return json(res,{status:'ok'});
+      if(req.headers['x-admin-password']!=='demo'||req.headers['x-admin-username']!=='admin')return json(res,{detail:'Demo-Kennwort: demo'},401);
+      if(p==='/api/v1/darts/admin/verify')return json(res,{status:'ok'});
       if(p==='/api/v1/darts/admin/tournament'&&req.method==='GET')return json(res,setting);
       if(p==='/api/v1/darts/admin/tournament/preview'||(p==='/api/v1/darts/admin/tournament'&&req.method==='PUT')){
         let body='';req.on('data',chunk=>body+=chunk);req.on('end',()=>{const source=JSON.parse(body).source;
@@ -51,7 +51,7 @@ const server=http.createServer((req,res)=>{
     let liveRequests=0;page.on('request',r=>{if(r.url().includes('/api/'))liveRequests++;});await page.goto(`${origin}/turnier?tv=1&demo=tournament`);
     await page.getByText('DEMO · Keine echten Ergebnisse').waitFor();await page.locator('.board').first().waitFor();assert.equal(await page.locator('.board').count(),8);assert.equal(liveRequests,0);
     await page.click('#demoHighlight');await page.locator('#highlight').getByText(/180 geworfen/).waitFor();await page.click('#demoPause');await page.getByRole('button',{name:'Demo fortsetzen'}).waitFor();
-    await page.goto(`${origin}/darts-admin`);await page.fill('#adminPassword','demo');await page.click('#loginForm button');await page.click('#tournamentAdminTab');
+    await page.goto(`${origin}/darts-admin`);await page.fill('#adminUsername','admin');await page.fill('#adminPassword','demo');await page.click('#loginForm button');await page.click('#tournamentAdminTab');
     await page.getByText('Aktiv: DEMO · Barver Open',{exact:false}).waitFor();assert.equal(await page.isDisabled('#activateTournament'),true);
     await page.fill('#tournamentSource','https://portal.3k-darts.com/frontend/events/5/event/123/participants');await page.click('#checkTournament');await page.getByText(/Gefunden: DEMO · Nächstes Dartturnier/).waitFor();
     await page.fill('#tournamentSource','https://portal.3k-darts.com/frontend/events/5/event/124/participants');assert.equal(await page.isDisabled('#activateTournament'),true);

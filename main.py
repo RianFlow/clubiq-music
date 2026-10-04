@@ -43,6 +43,7 @@ DEFAULT_PLAYLIST_TARGET = max(1, min(100, int(os.getenv("PLAYLIST_TARGET_COUNT",
 PREVIOUS_PLAYLIST_LIMIT = 5
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
+DARTS_ADMIN_USERNAME = os.getenv("DARTS_ADMIN_USERNAME", "admin")
 SESSION_DAYS = max(1, int(os.getenv("SESSION_DAYS", "30")))
 PLAYER_AGENT_SOCKET = os.getenv("PLAYER_AGENT_SOCKET", "/run/clubiq-music/player.sock")
 PLAYER_AGENT_TOKEN = os.getenv("PLAYER_AGENT_TOKEN", "")
@@ -265,6 +266,16 @@ def require_admin(x_admin_password: str | None = Header(default=None)) -> None:
         raise HTTPException(status_code=503, detail="Das Verwaltungskennwort ist nicht eingerichtet.")
     if not x_admin_password or not secrets.compare_digest(x_admin_password, ADMIN_PASSWORD):
         raise HTTPException(status_code=401, detail="Verwaltungskennwort ungültig.")
+
+
+def require_darts_admin(x_admin_password: str | None = Header(default=None),
+                        x_admin_username: str | None = Header(default=None)) -> None:
+    if not ADMIN_PASSWORD or not DARTS_ADMIN_USERNAME:
+        raise HTTPException(status_code=503, detail="Der Verwaltungszugang ist nicht eingerichtet.")
+    username_ok = secrets.compare_digest((x_admin_username or "").encode(), DARTS_ADMIN_USERNAME.encode())
+    password_ok = secrets.compare_digest((x_admin_password or "").encode(), ADMIN_PASSWORD.encode())
+    if not username_ok or not password_ok:
+        raise HTTPException(status_code=401, detail="Benutzername oder Passwort ungültig.")
 
 
 def close_expired_cycles() -> None:
@@ -869,19 +880,24 @@ def _tournament_preview(source):
         raise HTTPException(503, "Das Turnier konnte bei 3K gerade nicht geprüft werden. Die bisherige Auswahl bleibt erhalten.") from exc
 
 
-@app.get("/api/v1/darts/admin/tournament", dependencies=[Depends(require_admin)])
+@app.get("/api/v1/darts/admin/verify", dependencies=[Depends(require_darts_admin)])
+def darts_admin_verify():
+    return {"status": "ok"}
+
+
+@app.get("/api/v1/darts/admin/tournament", dependencies=[Depends(require_darts_admin)])
 def darts_admin_tournament(response: Response):
     response.headers["Cache-Control"] = "no-store"
     return _tournament_setting()
 
 
-@app.post("/api/v1/darts/admin/tournament/preview", dependencies=[Depends(require_admin)])
+@app.post("/api/v1/darts/admin/tournament/preview", dependencies=[Depends(require_darts_admin)])
 def darts_admin_tournament_preview(update: DartsTournamentUpdate, response: Response):
     response.headers["Cache-Control"] = "no-store"
     return _tournament_preview(update.source)
 
 
-@app.put("/api/v1/darts/admin/tournament", dependencies=[Depends(require_admin)])
+@app.put("/api/v1/darts/admin/tournament", dependencies=[Depends(require_darts_admin)])
 def darts_admin_set_tournament(update: DartsTournamentUpdate, response: Response):
     response.headers["Cache-Control"] = "no-store"
     checked = _tournament_preview(update.source)
@@ -1106,6 +1122,8 @@ def _validated_darts_event(update: DartsEventUpdate) -> dict:
         raise HTTPException(status_code=422, detail="Der Veranstaltungstitel darf nicht leer sein.")
     starts_at = utc_datetime(update.starts_at, "Startzeit") if update.starts_at else None
     ends_at = utc_datetime(update.ends_at, "Endzeit") if update.ends_at else None
+    if update.active and not ends_at:
+        raise HTTPException(status_code=422, detail="Zum Veröffentlichen bitte ein Ende für das Banner festlegen.")
     if starts_at and ends_at and ends_at < starts_at:
         raise HTTPException(status_code=422, detail="Das Veranstaltungsende muss nach dem Start liegen.")
     return {
@@ -1179,12 +1197,12 @@ def darts_social_links():
                     headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=300"})
 
 
-@app.get("/api/v1/darts/admin/events", dependencies=[Depends(require_admin)])
+@app.get("/api/v1/darts/admin/events", dependencies=[Depends(require_darts_admin)])
 def darts_admin_events():
     return Response(content=json.dumps({"events": _darts_events(False)}, ensure_ascii=False, default=str), media_type="application/json", headers={"Cache-Control": "no-store"})
 
 
-@app.post("/api/v1/darts/admin/events", dependencies=[Depends(require_admin)], status_code=201)
+@app.post("/api/v1/darts/admin/events", dependencies=[Depends(require_darts_admin)], status_code=201)
 def darts_admin_create_event(update: DartsEventUpdate):
     v = _validated_darts_event(update)
     with db_connect() as conn, conn.cursor() as cur:
@@ -1195,7 +1213,7 @@ def darts_admin_create_event(update: DartsEventUpdate):
     return {"status": "success", "id": event_id}
 
 
-@app.put("/api/v1/darts/admin/events/{event_id}", dependencies=[Depends(require_admin)])
+@app.put("/api/v1/darts/admin/events/{event_id}", dependencies=[Depends(require_darts_admin)])
 def darts_admin_update_event(event_id: int, update: DartsEventUpdate):
     v = _validated_darts_event(update)
     with db_connect() as conn, conn.cursor() as cur:
@@ -1207,7 +1225,7 @@ def darts_admin_update_event(event_id: int, update: DartsEventUpdate):
     return {"status": "success", "id": event_id}
 
 
-@app.delete("/api/v1/darts/admin/events/{event_id}", dependencies=[Depends(require_admin)])
+@app.delete("/api/v1/darts/admin/events/{event_id}", dependencies=[Depends(require_darts_admin)])
 def darts_admin_delete_event(event_id: int):
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute("DELETE FROM darts_events WHERE id=%s;", (event_id,))
@@ -1216,7 +1234,7 @@ def darts_admin_delete_event(event_id: int):
     return {"status": "success"}
 
 
-@app.post("/api/v1/darts/admin/events/{event_id}/image", dependencies=[Depends(require_admin)])
+@app.post("/api/v1/darts/admin/events/{event_id}/image", dependencies=[Depends(require_darts_admin)])
 async def darts_admin_upload_event_image(event_id: int, image: UploadFile = File(...)):
     media_type, data = _validated_player_image(await image.read(3 * 1024 * 1024 + 1))
     version = int(datetime.now(timezone.utc).timestamp() * 1000)
@@ -1227,7 +1245,7 @@ async def darts_admin_upload_event_image(event_id: int, image: UploadFile = File
     return {"status": "success", "image": f"/api/v1/darts/events/{event_id}/image?v={version}"}
 
 
-@app.delete("/api/v1/darts/admin/events/{event_id}/image", dependencies=[Depends(require_admin)])
+@app.delete("/api/v1/darts/admin/events/{event_id}/image", dependencies=[Depends(require_darts_admin)])
 def darts_admin_delete_event_image(event_id: int):
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute("UPDATE darts_events SET image_data=NULL,image_media_type=NULL,image_path=NULL,image_version=image_version+1,updated_at=CURRENT_TIMESTAMP WHERE id=%s;", (event_id,))
@@ -1236,7 +1254,7 @@ def darts_admin_delete_event_image(event_id: int):
     return {"status": "success"}
 
 
-@app.get("/api/v1/darts/admin/events/{event_id}/image", dependencies=[Depends(require_admin)])
+@app.get("/api/v1/darts/admin/events/{event_id}/image", dependencies=[Depends(require_darts_admin)])
 def darts_admin_event_image_preview(event_id: int):
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute("SELECT image_data,image_media_type,image_version FROM darts_events WHERE id=%s;", (event_id,))
@@ -1257,12 +1275,12 @@ def darts_event_image(event_id: int):
     return Response(content=bytes(row[0]), media_type=row[1] or "image/webp", headers={"Cache-Control": "public, max-age=31536000, immutable", "ETag": f'"event-{event_id}-{row[2]}"'})
 
 
-@app.get("/api/v1/darts/admin/social-links", dependencies=[Depends(require_admin)])
+@app.get("/api/v1/darts/admin/social-links", dependencies=[Depends(require_darts_admin)])
 def darts_admin_social_links():
     return Response(content=json.dumps({"links": _darts_social_links(False)}, ensure_ascii=False), media_type="application/json", headers={"Cache-Control": "no-store"})
 
 
-@app.post("/api/v1/darts/admin/social-links", dependencies=[Depends(require_admin)], status_code=201)
+@app.post("/api/v1/darts/admin/social-links", dependencies=[Depends(require_darts_admin)], status_code=201)
 def darts_admin_create_social_link(update: DartsSocialLinkUpdate):
     v = _validated_social_link(update)
     with db_connect() as conn, conn.cursor() as cur:
@@ -1271,7 +1289,7 @@ def darts_admin_create_social_link(update: DartsSocialLinkUpdate):
     return {"status": "success", "id": link_id}
 
 
-@app.put("/api/v1/darts/admin/social-links/{link_id}", dependencies=[Depends(require_admin)])
+@app.put("/api/v1/darts/admin/social-links/{link_id}", dependencies=[Depends(require_darts_admin)])
 def darts_admin_update_social_link(link_id: int, update: DartsSocialLinkUpdate):
     v = _validated_social_link(update)
     with db_connect() as conn, conn.cursor() as cur:
@@ -1281,7 +1299,7 @@ def darts_admin_update_social_link(link_id: int, update: DartsSocialLinkUpdate):
     return {"status": "success", "id": link_id}
 
 
-@app.delete("/api/v1/darts/admin/social-links/{link_id}", dependencies=[Depends(require_admin)])
+@app.delete("/api/v1/darts/admin/social-links/{link_id}", dependencies=[Depends(require_darts_admin)])
 def darts_admin_delete_social_link(link_id: int):
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute("DELETE FROM darts_social_links WHERE id=%s;", (link_id,))
@@ -1396,7 +1414,7 @@ def darts_sponsors():
     )
 
 
-@app.get("/api/v1/darts/admin/sponsors", dependencies=[Depends(require_admin)])
+@app.get("/api/v1/darts/admin/sponsors", dependencies=[Depends(require_darts_admin)])
 def darts_admin_sponsors():
     return Response(
         content=json.dumps({"sponsors": _query_darts_sponsors(False)}, ensure_ascii=False, default=str),
@@ -1405,7 +1423,7 @@ def darts_admin_sponsors():
     )
 
 
-@app.post("/api/v1/darts/admin/sponsors", dependencies=[Depends(require_admin)], status_code=201)
+@app.post("/api/v1/darts/admin/sponsors", dependencies=[Depends(require_darts_admin)], status_code=201)
 def darts_admin_create_sponsor(update: DartsSponsorUpdate):
     values = _validated_sponsor_payload(update)
     with db_connect() as conn, conn.cursor() as cur:
@@ -1433,7 +1451,7 @@ def darts_admin_create_sponsor(update: DartsSponsorUpdate):
     return {"status": "success", "id": sponsor_id}
 
 
-@app.put("/api/v1/darts/admin/sponsors/{sponsor_id}", dependencies=[Depends(require_admin)])
+@app.put("/api/v1/darts/admin/sponsors/{sponsor_id}", dependencies=[Depends(require_darts_admin)])
 def darts_admin_update_sponsor(sponsor_id: int, update: DartsSponsorUpdate):
     values = _validated_sponsor_payload(update)
     with db_connect() as conn, conn.cursor() as cur:
@@ -1463,7 +1481,7 @@ def darts_admin_update_sponsor(sponsor_id: int, update: DartsSponsorUpdate):
     return {"status": "success", "id": sponsor_id}
 
 
-@app.delete("/api/v1/darts/admin/sponsors/{sponsor_id}", dependencies=[Depends(require_admin)])
+@app.delete("/api/v1/darts/admin/sponsors/{sponsor_id}", dependencies=[Depends(require_darts_admin)])
 def darts_admin_delete_sponsor(sponsor_id: int):
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute("DELETE FROM darts_sponsors WHERE id=%s;", (sponsor_id,))
@@ -1477,7 +1495,7 @@ def darts_admin_delete_sponsor(sponsor_id: int):
     return {"status": "success"}
 
 
-@app.post("/api/v1/darts/admin/sponsors/{sponsor_id}/logo", dependencies=[Depends(require_admin)])
+@app.post("/api/v1/darts/admin/sponsors/{sponsor_id}/logo", dependencies=[Depends(require_darts_admin)])
 async def darts_admin_upload_sponsor_logo(sponsor_id: int, logo: UploadFile = File(...)):
     media_type, data = _validated_player_image(await logo.read(3 * 1024 * 1024 + 1))
     version = int(datetime.now(timezone.utc).timestamp())
@@ -1499,7 +1517,7 @@ async def darts_admin_upload_sponsor_logo(sponsor_id: int, logo: UploadFile = Fi
     return {"status": "success", "image": f"/api/v1/darts/sponsors/{sponsor_id}/logo?v={version}"}
 
 
-@app.delete("/api/v1/darts/admin/sponsors/{sponsor_id}/logo", dependencies=[Depends(require_admin)])
+@app.delete("/api/v1/darts/admin/sponsors/{sponsor_id}/logo", dependencies=[Depends(require_darts_admin)])
 def darts_admin_delete_sponsor_logo(sponsor_id: int):
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute(
@@ -1533,7 +1551,7 @@ def darts_sponsor_logo(sponsor_id: int):
     )
 
 
-@app.get("/api/v1/darts/admin/players", dependencies=[Depends(require_admin)])
+@app.get("/api/v1/darts/admin/players", dependencies=[Depends(require_darts_admin)])
 def darts_admin_players():
     base = _base_darts_player_profiles()
     stored = _darts_profile_rows()
@@ -1568,7 +1586,7 @@ def darts_admin_players():
     )
 
 
-@app.post("/api/v1/darts/admin/players", dependencies=[Depends(require_admin)])
+@app.post("/api/v1/darts/admin/players", dependencies=[Depends(require_darts_admin)])
 def darts_admin_create_player(player: DartsPlayerCreate):
     name = _clean_profile_text(player.name)
     role = _clean_profile_text(player.role) or "Spieler"
@@ -1595,7 +1613,7 @@ def darts_admin_create_player(player: DartsPlayerCreate):
     return {"status": "success", "player_id": player_id}
 
 
-@app.post("/api/v1/darts/admin/roster-cache", dependencies=[Depends(require_admin)])
+@app.post("/api/v1/darts/admin/roster-cache", dependencies=[Depends(require_darts_admin)])
 def darts_admin_cache_roster(update: DartsRosterCacheUpdate):
     """Persist public roster labels so the editor remains useful during a 3K outage."""
     with db_connect() as conn, conn.cursor() as cur:
@@ -1621,7 +1639,7 @@ def darts_admin_cache_roster(update: DartsRosterCacheUpdate):
     return {"status": "success", "cached": len(update.players)}
 
 
-@app.put("/api/v1/darts/admin/players/{player_id}", dependencies=[Depends(require_admin)])
+@app.put("/api/v1/darts/admin/players/{player_id}", dependencies=[Depends(require_darts_admin)])
 def darts_admin_update_player(player_id: int, update: DartsPlayerProfileUpdate):
     values = {
         "display_name": _clean_profile_text(update.display_name),
@@ -1682,7 +1700,7 @@ def _validated_player_image(data: bytes) -> tuple[str, bytes]:
     raise HTTPException(status_code=422, detail="Erlaubt sind JPEG-, PNG- und WebP-Bilder.")
 
 
-@app.post("/api/v1/darts/admin/players/{player_id}/photo", dependencies=[Depends(require_admin)])
+@app.post("/api/v1/darts/admin/players/{player_id}/photo", dependencies=[Depends(require_darts_admin)])
 async def darts_admin_upload_player_photo(player_id: int, photo: UploadFile = File(...)):
     media_type, data = _validated_player_image(await photo.read(3 * 1024 * 1024 + 1))
     version = int(datetime.now(timezone.utc).timestamp())
@@ -1705,7 +1723,7 @@ async def darts_admin_upload_player_photo(player_id: int, photo: UploadFile = Fi
     return {"status": "success", "image": f"/api/v1/darts/players/{player_id}/photo?v={version}"}
 
 
-@app.delete("/api/v1/darts/admin/players/{player_id}/photo", dependencies=[Depends(require_admin)])
+@app.delete("/api/v1/darts/admin/players/{player_id}/photo", dependencies=[Depends(require_darts_admin)])
 def darts_admin_delete_player_photo(player_id: int):
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute(

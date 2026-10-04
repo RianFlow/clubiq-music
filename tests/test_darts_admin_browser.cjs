@@ -11,8 +11,8 @@ const events={events:[]},socialLinks={links:[]};
 const server=http.createServer((req,res)=>{
   const url=new URL(req.url,'http://localhost'),p=url.pathname;
   if(p.startsWith('/api/')) {
-    if(req.headers['x-admin-password']!=='secret' && p!=='/api/v1/darts/season'){res.writeHead(401,{'Content-Type':'application/json'});res.end('{"detail":"Verwaltungskennwort ungültig."}');return;}
-    if(p==='/api/v1/music/admin/verify'){res.writeHead(200,{'Content-Type':'application/json'});res.end('{"status":"ok"}');return;}
+    if((req.headers['x-admin-password']!=='secret'||req.headers['x-admin-username']!=='admin') && p!=='/api/v1/darts/season'){res.writeHead(401,{'Content-Type':'application/json'});res.end('{"detail":"Verwaltungskennwort ungültig."}');return;}
+    if(p==='/api/v1/darts/admin/verify'){res.writeHead(200,{'Content-Type':'application/json'});res.end('{"status":"ok"}');return;}
     if(p==='/api/v1/darts/admin/players'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(profiles));return;}
     if(p==='/api/v1/darts/admin/sponsors'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(sponsors));return;}
     if(p==='/api/v1/darts/admin/events'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(events));return;}
@@ -42,8 +42,8 @@ const server=http.createServer((req,res)=>{
   try{
     const page=await browser.newPage({viewport:{width:1280,height:900},timezoneId:'Europe/Berlin'}),errors=[];page.on('pageerror',error=>errors.push(error.message));
     await page.goto(`${origin}/darts-admin`);
-    await page.fill('#adminPassword','wrong');await page.click('#loginForm button');await page.getByText('Verwaltungskennwort ungültig.').waitFor();
-    await page.fill('#adminPassword','secret');await page.click('#loginForm button');await page.locator('#playerList').getByText('Patrick Lammers',{exact:true}).waitFor();
+    await page.fill('#adminUsername','admin');await page.fill('#adminPassword','wrong');await page.click('#loginForm button');await page.getByText('Verwaltungskennwort ungültig.').waitFor();
+    await page.fill('#adminUsername','admin');await page.fill('#adminPassword','secret');await page.click('#loginForm button');await page.locator('#playerList').getByText('Patrick Lammers',{exact:true}).waitFor();
     await page.locator('#playerList').getByText('Patrick Lammers',{exact:true}).click();
     assert.equal(await page.inputValue('#alias'),'Peddy');assert.equal(await page.inputValue('#favoriteFinish'),'D16');
     await page.fill('#playerNumber','Q8V4');await page.fill('#walkOnSong','Don\'t Stop Believin\' – Journey');await page.check('#published');await page.click('#profileForm button[type="submit"]');
@@ -53,6 +53,11 @@ const server=http.createServer((req,res)=>{
     await page.fill('#sponsorPriority','120');await page.click('#sponsorForm button[type="submit"]');await page.getByText('Sponsor gespeichert.').waitFor();assert.equal(savedSponsor.priority,120);assert.equal(savedSponsor.sponsor_type,'main');
     await page.click('#eventsAdminTab');await page.click('#newEvent');await page.fill('#eventTitle','Sommerturnier');await page.fill('#eventKicker','SV Barver');await page.fill('#eventDescription','Offenes Dartturnier für alle.');await page.fill('#eventDate','Samstag, 15. August');await page.fill('#eventLocation','Sporthalle Barver');await page.fill('#eventHref','https://example.org/turnier');await page.fill('#eventButtonLabel','Jetzt anmelden');await page.fill('#eventPriority','7');await page.fill('#eventStartsAt','2026-08-15T14:30');await page.fill('#eventEndsAt','2026-08-15T22:00');await page.check('#eventActive');await page.setInputFiles('#eventImage',path.join(root,'pics/logo.png'));await page.getByText(/Banner vorbereitet/).waitFor();await page.click('#eventForm button[type="submit"]');await page.getByText('Veranstaltung gespeichert.').waitFor();assert.equal(savedEvent.title,'Sommerturnier');assert.equal(savedEvent.description,'Offenes Dartturnier für alle.');assert.equal(savedEvent.website,'https://example.org/turnier');assert.equal(savedEvent.active,true);assert.equal(savedEvent.starts_at,'2026-08-15T12:30:00.000Z');await page.locator('#eventImagePreview img[src^="blob:"]').waitFor();
     await page.click('#socialAdminTab');await page.click('#newSocial');await page.selectOption('#socialPlatform','instagram');await page.fill('#socialLabel','SV Barver auf Instagram');await page.fill('#socialHref','https://instagram.com/svbarver');await page.fill('#socialPriority','4');await page.click('#socialForm button[type="submit"]');await page.getByText('Link gespeichert.').waitFor();assert.equal(savedSocial.website,'https://instagram.com/svbarver');assert.equal(savedSocial.active,false);
+    for(const theme of ['light','dark']) {
+      if(await page.evaluate(()=>document.documentElement.dataset.theme)!==theme)await page.click('#adminThemeToggle');
+      await page.evaluate(()=>window.scrollTo(0,0));
+      await page.screenshot({path:path.join(root,`outputs/darts-admin-${theme}.png`),fullPage:true});
+    }
     await page.screenshot({path:path.join(root,'outputs/darts-admin-desktop.png'),fullPage:true});
     await page.setViewportSize({width:390,height:844});for(const tab of ['#playersAdminTab','#sponsorsAdminTab','#eventsAdminTab','#socialAdminTab']){await page.click(tab);const mobile=await page.evaluate(()=>({fits:document.documentElement.scrollWidth<=innerWidth,width:document.documentElement.scrollWidth,viewport:innerWidth,wide:[...document.querySelectorAll('*')].filter(node=>node.getBoundingClientRect().right>innerWidth+1).slice(0,5).map(node=>`${node.tagName}.${node.className}`)}));assert.equal(mobile.fits,true,`${tab}: ${JSON.stringify(mobile)}`);}await page.screenshot({path:path.join(root,'outputs/darts-admin-mobile.png'),fullPage:true});
     assert.deepEqual(errors,[]);console.log('Browser: player, sponsor, event/banner, social admin and mobile tabs OK');

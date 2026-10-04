@@ -114,6 +114,17 @@ const server=http.createServer((req,res)=>{
     await page.waitForTimeout(300);
     assert.match(await page.locator('#liveDataStatus').innerText(),/aktuell/);
     fs.mkdirSync(path.join(root,'outputs'),{recursive:true});
+    for(const theme of ['light','dark']) {
+      if(await page.evaluate(()=>document.documentElement.dataset.theme)!==theme)await page.click('#themeToggle');
+      await page.evaluate(()=>window.scrollTo(0,0));
+      await page.screenshot({path:path.join(root,`outputs/darts-colors-${theme}-desktop.png`),fullPage:true});
+      await page.setViewportSize({width:390,height:844});
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`${theme} mobile overflow`);
+      await page.evaluate(()=>window.scrollTo(0,0));
+      await page.screenshot({path:path.join(root,`outputs/darts-colors-${theme}-mobile.png`),fullPage:true});
+      await page.setViewportSize({width:1440,height:1080});
+    }
+    await page.click('#themeToggle');
     await page.screenshot({path:path.join(root,'outputs/darts-home-desktop.png'),fullPage:true});
     await page.setViewportSize({width:390,height:844});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'mobile horizontal overflow');

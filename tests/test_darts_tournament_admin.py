@@ -9,7 +9,7 @@ class TournamentAdminTests(unittest.TestCase):
         routes = [r for r in main.app.routes if getattr(r, 'path', '').startswith('/api/v1/darts/admin/tournament')]
         self.assertEqual(len(routes), 3)
         for route in routes:
-            self.assertIn(main.require_admin, [d.call for d in route.dependant.dependencies])
+            self.assertIn(main.require_darts_admin, [d.call for d in route.dependant.dependencies])
 
     def test_bad_source_or_offline_never_changes_settings(self):
         update = main.DartsTournamentUpdate(source='https://evil.test/event/1')
