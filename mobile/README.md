@@ -33,6 +33,33 @@ In nativen Builds erfolgt der Datenabruf über CapacitorHttp. Kein offener CORS-
 
 Android: Android Studio/SDK installieren, `npm run android:init`, `npm run sync`, `npm run android`.
 iOS: auf einem Mac mit passendem Xcode `npm run ios:init`, `npm run sync`, `npm run ios`.
+
+### Lokale Android-Test-APK
+
+Nach `cap sync android` immer `npm run android:prepare` ausführen. Damit werden das
+Vereinslogo, der dunkle Startbildschirm, HTTPS-only, deaktivierte Cloud-Sicherung,
+die Testversionsnummer und der lokale Debug-Schlüsselpfad auf das erzeugte Projekt
+übertragen. Die Quelldateien dafür liegen in `android-overrides/`.
+Die Gradle-Distribution 9.1.0 ist per SHA-256 festgelegt und vermeidet den
+Windows-Dateisperrfehler des ursprünglichen 8.14.3-Templates.
+
+Mit Java 21 und Android SDK 36: im Ordner `android/` unter Windows
+`gradlew.bat --no-daemon --console=plain --max-workers=2 assembleDebug` ausführen.
+SDK und Java können portabel verwendet werden; Android Studio ist für diesen
+Kommandozeilen-Testbau nicht nötig. Resultat: `android/app/build/outputs/apk/debug/app-debug.apk`.
+Vor dem allerersten Bau muss der lokale Testschlüssel erzeugt werden, falls er
+noch nicht vorhanden ist. Im Ordner `android/` mit dem JDK-Werkzeug `keytool`:
+`keytool -genkeypair -keystore debug.keystore -storepass android -keypass android -alias androiddebugkey -keyalg RSA -keysize 3072 -validity 3650 -storetype JKS -dname "CN=Barver Darts Test,O=ClubIQ,C=DE"`.
+Dies sind ausschließlich die Standard-Testpasswörter, keine Produktionssignatur.
+Einen vorhandenen Schlüssel niemals durch einen neuen ersetzen.
+
+Diese APK ist mit einem **lokalen Debug-Schlüssel** signiert, nicht für den Store
+bestimmt. Den Schlüssel in `android/debug.keystore` für weitere Testupdates erhalten,
+niemals veröffentlichen. APK und native Builddateien bleiben lokal und ignoriert.
+Auf dem Handy kann die APK direkt installiert werden; die Erlaubnis „Unbekannte
+Apps installieren“ nur für die verwendete Datei-/Browser-App geben und anschließend
+wieder abschalten. Es ist kein Google-Play-Login nötig.
+Ein erstes Gerätetest-Ergebnis liegt erst nach Installation auf einem echten Handy vor.
 App-ID vor Anmeldung in den Stores verbindlich festlegen: aktuell `party.clubiq.barverdarts`.
 Die erzeugten nativen Projekte sind vorläufig lokale Artefakte. Sobald native Anpassungen verbindlich
 sind, diese ohne Signaturdateien/Firebase-Dateien gezielt ins Repository übernehmen.

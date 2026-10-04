@@ -11,6 +11,7 @@
     "ios:init": "npm run build && cap add ios",
     "sync": "npm run build && cap sync",
     "android": "cap open android",
+    "android:prepare": "node scripts/prepare-android.mjs",
     "ios": "cap open ios"
   },
   "dependencies": {
