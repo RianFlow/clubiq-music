@@ -145,6 +145,16 @@ const server=http.createServer((req,res)=>{
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'mobile horizontal overflow');
     await page.screenshot({path:path.join(root,'outputs/darts-home-mobile.png'),fullPage:true});
     await page.setViewportSize({width:1440,height:1080});
+    await page.locator('#matchCenterGrid [data-team-code="A"]').first().click();
+    await page.locator('.team-group-players').waitFor();
+    assert.equal(await page.locator('.team-group-wordmark strong').innerText(),'BARVER A');
+    assert.match(await page.locator('.team-group-players').getAttribute('src'),/barver-a-team-cutout.png/);
+    await page.waitForFunction(()=>{const image=document.querySelector('.team-group-players');return image.complete&&image.naturalWidth>0;});
+    await page.locator('.team-group-photo').screenshot({path:path.join(root,'outputs/barver-a-team-desktop.png')});
+    await page.setViewportSize({width:390,height:844});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'mobile team photo overflow');
+    await page.locator('.team-group-photo').screenshot({path:path.join(root,'outputs/barver-a-team-mobile.png')});
+    await page.click('#closeTeamProfile');await page.setViewportSize({width:1440,height:1080});
     await page.locator('#matchCenterGrid [data-team-code="B"]').first().click();
     await page.locator('.team-group-players').waitFor();
     assert.equal(await page.locator('.team-group-players').getAttribute('src'),'/pics/teams/barver-b-team-cutout.webp?v=20260927-2');
