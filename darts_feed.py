@@ -31,6 +31,7 @@ _special_cache: tuple[float, dict] | None = None
 _match_cache: dict[int, tuple[float, dict]] = {}
 _player_stats_cache: tuple[float, dict] | None = None
 _player_stats_load_lock = Lock()
+_venue_cache: dict[int, tuple[float, dict]] = {}
 _player_match_stats_cache: dict[tuple[int, int], tuple[list[dict], list[dict]]] = {}
 
 
@@ -821,6 +822,31 @@ def _get_special_events(now: datetime) -> dict:
         return {"available": False, "stale": True, "updatedAt": now.isoformat(), "events": [], "matches": []}
 
 
+def _safe_venue(venue: dict) -> dict:
+    return {
+        "name": str(venue.get("name") or ""),
+        "city": str(venue.get("locationCity") or ""),
+        "postalCode": str(venue.get("locationPostalCode") or ""),
+        "street": str(venue.get("locationStreet") or ""),
+        "boards": venue.get("numberOfBoards") if isinstance(venue.get("numberOfBoards"), int) else None,
+    }
+
+
+def _load_home_venue(team_id: int, now: datetime) -> dict:
+    with _lock:
+        cached = _venue_cache.get(team_id)
+    if cached and now.timestamp() - cached[0] < 3600:
+        return cached[1]
+    try:
+        payload = _public_get(f"{FRONTEND_API}/participant/{team_id}")
+        venue = _safe_venue(((payload.get("participant") or {}).get("teamSeason") or {}).get("playingVenue") or {})
+    except (requests.RequestException, ValueError, KeyError, TypeError):
+        return cached[1] if cached else {}
+    with _lock:
+        _venue_cache[team_id] = (now.timestamp(), venue)
+    return venue
+
+
 def _load_team_profile(team_id: int) -> dict:
     payload = _public_get(f"{FRONTEND_API}/participant/{team_id}")
     participant = payload.get("participant") or {}
@@ -849,14 +875,7 @@ def _load_team_profile(team_id: int) -> dict:
         roster.append(public_member)
     role_order = {"Kapitän": 0, "Stellvertretung": 1, "Spieler": 2}
     roster.sort(key=lambda item: (role_order.get(item["role"], 3), item["name"]))
-    venue = team.get("playingVenue") or {}
-    safe_venue = {
-        "name": str(venue.get("name") or ""),
-        "city": str(venue.get("locationCity") or ""),
-        "postalCode": str(venue.get("locationPostalCode") or ""),
-        "street": str(venue.get("locationStreet") or ""),
-        "boards": venue.get("numberOfBoards") if isinstance(venue.get("numberOfBoards"), int) else None,
-    }
+    safe_venue = _safe_venue(team.get("playingVenue") or {})
     return {
         "name": str(participant.get("displayName") or team.get("name") or ""),
         "roster": roster,
@@ -1009,6 +1028,21 @@ def _load_season(now: datetime) -> dict:
                 profiles[code] = job.result()
             except (requests.RequestException, ValueError, KeyError, TypeError):
                 profiles[code] = {"name": "", "roster": [], "venue": {}, "weekday": None, "throwoffTime": None}
+    home_venues = {
+        team_id: (profiles.get(code) or {}).get("venue") or {}
+        for league in LEAGUES for team_id, code in league["teams"].items()
+    }
+    away_home_ids = {
+        item.get("homeTeamId") for item in all_matches
+        if item.get("kind") in {"upcoming", "live"}
+        and item.get("homeTeamId") and item.get("homeTeamId") not in home_venues
+    }
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        jobs = {executor.submit(_load_home_venue, team_id, now): team_id for team_id in away_home_ids}
+        for job in as_completed(jobs):
+            home_venues[jobs[job]] = job.result()
+    for item in all_matches:
+        item["homeVenue"] = home_venues.get(item.get("homeTeamId")) or {}
     teams = []
     for league in LEAGUES:
         for team_id, code in league["teams"].items():

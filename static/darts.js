@@ -897,7 +897,7 @@ function initDarts() {
   function appointmentLocation(item) {
     if(item.location)return item.location;
     const code=item.kind==='training'?'A':dartsTeamCode(item.match?.home||'');
-    const venue=code?teamByCode(code)?.venue:null;
+    const venue=item.match?.homeVenue?.street||item.match?.homeVenue?.city?item.match.homeVenue:(code?teamByCode(code)?.venue:null);
     return venue?[venue.name,venue.street,[venue.postalCode,venue.city].filter(Boolean).join(' ')].filter(Boolean).join(', '):'';
   }
   function calendarButton(item) {
