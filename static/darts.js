@@ -219,7 +219,7 @@ function dartsClubEvents(config, now=Date.now()) {
     const title=clean(item?.title,100); if (!title) return [];
     const starts=item.startsAt?Date.parse(item.startsAt):-Infinity;
     const ends=item.endsAt?Date.parse(item.endsAt):Infinity;
-    if (Number.isNaN(starts)||Number.isNaN(ends)||starts>ends||now<starts||now>ends) return [];
+    if (Number.isNaN(starts)||Number.isNaN(ends)||starts>ends||now<starts||now>=ends) return [];
     let href='';
     if (typeof item.href==='string'&&item.href) {
       try { const url=new URL(item.href); if (url.protocol==='https:'&&!url.username&&!url.password) href=url.href; } catch (_) {}
@@ -445,7 +445,7 @@ function initDarts() {
     banner.classList.toggle('has-event-image',Boolean(event.image));
     banner.hidden=false;
   }
-  let clubEvents=[],clubEventIndex=0;
+  let clubEvents=[],clubEventIndex=0,clubEventConfig={events:[]};
   q('#clubEventPoster').addEventListener('click',event=>{
     const image=q('#clubEventImage');
     if(!image.getAttribute('src')) return;
@@ -467,12 +467,13 @@ function initDarts() {
     q('#clubEventControls').hidden=clubEvents.length<2;
     q('#clubEventCount').textContent=`${clubEventIndex+1} / ${clubEvents.length}`;
   }
+  window.setInterval(()=>{const next=dartsClubEvents(clubEventConfig);if(JSON.stringify(next)!==JSON.stringify(clubEvents)){clubEvents=next;showClubEvent(clubEventIndex);}},1000);
   q('#previousClubEvent').addEventListener('click',()=>showClubEvent(clubEventIndex-1));
   q('#nextClubEvent').addEventListener('click',()=>showClubEvent(clubEventIndex+1));
   fetch('/api/v1/darts/events',{headers:{Accept:'application/json'},cache:'no-store',signal:AbortSignal.timeout(8000)})
     .then(response=>response.ok?response.json():Promise.reject(new Error('events api unavailable')))
     .catch(()=>fetch('/static/darts-events.json',{headers:{Accept:'application/json'},signal:AbortSignal.timeout(8000)}).then(response=>response.ok?response.json():Promise.reject(new Error('events unavailable'))))
-    .then(config=>{clubEvents=dartsClubEvents(config);showClubEvent(0);})
+    .then(config=>{clubEventConfig=config;clubEvents=dartsClubEvents(config);showClubEvent(0);})
     .catch(()=>renderClubEvent(null));
   fetch('/api/v1/darts/social-links',{headers:{Accept:'application/json'},signal:AbortSignal.timeout(8000)})
     .then(response=>response.ok?response.json():Promise.reject(new Error('events unavailable')))

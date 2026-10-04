@@ -68,20 +68,37 @@ class DartsContentTests(unittest.TestCase):
         }
         for route in main.app.routes:
             if getattr(route, "path", None) in paths:
-                self.assertIn(main.require_admin, [dep.call for dep in route.dependant.dependencies])
+                self.assertIn(main.require_darts_admin, [dep.call for dep in route.dependant.dependencies])
         with patch.object(main, "ADMIN_PASSWORD", "secret"):
             with self.assertRaises(HTTPException) as caught:
                 main.require_admin(None)
             self.assertEqual(caught.exception.status_code, 401)
 
+    def test_darts_login_requires_both_credentials_and_protects_all_routes(self):
+        with patch.object(main, "ADMIN_PASSWORD", "test-password"), patch.object(main, "DARTS_ADMIN_USERNAME", "test-admin"):
+            for password, username in ((None, None), ("test-password", None),
+                                       ("test-password", "wrong"), ("wrong", "test-admin")):
+                with self.assertRaises(HTTPException) as caught:
+                    main.require_darts_admin(password, username)
+                self.assertEqual(caught.exception.status_code, 401)
+            main.require_darts_admin("test-password", "test-admin")
+            main.require_admin("test-password")  # Music keeps its existing login.
+        for route in main.app.routes:
+            if getattr(route, "path", "").startswith("/api/v1/darts/admin/"):
+                self.assertIn(main.require_darts_admin, [dep.call for dep in route.dependant.dependencies])
+
     def test_event_https_timestamp_and_whitespace_validation(self):
         good = main.DartsEventUpdate(title="Open", website="https://example.org/event",
-                                     starts_at=datetime.fromisoformat("2026-10-01T10:00:00+02:00"))
+                                     starts_at=datetime.fromisoformat("2026-10-01T10:00:00+02:00"),
+                                     ends_at=datetime.fromisoformat("2026-10-01T22:00:00+02:00"))
         parsed = main._validated_darts_event(good)
         self.assertEqual(parsed["starts_at"].utcoffset().total_seconds(), 0)
+        with self.assertRaises(HTTPException):
+            main._validated_darts_event(main.DartsEventUpdate(title="Open", active=True))
+        self.assertIsNone(main._validated_darts_event(main.DartsEventUpdate(title="Draft", active=False))["ends_at"])
         for url in ("http://example.org", "https://user:pass@example.org", "https://example.org:bad"):
             with self.assertRaises(HTTPException):
-                main._validated_darts_event(main.DartsEventUpdate(title="Open", website=url))
+                main._validated_darts_event(main.DartsEventUpdate(title="Open", website=url, active=False))
         with self.assertRaises(HTTPException):
             main._validated_darts_event(main.DartsEventUpdate(title="   "))
         with self.assertRaises(HTTPException):

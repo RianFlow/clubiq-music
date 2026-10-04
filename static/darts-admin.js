@@ -1,9 +1,18 @@
 const $ = selector => document.querySelector(selector);
-const state = { password: sessionStorage.getItem('clubiq_darts_admin') || '', players: [], selected: null, pendingPhoto: null, previewUrl: '', sponsors: [], selectedSponsor: null, pendingSponsorLogo: null, events: [], selectedEvent: null, pendingEventImage: null, eventImageObjectUrl: '', socialLinks: [], selectedSocial: null };
+function applyAdminTheme(theme) {
+  document.documentElement.dataset.theme=theme;
+  $('#adminThemeToggle').setAttribute('aria-checked',String(theme==='dark'));
+  $('#adminThemeToggle').textContent=theme==='dark'?'☀ Hell':'☾ Dunkel';
+  try{localStorage.setItem('clubiq_darts_theme',theme);}catch(_){}
+}
+applyAdminTheme(document.documentElement.dataset.theme==='dark'?'dark':'light');
+$('#adminThemeToggle').addEventListener('click',()=>applyAdminTheme(document.documentElement.dataset.theme==='dark'?'light':'dark'));
+const state = { username: sessionStorage.getItem('clubiq_darts_admin_username') || '', password: sessionStorage.getItem('clubiq_darts_admin') || '', players: [], selected: null, pendingPhoto: null, previewUrl: '', sponsors: [], selectedSponsor: null, pendingSponsorLogo: null, events: [], selectedEvent: null, pendingEventImage: null, eventImageObjectUrl: '', socialLinks: [], selectedSocial: null };
 
 async function api(path, options = {}) {
   const headers = new Headers(options.headers || {});
   headers.set('X-Admin-Password', state.password);
+  headers.set('X-Admin-Username', state.username);
   if (options.body && !(options.body instanceof FormData)) headers.set('Content-Type', 'application/json');
   const response = await fetch(path, {...options, headers, cache:'no-store'});
   if (!response.ok) {
@@ -298,18 +307,25 @@ async function loadProtectedEventImage(item){
   if(!item?.id||!item.hasImage)return;
   const selectedId=item.id;
   try{
-    const response=await fetch(`/api/v1/darts/admin/events/${selectedId}/image`,{headers:{'X-Admin-Password':state.password},cache:'no-store'});
+    const response=await fetch(`/api/v1/darts/admin/events/${selectedId}/image`,{headers:{'X-Admin-Password':state.password,'X-Admin-Username':state.username},cache:'no-store'});
     if(!response.ok)throw new Error('Banner-Vorschau nicht verfügbar.');
     const url=URL.createObjectURL(await response.blob());
     if(state.selectedEvent?.id!==selectedId){URL.revokeObjectURL(url);return;}
     state.eventImageObjectUrl=url;eventImagePreview(item,url);
   }catch(_){if(state.selectedEvent?.id===selectedId)eventImagePreview(item);}
 }
+function eventPublicationStatus(item){
+  if(!item.active)return 'Entwurf';
+  if(!item.endsAt)return 'Ende fehlt';
+  if(Date.parse(item.endsAt)<=Date.now())return 'Abgelaufen · ausgeblendet';
+  if(item.startsAt&&Date.parse(item.startsAt)>Date.now())return 'Geplant';
+  return 'Sichtbar bis '+new Date(item.endsAt).toLocaleString('de-DE');
+}
 function renderEventList(){
   const q=clean($('#eventSearch').value).toLocaleLowerCase('de-DE'), fragment=document.createDocumentFragment();
   for(const item of state.events.filter(e=>!q||`${e.title||''} ${e.location||''}`.toLocaleLowerCase('de-DE').includes(q))){
     const button=document.createElement('button');button.type='button';if(state.selectedEvent?.id===item.id)button.classList.add('active');
-    const name=document.createElement('strong');name.textContent=item.title||'Unbenannte Veranstaltung';const meta=document.createElement('span');meta.textContent=`${item.date||'Ohne Datum'} · ${item.active?'veröffentlicht':'Entwurf'}`;
+    const name=document.createElement('strong');name.textContent=item.title||'Unbenannte Veranstaltung';const meta=document.createElement('span');meta.textContent=`${item.date||'Ohne Datum'} · ${eventPublicationStatus(item)}`;
     button.append(name,meta);button.addEventListener('click',()=>selectEvent(item));fragment.append(button);
   }
   if(!fragment.childNodes.length)fragment.append(Object.assign(document.createElement('p'),{textContent:'Keine passenden Veranstaltungen.'}));$('#eventList').replaceChildren(fragment);
@@ -317,7 +333,7 @@ function renderEventList(){
 function selectEvent(item){
   revokeEventImagePreview();state.selectedEvent=item;state.pendingEventImage=null;$('#eventEditorEmpty').hidden=true;$('#eventForm').hidden=false;$('#eventId').value=item.id||'';
   $('#eventTitle').value=item.title||'';$('#eventKicker').value=item.kicker||'';$('#eventDescription').value=item.description||'';$('#eventDate').value=item.date||'';$('#eventLocation').value=item.location||'';$('#eventHref').value=item.href||'';$('#eventButtonLabel').value=item.buttonLabel||'';$('#eventPriority').value=item.priority??0;$('#eventStartsAt').value=localDateTimeValue(item.startsAt);$('#eventEndsAt').value=localDateTimeValue(item.endsAt);$('#eventActive').checked=item.active===true;
-  $('#eventHeading').textContent=item.title||'Neue Veranstaltung';$('#eventMeta').textContent=item.id?`Veranstaltung #${item.id}`:'Noch nicht gespeichert';$('#eventImage').value='';$('#deleteEventImage').disabled=!item.hasImage;$('#deleteEvent').disabled=!item.id;$('#eventFormStatus').hidden=true;eventImagePreview(item.image&&!String(item.image).includes('/api/v1/darts/admin/events/')?item:null);if(item.hasImage)loadProtectedEventImage(item);renderEventList();
+  $('#eventHeading').textContent=item.title||'Neue Veranstaltung';$('#eventMeta').textContent=item.id?eventPublicationStatus(item):'Noch nicht gespeichert';$('#eventImage').value='';$('#deleteEventImage').disabled=!item.hasImage;$('#deleteEvent').disabled=!item.id;$('#eventFormStatus').hidden=true;eventImagePreview(item.image&&!String(item.image).includes('/api/v1/darts/admin/events/')?item:null);if(item.hasImage)loadProtectedEventImage(item);renderEventList();
 }
 function newEvent(){selectEvent({id:null,title:'',kicker:'',description:'',date:'',location:'',href:'',buttonLabel:'',priority:0,active:false,hasImage:false});$('#eventTitle').focus();}
 async function loadEvents(){
@@ -337,7 +353,7 @@ async function saveEvent(event){
 async function deleteEvent(){const id=Number($('#eventId').value);if(!id||!confirm('Diese Veranstaltung wirklich löschen?'))return;const status=$('#eventFormStatus');status.hidden=false;status.textContent='Veranstaltung wird gelöscht …';try{await api(`/api/v1/darts/admin/events/${id}`,{method:'DELETE'});state.selectedEvent=null;await loadEvents();status.hidden=true;}catch(error){status.textContent=error.message;}}
 async function deleteEventImage(){const id=Number($('#eventId').value);if(!id||!state.selectedEvent?.hasImage||!confirm('Veranstaltungsbanner wirklich entfernen?'))return;const status=$('#eventFormStatus');status.hidden=false;status.textContent='Banner wird entfernt …';try{await api(`/api/v1/darts/admin/events/${id}/image`,{method:'DELETE'});await loadEvents();const item=state.events.find(e=>e.id===id);if(item)selectEvent(item);status.hidden=false;status.textContent='Banner entfernt.';}catch(error){status.textContent=error.message;}}
 
-function renderSocialList(){const q=clean($('#socialSearch').value).toLocaleLowerCase('de-DE'),fragment=document.createDocumentFragment();for(const item of state.socialLinks.filter(x=>!q||`${x.platform||''} ${x.label||''}`.toLocaleLowerCase('de-DE').includes(q))){const button=document.createElement('button');button.type='button';if(state.selectedSocial?.id===item.id)button.classList.add('active');const name=document.createElement('strong');name.textContent=item.label||item.platform;const meta=document.createElement('span');meta.textContent=`${item.platform} · ${item.active?'veröffentlicht':'Entwurf'}`;button.append(name,meta);button.addEventListener('click',()=>selectSocial(item));fragment.append(button);}if(!fragment.childNodes.length)fragment.append(Object.assign(document.createElement('p'),{textContent:'Keine passenden Links.'}));$('#socialList').replaceChildren(fragment);}
+function renderSocialList(){const q=clean($('#socialSearch').value).toLocaleLowerCase('de-DE'),fragment=document.createDocumentFragment();for(const item of state.socialLinks.filter(x=>!q||`${x.platform||''} ${x.label||''}`.toLocaleLowerCase('de-DE').includes(q))){const button=document.createElement('button');button.type='button';if(state.selectedSocial?.id===item.id)button.classList.add('active');const name=document.createElement('strong');name.textContent=item.label||item.platform;const meta=document.createElement('span');meta.textContent=`${item.platform} · ${eventPublicationStatus(item)}`;button.append(name,meta);button.addEventListener('click',()=>selectSocial(item));fragment.append(button);}if(!fragment.childNodes.length)fragment.append(Object.assign(document.createElement('p'),{textContent:'Keine passenden Links.'}));$('#socialList').replaceChildren(fragment);}
 function selectSocial(item){state.selectedSocial=item;$('#socialEditorEmpty').hidden=true;$('#socialForm').hidden=false;$('#socialId').value=item.id||'';$('#socialPlatform').value=item.platform||'instagram';$('#socialLabel').value=item.label||'';$('#socialHref').value=item.href||'';$('#socialPriority').value=item.priority??0;$('#socialActive').checked=item.active===true;$('#socialHeading').textContent=item.label||'Neuer Link';$('#socialMeta').textContent=item.id?`Social Link #${item.id}`:'Noch nicht gespeichert';$('#deleteSocial').disabled=!item.id;$('#socialFormStatus').hidden=true;renderSocialList();}
 function newSocial(){selectSocial({id:null,platform:'instagram',label:'',href:'',priority:0,active:false});$('#socialLabel').focus();}
 async function loadSocial(){ $('#socialDataStatus').textContent='Social Links werden geladen …';const keep=state.selectedSocial?.id;const result=await api('/api/v1/darts/admin/social-links');state.socialLinks=Array.isArray(result.links)?result.links:[];$('#socialDataStatus').textContent=`${state.socialLinks.length} Link${state.socialLinks.length===1?'':'s'}`;const item=state.socialLinks.find(x=>x.id===keep);if(item)selectSocial(item);else{state.selectedSocial=null;$('#socialForm').hidden=true;$('#socialEditorEmpty').hidden=false;renderSocialList();}}
@@ -360,10 +376,13 @@ $('#tournamentForm').addEventListener('submit',async event=>{
   try{const item=await api('/api/v1/darts/admin/tournament',{method:'PUT',body:JSON.stringify({source:checkedTournamentSource})});$('#tournamentCurrent').textContent=`Aktiv: ${tournamentLabel(item)}`;$('#tournamentSource').value=item.source;invalidateTournament();status.textContent='Turnier aktiviert. Live- und TV-Anzeigen übernehmen es beim nächsten Abgleich.';}catch(error){status.textContent=error.message;$('#activateTournament').disabled=false;}finally{tournamentBusy=false;$('#checkTournament').disabled=false;}
 });
 
-async function openAdmin(password) {
+async function openAdmin(password, username = state.username) {
+  state.username=clean(username);
   state.password=password;
-  await api('/api/v1/music/admin/verify');
+  await api('/api/v1/darts/admin/verify');
   sessionStorage.setItem('clubiq_darts_admin',password);
+  sessionStorage.setItem('clubiq_darts_admin_username',state.username);
+  $('#adminPassword').value='';
   $('#loginPanel').hidden=true; $('#adminPanel').hidden=false; $('#logout').hidden=false;
   const results=await Promise.allSettled([loadData(),loadSponsors(),loadEvents(),loadSocial(),loadTournament()]);
   const targets=['#dataStatus','#sponsorDataStatus','#eventDataStatus','#socialDataStatus','#tournamentCurrent'];
@@ -396,8 +415,8 @@ $('#eventImage').addEventListener('change',async event=>{const file=event.target
 $('#eventTitle').addEventListener('input',()=>$('#eventHeading').textContent=clean($('#eventTitle').value)||'Neue Veranstaltung');
 $('#socialSearch').addEventListener('input',renderSocialList);$('#newSocial').addEventListener('click',newSocial);$('#socialForm').addEventListener('submit',saveSocial);$('#deleteSocial').addEventListener('click',deleteSocial);$('#socialLabel').addEventListener('input',()=>$('#socialHeading').textContent=clean($('#socialLabel').value)||'Neuer Link');
 
-$('#loginForm').addEventListener('submit',async event=>{event.preventDefault();const error=$('#loginError');error.hidden=true;try{await openAdmin($('#adminPassword').value);}catch(problem){state.password='';sessionStorage.removeItem('clubiq_darts_admin');error.textContent=problem.message;error.hidden=false;}});
-$('#logout').addEventListener('click',()=>{revokeEventImagePreview();state.password='';sessionStorage.removeItem('clubiq_darts_admin');location.reload();});
+$('#loginForm').addEventListener('submit',async event=>{event.preventDefault();const error=$('#loginError');error.hidden=true;try{await openAdmin($('#adminPassword').value,$('#adminUsername').value);}catch(problem){state.password='';sessionStorage.removeItem('clubiq_darts_admin');state.username='';sessionStorage.removeItem('clubiq_darts_admin_username');error.textContent=problem.message;error.hidden=false;}});
+$('#logout').addEventListener('click',()=>{revokeEventImagePreview();state.password='';sessionStorage.removeItem('clubiq_darts_admin');state.username='';sessionStorage.removeItem('clubiq_darts_admin_username');location.reload();});
 $('#playerSearch').addEventListener('input',renderPlayerList); $('#teamFilter').addEventListener('change',renderPlayerList);
 $('#profileForm').addEventListener('submit',saveProfile); $('#deletePhoto').addEventListener('click',deletePhoto);
 $('#newPlayer').addEventListener('click',()=>{$('#newPlayerError').hidden=true;$('#newPlayerDialog').showModal();$('#newPlayerName').focus();});
@@ -405,4 +424,4 @@ $('#newPlayerForm').addEventListener('submit',createPlayer);
 $('[data-close-new-player]').addEventListener('click',()=>$('#newPlayerDialog').close());
 $('#profilePhoto').addEventListener('change',async event=>{const file=event.target.files?.[0];if(!file||!state.selected)return;const status=$('#formStatus');status.hidden=false;status.textContent='Bild wird für schnelle Darstellung optimiert …';try{state.pendingPhoto=await compressPhoto(file);state.previewUrl=await photoDataUrl(state.pendingPhoto);setPreview(state.selected,state.previewUrl);status.textContent=`Bild vorbereitet (${Math.max(1,Math.round(state.pendingPhoto.size/1024))} KB). Zum Übernehmen noch speichern.`;}catch(error){state.pendingPhoto=null;status.textContent=error.message;}});
 
-if (state.password) openAdmin(state.password).catch(()=>{state.password='';sessionStorage.removeItem('clubiq_darts_admin');});
+if (state.password) openAdmin(state.password).catch(()=>{state.password='';sessionStorage.removeItem('clubiq_darts_admin');state.username='';sessionStorage.removeItem('clubiq_darts_admin_username');});

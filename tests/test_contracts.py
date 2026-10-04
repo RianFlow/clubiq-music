@@ -149,7 +149,7 @@ class SecurityContractTests(unittest.TestCase):
             routes = [route for route in main.app.routes if getattr(route, "path", None) == path]
             self.assertTrue(routes, path)
             for route in routes:
-                self.assertIn(main.require_admin, [dependency.call for dependency in route.dependant.dependencies])
+                self.assertIn(main.require_darts_admin, [dependency.call for dependency in route.dependant.dependencies])
         profile = main.DartsPlayerProfileUpdate(
             player_number="Q8V4", alias="Peddy", favorite_finish="D16", published=True,
         )

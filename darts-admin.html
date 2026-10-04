@@ -7,21 +7,23 @@
   <meta name="robots" content="noindex,nofollow,noarchive">
   <title>ClubIQ · Dartsverwaltung</title>
   <link rel="icon" href="/pics/logo.png">
-  <link rel="stylesheet" href="/static/darts-admin.css?v=20261002-content1">
-  <script defer src="/static/darts-admin.js?v=20261003-turnier1"></script>
+  <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
+  <link rel="stylesheet" href="/static/darts-admin.css?v=20261004-colors1">
+  <script defer src="/static/darts-admin.js?v=20261004-colors1"></script>
 </head>
 <body>
   <header class="admin-header">
     <a href="/darts" class="brand"><img src="/pics/logo.png" alt=""><span>ClubIQ <b>Dartsverwaltung</b></span></a>
-    <button id="logout" type="button" hidden>Abmelden</button>
+    <div class="admin-header-tools"><button id="adminThemeToggle" type="button" role="switch" aria-checked="false" aria-label="Dunkelmodus">Hell / Dunkel</button><button id="logout" type="button" hidden>Abmelden</button></div>
   </header>
   <main>
     <section id="loginPanel" class="login-card">
       <p class="eyebrow">Geschützter Bereich</p>
       <h1>Dartsbereich verwalten</h1>
-      <p>Hier verwaltest du Spielerprofile und die Sponsoren des öffentlichen Matchcenters.</p>
+      <p>Spielerprofile, Sponsoren, Veranstaltungen, Turniere und Vereinslinks zentral verwalten.</p>
       <form id="loginForm">
-        <label>Verwaltungskennwort<input id="adminPassword" type="password" autocomplete="current-password" required></label>
+        <label>Benutzername<input id="adminUsername" name="username" autocomplete="username" maxlength="100" required></label>
+        <label>Passwort<input id="adminPassword" name="password" type="password" autocomplete="current-password" required></label>
         <button type="submit">Verwaltung öffnen</button>
         <p id="loginError" class="error" role="alert" hidden></p>
       </form>
@@ -105,9 +107,9 @@
               <label>Titel<input id="eventTitle" maxlength="100" required></label><label>Kurztitel<input id="eventKicker" maxlength="50"></label>
               <label class="wide">Beschreibung<textarea id="eventDescription" maxlength="600" rows="4"></textarea></label><label>Datum / Anzeige<input id="eventDate" maxlength="100" placeholder="z. B. Samstag, 15. August"></label><label>Ort<input id="eventLocation" maxlength="120"></label>
               <label class="wide">Webseite<input id="eventHref" type="url" maxlength="500" placeholder="https://…"></label><label>Button-Text<input id="eventButtonLabel" maxlength="40" placeholder="Mehr erfahren"></label><label>Priorität<input id="eventPriority" type="number" min="-1000" max="1000" value="0"></label>
-              <label>Beginn<input id="eventStartsAt" type="datetime-local"></label><label>Ende<input id="eventEndsAt" type="datetime-local"></label>
+              <label>Banner sichtbar ab<input id="eventStartsAt" type="datetime-local"></label><label>Banner ausblenden ab<input id="eventEndsAt" type="datetime-local"></label>
             </div>
-            <label class="publish-switch"><input id="eventActive" type="checkbox"><span><strong>Veranstaltung veröffentlichen</strong><small>Neue Veranstaltungen starten immer als unveröffentlichter Entwurf.</small></span></label>
+            <label class="publish-switch"><input id="eventActive" type="checkbox"><span><strong>Veranstaltung veröffentlichen</strong><small>Zum Veröffentlichen ein Ende festlegen. Danach wird das Banner automatisch ausgeblendet. Ohne Beginn erscheint es sofort.</small></span></label>
             <div class="form-actions"><button type="submit">Veranstaltung speichern</button><button id="deleteEvent" type="button" class="secondary danger">Veranstaltung löschen</button><a href="/darts" target="_blank" rel="noopener">Öffentliche Seite ansehen</a></div><p id="eventFormStatus" role="status" hidden></p>
           </form>
         </div>

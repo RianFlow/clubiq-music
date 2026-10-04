@@ -1,0 +1,82 @@
+/* Shared surface palette and shape scale for the public matchcenter. */
+:root {
+  color-scheme:light;
+  --ui-bg:#f2f5f6; --ui-panel:#fff; --ui-soft:#eaf1ef;
+  --ui-text:#172d29; --ui-muted:#526660; --ui-line:#cbd8d3;
+  --ui-accent:#17644f; --ui-gold:#927128; --ui-shadow:0 4px 18px #183c2e09;
+  --green:#17644f; --line:var(--ui-line);
+}
+[data-theme="dark"] {
+  --ui-bg:#0c1715; --ui-panel:#13251f; --ui-soft:#1b3028;
+  --ui-text:#edf5f1; --ui-muted:#afc3ba; --ui-line:#395348;
+  --ui-accent:#91d8bd; --ui-gold:#dfc37b; --ui-shadow:0 4px 18px #0002;
+  --green:#91d8bd; --line:var(--ui-line);
+}
+:root body:not(.tv-live) { color:var(--ui-text); background:var(--ui-bg); }
+body:not(.tv-live) :is(.today-game,.sport-card,.team-card,.native-team-card,.native-match-row,.member-card,.player-roster-card,.league-block,.team-profile-section) {
+  border-radius:12px; border-color:var(--ui-line); box-shadow:var(--ui-shadow);
+}
+body:not(.tv-live) :is(.today-game,.sport-card,.team-card,.native-team-card,.native-match-row,.member-card,.league-block,.team-profile-section,dialog) {
+  color:var(--ui-text); background:var(--ui-panel);
+}
+body:not(.tv-live) :is(button,.external,.layout-controls,.personal-settings,.social-links a) { border-radius:8px; }
+body:not(.tv-live) :is(.sports-panel,.intro,.social-links,.source-note,.club-training) { border-radius:16px; box-shadow:var(--ui-shadow); }
+body:not(.tv-live) :is(.league-overview,.league-dashboard,.today-grid) { background:var(--ui-bg); }
+body:not(.tv-live) :is(.team-profile-match,.team-profile-stats>div,.player-profile-facts>div,.player-personal-item,.player-roster-card) {
+  color:var(--ui-text); background:var(--ui-soft); border-color:var(--ui-line); border-radius:8px;
+}
+body:not(.tv-live) #todayPanel :is(.match-center,.home-schedule section) { background:var(--ui-panel); border-color:var(--ui-line); border-radius:12px; box-shadow:var(--ui-shadow); }
+body:not(.tv-live) #todayPanel .match-center-card { color:var(--ui-text); background:var(--ui-soft); border-color:var(--ui-line); border-radius:10px; }
+body:not(.tv-live) #todayPanel .match-center-card.live { border-top-color:#bc3c35; }
+body:not(.tv-live) #todayPanel .match-center-card.upcoming { border-top-color:var(--ui-accent); }
+body:not(.tv-live) #todayPanel .match-center-card.final { border-top-color:var(--ui-gold); }
+body:not(.tv-live) #todayPanel .club-event-banner { background:var(--ui-panel); color:var(--ui-text); border-color:var(--ui-line); border-left:4px solid var(--ui-gold); border-radius:16px; }
+body:not(.tv-live) #todayPanel .club-event-copy h2 { color:var(--ui-text); }
+body:not(.tv-live) #todayPanel .club-event-copy .eyebrow { color:var(--ui-gold); }
+body:not(.tv-live) #todayPanel .club-event-copy > p:not(.eyebrow) { color:var(--ui-muted); }
+body:not(.tv-live) #todayPanel .club-event-controls button { color:var(--ui-text); border-color:var(--ui-line); background:var(--ui-soft); }
+body:not(.tv-live) #todayPanel .club-event-meta span { color:var(--ui-text); background:var(--ui-soft); border-radius:6px; }
+body:not(.tv-live) :is(.source-note,.social-links,.club-training,.home-filters,.layout-controls,.personal-settings[open]) { background:var(--ui-panel); border-color:var(--ui-line); }
+body:not(.tv-live) :is(.source-note,.intro p:last-child,.social-links p:last-child,.home-filters>summary span) { color:var(--ui-muted); }
+/* Light mode uses light navigation and section headers, including profile views. */
+:root:not([data-theme="dark"]) body:not(.tv-live) .darts-header { color:var(--ui-text); background:var(--ui-panel); border-bottom:1px solid var(--ui-line); }
+:root:not([data-theme="dark"]) body:not(.tv-live) .brand { color:var(--ui-text); }
+:root:not([data-theme="dark"]) body:not(.tv-live) .brand :is(small,em) { color:var(--ui-muted); }
+:root:not([data-theme="dark"]) body:not(.tv-live) .brand img { filter:none; }
+:root:not([data-theme="dark"]) body:not(.tv-live) :is(.primary-navigation>button,.more-navigation>summary,.header-tools>button) { color:var(--ui-text); background:transparent; border-color:var(--ui-line); border-radius:8px; }
+:root:not([data-theme="dark"]) body:not(.tv-live) .primary-navigation>button[aria-pressed="true"] { color:#fff; background:var(--ui-accent); }
+:root:not([data-theme="dark"]) body:not(.tv-live) .primary-navigation>button::after { display:none; }
+:root:not([data-theme="dark"]) body:not(.tv-live) :is(.primary-navigation>button:hover,.header-tools>button:hover,.more-navigation>summary:hover) { color:var(--ui-accent); background:var(--ui-soft); }
+:root:not([data-theme="dark"]) body:not(.tv-live) .darts-header .theme-option { color:var(--ui-muted); }
+:root:not([data-theme="dark"]) body:not(.tv-live) .darts-header .theme-light { color:var(--ui-accent); }
+:root:not([data-theme="dark"]) body:not(.tv-live) :is(.intro,.sports-panel-head,.team-profile-hero,.match-center-head) {
+  color:var(--ui-text); background:var(--ui-soft); border-bottom:2px solid var(--ui-line);
+}
+:root:not([data-theme="dark"]) body:not(.tv-live) .intro { border-bottom:3px solid var(--ui-accent); }
+:root:not([data-theme="dark"]) body:not(.tv-live) .intro::after { background:none; }
+:root:not([data-theme="dark"]) body:not(.tv-live) .intro::before { opacity:.45; background:repeating-linear-gradient(60deg,transparent 0 37px,#17644f0e 38px 40px); }
+:root:not([data-theme="dark"]) body:not(.tv-live) .intro h1 { color:var(--ui-text); text-shadow:none; }
+:root:not([data-theme="dark"]) body:not(.tv-live) .intro h1 span { color:var(--ui-accent); }
+:root:not([data-theme="dark"]) body:not(.tv-live) .intro p:last-child strong { color:var(--ui-text); }
+:root:not([data-theme="dark"]) body:not(.tv-live) .intro-watermark { color:#17644f0a; }
+:root:not([data-theme="dark"]) body:not(.tv-live) .intro-club-logo { filter:drop-shadow(0 6px 10px #173c2a18); transform:translateY(-50%); }
+:root:not([data-theme="dark"]) body:not(.tv-live) :is(.intro,.sports-panel-head,.team-profile-hero,.match-center-head) :is(h2,h3) { color:var(--ui-text); }
+:root:not([data-theme="dark"]) body:not(.tv-live) :is(.intro,.sports-panel-head,.match-center-head) .eyebrow { color:var(--ui-accent); }
+:root:not([data-theme="dark"]) body:not(.tv-live) :is(.sports-panel-head,.team-profile-hero) p:not(.eyebrow) { color:var(--ui-muted); }
+:root:not([data-theme="dark"]) body:not(.tv-live) .sports-panel-head label { color:var(--ui-text); }
+:root:not([data-theme="dark"]) body:not(.tv-live) :is(.league-block-head,.league-controls,.season-toolbar,.social-links,.sponsor-banner) { background:var(--ui-panel); color:var(--ui-text); }
+:root:not([data-theme="dark"]) body:not(.tv-live) footer { color:var(--ui-muted); background:var(--ui-soft); border-top:1px solid var(--ui-line); }
+body:not(.tv-live) :is(button,input,select,a,summary):focus-visible { outline:3px solid var(--ui-accent); outline-offset:3px; }
+body:not(.tv-live) :is(.team-profile-match span,.team-profile-stats span,.darts-online,.sponsor-caption) { color:var(--ui-muted); }
+body:not(.tv-live) #todayPanel .home-schedule .is-empty { background:var(--ui-soft); }
+body:not(.tv-live) footer a { color:var(--ui-accent); }
+:root:not([data-theme="dark"]) body:not(.tv-live) .live-data-status { color:var(--ui-muted); }
+:root:not([data-theme="dark"]) body:not(.tv-live) .live-data-status[data-state="warn"] { color:#a3342b; }
+:root:not([data-theme="dark"]) body:not(.tv-live) .live-data-status[data-state="ok"]::before { background:#17644f; box-shadow:0 0 0 3px #17644f16; }
+body:not(.tv-live) #todayPanel .club-event-controls > span { color:var(--ui-muted); }
+body:not(.tv-live) .darts-header { box-shadow:0 2px 12px #163c3610; }
+:root:not([data-theme="dark"]) body:not(.tv-live) .primary-navigation { background:var(--ui-panel); }
+:root:not([data-theme="dark"]) body:not(.tv-live) .brand b { color:var(--ui-text); }
+body:not(.tv-live) .today-time { color:var(--ui-muted); }
+body:not(.tv-live) .sponsor-caption { color:#526660; }
+body:not(.tv-live) #todayPanel .club-event-banner::before { display:none; }
