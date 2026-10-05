@@ -1813,7 +1813,7 @@ function initDarts() {
   }
   function openJoin(){setSection('join');renderJoin();loadSeason().then(renderJoin);}
   q('#joinView').addEventListener('click',openJoin);q('#joinTeaserButton').addEventListener('click',openJoin);
-  function focusSection(){const ids={today:'homeTeamHeading',teams:'seasonHeading',league:'leagueHeading',ranking:'rankingHeading',join:'joinHeading',members:'membersHeading',training:'trainingHeading',cup:'cupHeading'};const heading=q(`#${ids[currentSection]||'homeTeamHeading'}`);if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});heading.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth'});}}
+  function focusSection(){const ids={today:'homeTeamHeading',teams:'seasonHeading',league:'leagueHeading',ranking:'rankingHeading',tv:'tvScheduleHeading',join:'joinHeading',members:'membersHeading',training:'trainingHeading',cup:'cupHeading'};const heading=q(`#${ids[currentSection]||'homeTeamHeading'}`);if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});heading.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth'});}}
   const mobileTargets={today:'todayView',teams:'gridView',league:'leagueView'};
   for(const button of document.querySelectorAll('[data-mobile-section]'))button.addEventListener('click',()=>{const section=button.dataset.mobileSection;if(section==='more')q('#mobileMenuDialog').showModal();else{q(`#${mobileTargets[section]}`).click();focusSection();}});
   q('#closeMobileMenu').addEventListener('click',()=>q('#mobileMenuDialog').close());
@@ -1947,6 +1947,25 @@ function initDarts() {
   q('#rankingPrevious').addEventListener('click',()=>{rankingPage--;renderRanking();});q('#rankingNextPage').addEventListener('click',()=>{rankingPage++;renderRanking();});
   for(const button of document.querySelectorAll('[data-ranking-filter]'))button.addEventListener('click',async()=>{rankingOurs=button.dataset.rankingFilter==='ours';rankingPage=0;for(const item of document.querySelectorAll('[data-ranking-filter]'))item.setAttribute('aria-pressed',String(item===button));if(rankingOurs)await Promise.allSettled([loadSeason(),loadClubMembers()]);renderRanking();});
   window.setInterval(()=>{if(!q('#rankingPanel').hidden)loadRanking();},60000);
+  let tvScheduleData=null,tvScheduleLoading=false,tvScheduleLoadedAt=0;
+  const tvDate=value=>new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',weekday:'short',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(value))+' Uhr';
+  function tvScheduleEvents(){return (tvScheduleData?.events||[]).filter(item=>{try{const url=new URL(item.url);return Date.parse(item.start)>Date.now()&&url.protocol==='https:'&&url.hostname==='www.sport1.de'&&url.pathname.startsWith('/tv-video/stream/');}catch(_){return false;}}).sort((a,b)=>Date.parse(a.start)-Date.parse(b.start)).slice(0,12);}
+  function renderTvSchedule(){
+    const events=tvScheduleEvents(),next=events[0],fragment=document.createDocumentFragment();
+    q('#tvTeaserHeading').textContent=next?next.title:'Wann läuft wieder Darts?';q('#tvTeaserCopy').textContent=next?`${tvDate(next.start)} · SPORT1 · Livestream`:tvScheduleData?.available?'Noch kein weiterer Livestream veröffentlicht.':'Kommende Livestreams und Anbieterprogramme.';
+    for(const item of events){const card=document.createElement('article');card.className='tv-schedule-card';const date=document.createElement('time');date.dateTime=item.start;date.textContent=tvDate(item.start);const title=document.createElement('h2');title.textContent=item.title;const provider=document.createElement('span');provider.className='tv-provider';provider.textContent='SPORT1 · Livestream';const link=document.createElement('a');link.href=item.url;link.target='_blank';link.rel='noopener noreferrer';link.className='external';link.textContent='Zum Livestream ↗';card.append(date,title,provider,link);fragment.append(card);}
+    if(!events.length){const empty=document.createElement('p');empty.className='tv-schedule-empty';empty.textContent=tvScheduleData?.available?'SPORT1 hat hier noch keinen weiteren Darts-Livestream veröffentlicht. Schau auch in die Anbieterprogramme unten.':'Die Termine konnten gerade nicht geladen werden. Du kannst die Anbieterprogramme unten direkt öffnen.';fragment.append(empty);}
+    q('#tvScheduleList').replaceChildren(fragment);
+    const checked=tvScheduleData?.updatedAt;const validChecked=Number.isFinite(Date.parse(checked));q('#tvScheduleStatus').textContent=tvScheduleData?.stale?'Die Quelle ist gerade nicht erreichbar. Angezeigt wird der zuletzt geprüfte Stand.':validChecked?`Quelle: SPORT1 · Geprüft: ${tvDate(checked)} · Termine werden automatisch aktualisiert.`:'Quelle: SPORT1 · Termine werden automatisch aktualisiert.';
+  }
+  async function loadTvSchedule(force=false){
+    if(tvScheduleLoading||(!force&&Date.now()-tvScheduleLoadedAt<300000))return;
+    tvScheduleLoading=true;q('#reloadTvSchedule').disabled=true;
+    try{const response=await fetch('/api/v1/darts/tv',{headers:{Accept:'application/json'}});if(!response.ok)throw new Error();tvScheduleData=await response.json();tvScheduleLoadedAt=Date.now();}catch(_){if(tvScheduleData)tvScheduleData={...tvScheduleData,stale:true};else tvScheduleData={available:false,events:[]};}finally{renderTvSchedule();tvScheduleLoading=false;q('#reloadTvSchedule').disabled=false;}
+  }
+  q('#tvScheduleView').addEventListener('click',()=>{setSection('tv');loadTvSchedule();});q('#tvTeaserButton').addEventListener('click',()=>{q('#tvScheduleView').click();focusSection();});q('#reloadTvSchedule').addEventListener('click',()=>loadTvSchedule(true));
+  window.setInterval(()=>{renderTvSchedule();if(!document.hidden)loadTvSchedule();},60000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden){renderTvSchedule();loadTvSchedule();}});
   const requestedSection=new URLSearchParams(location.search).get('view');
   let currentSection='today',sectionNavigationReady=false;
   function setSection(section) {
@@ -1957,6 +1976,7 @@ function initDarts() {
     q('#seasonPanel').hidden = !teams;
     q('#activityPanel').hidden = section !== 'activity';
     q('#trainingPanel').hidden = section !== 'training';
+    q('#tvSchedulePanel').hidden=section!=='tv';q('#tvScheduleTeaser').hidden=section!=='today';q('#tvScheduleView').setAttribute('aria-pressed',String(section==='tv'));
     q('#rankingPanel').hidden = section !== 'ranking';
     q('#rankingView').setAttribute('aria-pressed',String(section==='ranking'));
     q('#todayPanel').hidden = section !== 'today';q('#nextAppointments').hidden=section!=='today';q('#homeTeamPanel').hidden=section!=='today';q('#joinTeaser').hidden=section!=='today';q('#joinPanel').hidden=section!=='join';
@@ -2124,6 +2144,7 @@ function initDarts() {
   }
   applyLayout();
   setSection('today');
+  loadTvSchedule();
   q('#todayView').textContent='Startseite';
   q('#todayGrid').before(q('#nextAppointments'));
   q('#todayGrid').after(q('.match-center'));
@@ -2176,6 +2197,6 @@ function initDarts() {
     q('#fullscreen').textContent=active ? 'TV-Modus beenden' : 'TV-Modus';
   });
   sectionNavigationReady=true;
-  const sectionTargets={teams:'gridView',league:'leagueView',ranking:'rankingView',join:'joinView',members:'membersView',training:'trainingView',cup:'cupView'};
+  const sectionTargets={teams:'gridView',league:'leagueView',ranking:'rankingView',tv:'tvScheduleView',join:'joinView',members:'membersView',training:'trainingView',cup:'cupView'};
   if(sectionTargets[requestedSection])q(`#${sectionTargets[requestedSection]}`).click();
 }

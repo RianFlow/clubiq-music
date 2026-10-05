@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field
 
 from db_config import connection_kwargs
 from darts_ranking import get_darts_ranking
+from darts_tv import get_darts_tv
 from darts_feed import DartsFeedUnavailable, get_darts_center, get_darts_feed, get_darts_match, get_darts_player_stats, get_darts_season
 from darts_live import darts_live_hub
 from darts_tournament import get_tournament, get_series_tournament, preview_tournament, SOURCE as DEFAULT_TOURNAMENT_SOURCE
@@ -990,6 +991,12 @@ def darts_center(league: str = "kl04", round_id: int | None = None):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except DartsFeedUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/v1/darts/tv")
+def darts_tv(response: Response):
+    response.headers["Cache-Control"] = "public, max-age=60"
+    return get_darts_tv()
 
 
 @app.get("/api/v1/darts/ranking")
