@@ -702,6 +702,7 @@ function initDarts() {
     if (!group?.groupKey) return null;
     const matchId=Number(group.meta?.id || group.groupKey);
     const existing=(tickerData.items||[]).find(entry=>entry.id===matchId);
+    if (group.stale||tickerData.source==='browser-3k') return existing || null;
     if(!group.finished&&!dartsLiveGroupActive(group))return existing || null;
     if(existing?.kind==='final'&&!group.finished)return existing;
     const latest=(group.matches || []).slice().sort((a,b)=>(b.lastUpdateNs||0)-(a.lastUpdateNs||0))[0];
@@ -735,8 +736,9 @@ function initDarts() {
   }
   function applyServerLiveGroup(group) {
     if (!group?.groupKey) return;
-    if (!demoLive && !group.stale && Array.isArray(group.events)) window.DartsBroadcast?.ingest(group.events);
     serverLiveGroups.set(String(group.groupKey),group);
+    if (group.stale||tickerData.source==='browser-3k') return;
+    if (!demoLive && !group.stale && Array.isArray(group.events)) window.DartsBroadcast?.ingest(group.events);
     const serverCenters=[...serverLiveGroups.values()].filter(entry=>dartsLiveGroupActive(entry)).map(liveGroupAsCenter);
     const ids=new Set(serverCenters.flatMap(center=>center.barverMatches.map(match=>match.id)));
     liveCenters=[...serverCenters,...liveCenters.filter(center=>!center.liveGroup&&!(center.barverMatches || []).some(match=>ids.has(match.id)))];
@@ -1062,7 +1064,7 @@ function initDarts() {
     const detailsAge=Date.now()-(liveDetailsLoadedAt||liveDetailsFirstAttempt);
     const directDetailsFailed=tickerData.source==='browser-3k'&&(tickerData.centers||[]).some(center=>center.stale);
     const detailsStale=directDetailsFailed||((tickerData.items||[]).some(m=>m.kind==='live')&&liveDetailsFirstAttempt>0&&detailsAge>180000);
-    const activeServerGroups=[...serverLiveGroups.values()].filter(group=>!group.finished);
+    const activeServerGroups=[...serverLiveGroups.values()].filter(group=>!group.finished&&!group.stale);
     const upstreamLiveConnected=activeServerGroups.some(group=>group.connected);
     const serverFallback=activeServerGroups.length>0&&(!serverLiveConnected||!upstreamLiveConnected);
     const serverUpdates=activeServerGroups.map(group=>Date.parse(group.lastSuccess||group.lastUpdate||'')).filter(Number.isFinite);
@@ -1802,7 +1804,7 @@ function initDarts() {
       if (!response.ok) throw new Error('match unavailable');
       activeMatchDetailData=await response.json();
       const group=serverLiveGroups.get(String(matchId));
-      if (group) activeMatchDetailData={...activeMatchDetailData,liveGames:normalizedLiveGames(group)};
+      if (group&&!group.stale&&tickerData.source!=='browser-3k') activeMatchDetailData={...activeMatchDetailData,liveGames:normalizedLiveGames(group)};
       renderMatchDetail(activeMatchDetailData);
     } catch (_) { q('#matchDetail').innerHTML='<p class="error">Der Spielbericht konnte gerade nicht geladen werden. Bitte später erneut versuchen.</p>'; }
   }

@@ -67,6 +67,10 @@ const server=http.createServer((req,res)=>{
       if(!fallbackEnabled)return route.abort();
       await route.fulfill({status:200,headers:{'access-control-allow-origin':'*'},contentType:'application/json',body:JSON.stringify({data:[{id:55,statusActive:true,currentplayerIndex:0,matchPlayers:[{playerName:'Jannik Kläning',points:121,legs:2,email:'private@example.test'},{playerName:'Gast',points:180,legs:1}]}]})});
     });
+    await context.route(`${origin}/api/v1/darts/live`,async route=>{
+      if(!fallbackEnabled)return route.continue();
+      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({groups:[{groupKey:'901',connected:false,stale:true,finished:false,lastSuccess:day(-1),meta:{id:901,home:'SV Barver Darts A',away:'Gäste',barverTeams:['A']},matches:[{id:999,active:true,finished:false,teamScoreHome:1,teamScoreGuest:1,home:{name:'Alt',points:320,legs:0},guest:{name:'Alt',points:501,legs:0},lastUpdateNs:Date.now()*1e6}]}]})});
+    });
     const page=await context.newPage(),errors=[];page.on('pageerror',e=>{errors.push(e.message);console.error('Page error:',e.message);});
     await page.goto(`${origin}/darts`);
     assert.equal(await page.locator('#scheduleDetails').evaluate(n=>n.open),false);await page.locator('#scheduleDetails').evaluate(n=>n.open=true);
@@ -272,6 +276,7 @@ const server=http.createServer((req,res)=>{
     fail=true;fallbackEnabled=true;await page.reload();
     await page.getByText('Alternative 3K-Verbindung aktiv',{exact:true}).waitFor();
     assert.match(await page.locator('#todayGrid').innerText(),/121/);
+    assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('clubiq_darts_last_ticker')).items.find(m=>m.id===901).score),'8:3','stale server live state must not overwrite the independent fresh source');
     assert.equal((await page.evaluate(()=>localStorage.getItem('clubiq_darts_last_ticker'))).includes('private@example.test'),false);
     assert.equal(await page.locator('#matchCenterGrid .match-center-card').count(),4,'season snapshot survives both server failures');
     fail=false;fallbackEnabled=false;await page.evaluate(()=>window.dispatchEvent(new Event('online')));
