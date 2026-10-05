@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const context={module:{exports:{}},Intl};vm.runInNewContext(fs.readFileSync('static/darts-usability.js','utf8'),context);const {outcome,rankingPage}=context.module.exports;
+assert.equal(outcome({kind:'final',home:'Gegner',away:'SV Barver Darts B',score:'3:9'},'B').kind,'win');
+assert.equal(outcome({kind:'final',home:'SV Barver Darts A',away:'SV Barver Darts C',score:'7:5',barverSides:{A:'home',C:'away'}},'C').kind,'loss');
+assert.equal(outcome({kind:'final',home:'SV Barver Darts A',score:'6:6'},'A').kind,'draw');
+assert.equal(outcome({kind:'pending',home:'SV Barver Darts A',score:'7:5'},'A'),null);
+assert.equal(outcome({kind:'final',home:'SV Barver Darts A',score:null},'A'),null);
+const rows=Array.from({length:25},(_,i)=>({rank:i+1,name:i===20?'Jannik Kläning':`Spieler ${i}`,points:100-i}));
+assert.equal(rankingPage(rows,{page:1}).rows[0].rank,13);
+const ours=rankingPage(rows,{ours:true,names:['Jannik Kläning'],page:8});assert.equal(ours.total,1);assert.equal(ours.page,0);assert.equal(ours.rows[0].rank,21);
+assert.equal(rankingPage(rows,{search:'Klaning'}).rows[0].rank,21);
+assert.equal(rankingPage(rows,{ours:true,names:['Jannik']}).total,0);
+console.log('Usability: result perspective, unconfirmed scores, original rankings, filtering and pagination OK');
