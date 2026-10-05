@@ -1,0 +1,30 @@
+const assert=require('node:assert/strict');
+const source=require('../static/darts-source-fallback.js');
+const now=Date.now(),league={key:'kl04',event:1445,phase:2139,name:'KL',short:'KL',teams:{174110:'A'}};
+const raw={id:1,statusCd:'FINISH',setsHome:4,setsAway:8,participantHome:{id:174110,displayName:'Barver A',email:'private'},participantGuest:{id:2,displayName:'Gäste',phone:'private'},datePlanned:new Date(now-86400000).toISOString()};
+const item=source.normalize(raw,league,3,now);
+assert.equal(item.kind,'final');assert.equal(item.score,'4:8');assert.equal(item.text,'Gäste gewinnt 8:4 gegen Barver A');
+assert.ok(!JSON.stringify(item).includes('private'));
+assert.equal(source.normalize({...raw,byeAway:true},league,3,now),null);
+assert.equal(source.normalize({...raw,participantHome:{id:9}},league,3,now),null);
+const pending=source.normalize({...raw,statusCd:'OPEN',setsHome:null,setsAway:null},league,3,now);
+assert.equal(pending.kind,'pending');assert.equal(pending.score,null);
+const live=source.liveEvents({data:[{id:7,statusActive:true,currentplayerIndex:1,matchPlayers:[{playerName:'A',points:121,legs:2,email:'private'},{playerName:'B',points:5000,legs:1,score:180}]}]},item);
+assert.equal(live[0].homeRemaining,121);assert.equal(live[0].awayRemaining,null);assert.equal(live[0].currentSide,'away');
+assert.ok(!JSON.stringify(live).includes('private'));assert.deepEqual(source.liveEvents({data:[{statusActive:false,matchPlayers:[]}]},item),[]);
+const rounds=[{id:1,dateFrom:new Date(now-86400000).toISOString()},{id:2,dateFrom:new Date(now+86400000).toISOString()},{id:3,dateFrom:new Date(now+10*86400000).toISOString()}];
+assert.deepEqual(source.relevantRounds(rounds,now).map(r=>r.id),[1,2]);
+let calls=0;
+global.fetch=async(url,options)=>{
+  calls++;assert.equal(options.credentials,'omit');assert.ok(!options.headers.Authorization);
+  assert.match(url,/^https:\/\/(backend-ddv|live)\.3k-darts\.com\//);
+  if(url.includes('/round/'))return {ok:true,json:async()=>({matches:[{...raw,statusCd:'FINISH'}]})};
+  return {ok:true,json:async()=>({rounds})};
+};
+(async()=>{
+  const [first,second]=await Promise.all([source.load(),source.load()]);
+  assert.equal(first,second);assert.equal(calls,6,'parallel callers share one bounded fetch');
+  assert.equal(first.source,'browser-3k');assert.equal(first.stale,false);
+  await source.load();assert.equal(calls,6,'avoid repeated upstream requests within 30 seconds');
+  console.log('3K fallback: public allowlist, real scores, pending fixtures, single flight and bounded polling OK');
+})().catch(error=>{console.error(error);process.exitCode=1});

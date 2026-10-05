@@ -520,7 +520,7 @@ def poll_darts_push_events() -> None:
 def sync_darts_live_groups() -> None:
     try:
         season = get_darts_season()
-        if not season.get("stale"):
+        if not season.get("stale") and not season.get("degraded"):
             # Use the complete season schedule here. The compact ticker intentionally
             # looks only at nearby matchdays and can omit fixtures moved far away
             # from their published round window.
@@ -594,11 +594,13 @@ def is_darts_host(request: Request) -> bool:
 async def security_headers(request: Request, call_next):
     response = await call_next(request)
     frame_sources = "https://www.youtube-nocookie.com"
+    connect_sources = "'self'"
     if request.url.path == "/darts" or is_darts_host(request):
         frame_sources = "https://portal.3k-darts.com https://live.3k-darts.com"
+        connect_sources += " https://backend-ddv.3k-darts.com https://live.3k-darts.com"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
-        f"script-src 'self'; connect-src 'self'; frame-src {frame_sources}; "
+        f"script-src 'self'; connect-src {connect_sources}; frame-src {frame_sources}; "
         "base-uri 'none'; frame-ancestors 'none'"
     )
     response.headers["Referrer-Policy"] = "same-origin"
@@ -941,7 +943,7 @@ def darts_ticker():
 
 @app.get("/api/v1/darts/live")
 def darts_live_snapshot():
-    """Normalized server-side state; browsers never connect to 3K directly."""
+    """Normalized server state; the website can fall back to public 3K reads."""
     return darts_live_hub.snapshot()
 
 

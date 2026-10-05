@@ -7,6 +7,8 @@ from urllib.parse import urlencode
 
 import requests
 
+from darts_resilience import PublicSession, source_recovery, save_snapshot, load_snapshot, last_known
+
 
 FRONTEND_API = "https://backend-ddv.3k-darts.com/2k-backend-ddv/api/v1/frontend"
 API = f"{FRONTEND_API}/event"
@@ -25,6 +27,7 @@ _cache: dict | None = None
 _cache_time = 0.0
 _lock = Lock()
 _season_load_lock = Lock()
+_feed_load_lock = Lock()
 _center_cache: dict[tuple[str, int], tuple[float, dict]] = {}
 _season_cache: tuple[float, dict] | None = None
 _special_cache: tuple[float, dict] | None = None
@@ -538,7 +541,7 @@ def _leg_events(payload: list[dict], match: dict, team_name: str = "") -> list[d
 
 
 def _load(now: datetime) -> dict:
-    session = requests.Session()
+    session = PublicSession()
     session.headers.update({
         "User-Agent": "Mozilla/5.0",
         "Accept": "application/json, text/plain, */*",
@@ -593,20 +596,23 @@ def get_darts_feed(now: datetime | None = None) -> dict:
     global _cache, _cache_time
     now = now or datetime.now(timezone.utc)
     timestamp = now.timestamp()
-    with _lock:
-        if _cache and timestamp - _cache_time < CACHE_SECONDS:
-            return _cache
-    try:
-        result = _load(now)
+    with _feed_load_lock:
         with _lock:
-            _cache = result
-            _cache_time = timestamp
-            return _cache
-    except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
-        with _lock:
-            if _cache:
-                return {**_cache, "stale": True}
-        raise DartsFeedUnavailable("3K-Ergebnisse sind gerade nicht erreichbar.") from exc
+            if _cache and timestamp - _cache_time < CACHE_SECONDS:
+                return _cache
+        try:
+            result = _load(now)
+            with _lock:
+                _cache, _cache_time = result, timestamp
+            save_snapshot("ticker", result)
+            return result
+        except (requests.RequestException, ValueError, KeyError, TypeError, DartsFeedUnavailable) as exc:
+            cached = _cache or load_snapshot("ticker")
+            if cached:
+                with _lock:
+                    _cache = cached
+                return last_known(cached)
+            raise DartsFeedUnavailable("3K-Ergebnisse sind gerade nicht erreichbar.") from exc
 
 
 def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now: datetime | None = None) -> dict:
@@ -617,7 +623,7 @@ def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now:
         raise ValueError("Unbekannte Liga.")
     requested_round_id = round_id
     now = now or datetime.now(timezone.utc)
-    session = requests.Session()
+    session = PublicSession()
     session.headers.update({
         "User-Agent": "Mozilla/5.0",
         "Accept": "application/json, text/plain, */*",
@@ -698,6 +704,9 @@ def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now:
         }
         with _lock:
             _center_cache[cache_key] = (now.timestamp(), result)
+        save_snapshot(f"center:{league_key}:{round_id}", result)
+        if requested_round_id is None:
+            save_snapshot(f"center:{league_key}:latest", result)
         return result
     except ValueError:
         raise
@@ -709,13 +718,16 @@ def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now:
             ]
         if cached:
             _, result = max(cached, key=lambda value: value[0])
-            return {**result, "stale": True}
+            return last_known(result)
+        result = load_snapshot(f"center:{league_key}:{requested_round_id if requested_round_id is not None else 'latest'}")
+        if result:
+            return last_known(result)
         raise DartsFeedUnavailable("3K-Spieltag ist gerade nicht erreichbar.") from exc
 
 
 def _public_get(url: str):
-    response = requests.get(
-        url,
+    response = source_recovery.get(
+        requests.get, url,
         headers={
             "User-Agent": "Mozilla/5.0",
             "Accept": "application/json, text/plain, */*",
@@ -1007,6 +1019,8 @@ def _load_season(now: datetime) -> dict:
                     "warning": "Diese Liga konnte gerade nicht vollständig von 3K geladen werden.",
                 }
     leagues = [leagues_by_key[league["key"]] for league in LEAGUES]
+    if all(item.get("degraded") and not item.get("rounds") for item in leagues):
+        raise DartsFeedUnavailable("Keine Liga konnte von 3K geladen werden.")
     special = _get_special_events(now)
     all_matches = [match for league in leagues for match in league["matches"]]
     all_matches.extend(special.get("matches") or [])
@@ -1106,14 +1120,21 @@ def get_darts_season(now: datetime | None = None) -> dict:
                     return cached[1]
         try:
             result = _load_season(now)
+            if result.get("degraded"):
+                previous = (_season_cache or (0, None))[1] or load_snapshot("season")
+                if previous:
+                    return last_known(previous)
+                result = {**result, "stale": True}
             with _lock:
                 _season_cache = (now.timestamp(), result)
+            save_snapshot("season", result)
             return result
-        except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+        except (requests.RequestException, ValueError, KeyError, TypeError, DartsFeedUnavailable) as exc:
             with _lock:
                 cached = _season_cache
-            if cached:
-                return {**cached[1], "stale": True}
+            previous = cached[1] if cached else load_snapshot("season")
+            if previous:
+                return last_known(previous)
             raise DartsFeedUnavailable("Der 3K-Saisonspielplan ist gerade nicht erreichbar.") from exc
 
 

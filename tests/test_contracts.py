@@ -215,6 +215,15 @@ class SecurityContractTests(unittest.TestCase):
         self.assertIn("frame-src https://www.youtube-nocookie.com;", response.headers["content-security-policy"])
 
 
+    def test_darts_allows_only_the_required_public_fallback_hosts(self):
+        async def call_next(_request):
+            return Response("ok")
+        request = Request({"type": "http", "method": "GET", "path": "/darts", "headers": []})
+        response = asyncio.run(main.security_headers(request, call_next))
+        self.assertIn("connect-src 'self' https://backend-ddv.3k-darts.com https://live.3k-darts.com;", response.headers["content-security-policy"])
+        self.assertNotIn("connect-src *", response.headers["content-security-policy"])
+
+
 class OfflineFrontendContractTests(unittest.TestCase):
     def test_frontend_has_no_external_runtime_dependency(self):
         html_source = (ROOT / "index.html").read_text(encoding="utf-8")

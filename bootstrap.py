@@ -273,6 +273,12 @@ ALTER TABLE darts_player_profiles ADD COLUMN IF NOT EXISTS throwing_hand VARCHAR
 CREATE INDEX IF NOT EXISTS idx_darts_player_profiles_published
 ON darts_player_profiles(published);
 
+CREATE TABLE IF NOT EXISTS darts_feed_snapshots (
+    cache_key VARCHAR(80) PRIMARY KEY,
+    payload JSONB NOT NULL,
+    observed_at TIMESTAMPTZ NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS darts_roster_cache (
     player_id BIGINT PRIMARY KEY,
     display_name VARCHAR(100) NOT NULL,
