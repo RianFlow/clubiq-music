@@ -12,7 +12,7 @@ const matches=[
 if(process.argv.includes('--quiet'))for(const match of matches)if(match.kind==='live'){match.kind='upcoming';delete match.score;}
 const teams=['A','B','C','D'].map((code,i)=>({code,rank:i+2,name:`SV Barver Darts ${code}`,league:{name:code==='D'?'Kreisklasse 11':'Kreisligen 04'},record:{},matches:matches.filter(m=>m.barverTeam===code),roster:[{id:89027+i,name:code==='A'?'Jannik Kläning':`Demo-Spieler ${code}`,role:'Kapitän'}],venue:{name:'Testspielstätte',street:'Teststraße 1',postalCode:'49453',city:'Barver'}}));
 teams[1].roster=[{id:89029,name:'Patrick Lammers',role:'Kapitän'}];
-let fail=false,tvEmpty=false;
+let fail=false,tvEmpty=false,fallbackEnabled=false;
 const server=http.createServer((req,res)=>{
   const url=new URL(req.url,'http://localhost'),p=url.pathname;
   if(p.startsWith('/api/')) {
@@ -57,6 +57,20 @@ const server=http.createServer((req,res)=>{
   const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHANNEL?{channel:process.env.PLAYWRIGHT_CHANNEL}:{})});
   try {
     const context=await browser.newContext({viewport:{width:1440,height:1080},serviceWorkers:'block'});
+    await context.route('https://backend-ddv.3k-darts.com/**',async route=>{
+      if(!fallbackEnabled)return route.abort();
+      const url=route.request().url(),event=url.includes('/event/1445/')?1445:1460;
+      const body=url.includes('/round/')?{matches:[{id:event===1445?901:902,eventId:event,statusCd:'OPEN',setsHome:8,setsAway:3,datePlanned:day(0),participantHome:{id:event===1445?174110:174266,displayName:event===1445?'SV Barver Darts A':'SV Barver Darts D',email:'private@example.test'},participantGuest:{id:888,displayName:'Alternative Gäste'}}]}:{rounds:[{id:123,dateFrom:day(-1),dateTo:day(1)}]};
+      await route.fulfill({status:200,headers:{'access-control-allow-origin':'*'},contentType:'application/json',body:JSON.stringify(body)});
+    });
+    await context.route('https://live.3k-darts.com/**',async route=>{
+      if(!fallbackEnabled)return route.abort();
+      await route.fulfill({status:200,headers:{'access-control-allow-origin':'*'},contentType:'application/json',body:JSON.stringify({data:[{id:55,statusActive:true,currentplayerIndex:0,matchPlayers:[{playerName:'Jannik Kläning',points:121,legs:2,email:'private@example.test'},{playerName:'Gast',points:180,legs:1}]}]})});
+    });
+    await context.route(`${origin}/api/v1/darts/live`,async route=>{
+      if(!fallbackEnabled)return route.continue();
+      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({groups:[{groupKey:'901',connected:false,stale:true,finished:false,lastSuccess:day(-1),meta:{id:901,home:'SV Barver Darts A',away:'Gäste',barverTeams:['A']},matches:[{id:999,active:true,finished:false,teamScoreHome:1,teamScoreGuest:1,home:{name:'Alt',points:320,legs:0},guest:{name:'Alt',points:501,legs:0},lastUpdateNs:Date.now()*1e6}]}]})});
+    });
     const page=await context.newPage(),errors=[];page.on('pageerror',e=>{errors.push(e.message);console.error('Page error:',e.message);});
     await page.goto(`${origin}/darts`);
     assert.equal(await page.locator('#scheduleDetails').evaluate(n=>n.open),false);await page.locator('#scheduleDetails').evaluate(n=>n.open=true);
@@ -135,7 +149,7 @@ const server=http.createServer((req,res)=>{
     fail=true;await page.evaluate(()=>window.dispatchEvent(new Event('online')));
     await page.waitForTimeout(300);
     assert.equal(await page.locator('#matchCenterGrid .match-center-card').count(),4);
-    assert.match(await page.locator('#liveDataStatus').innerText(),/erneuert/);
+    assert.match(await page.locator('#liveDataStatus').innerText(),/Letzter Stand/);
     fail=false;await page.evaluate(()=>window.dispatchEvent(new Event('online')));
     await page.waitForTimeout(300);
     assert.match(await page.locator('#liveDataStatus').innerText(),/aktuell/);
@@ -258,6 +272,16 @@ const server=http.createServer((req,res)=>{
     tvEmpty=true;await page.click('#reloadTvSchedule');await page.locator('.tv-schedule-empty').waitFor();assert.match(await page.locator('.tv-schedule-empty').innerText(),/keinen weiteren/);assert.equal(await page.locator('.tv-schedule-card').count(),0);tvEmpty=false;await page.click('#reloadTvSchedule');await page.locator('.tv-schedule-card').waitFor();fail=true;await page.click('#reloadTvSchedule');await page.waitForFunction(()=>!document.querySelector('#reloadTvSchedule').disabled);assert.match(await page.locator('#tvScheduleStatus').innerText(),/zuletzt geprüfte/);assert.equal(await page.locator('.tv-schedule-card').count(),1);fail=false;
     await page.screenshot({path:path.join(root,'outputs/darts-tv-service-mobile.png')});await page.click('[data-mobile-section=more]');await page.click('[data-menu-target=tvScheduleView]');assert.equal(await page.locator('#tvSchedulePanel').isVisible(),true);
     await page.click('[data-mobile-section=more]');await page.click('[data-menu-target=fullscreen]');assert.equal(await page.locator('#tvLauncher').isVisible(),true);await page.locator('input[name=tvType][value=tournament]').check();assert.equal(await page.locator('#tvTournamentField').isVisible(),true);await page.selectOption('#tvTournamentChoice','30458');await page.locator('#tvLauncherForm button[type=submit]').click();await page.waitForURL('**/turnier?tv=1&event=30458');await page.getByRole('heading',{name:'DBD 9. Runde',exact:true}).waitFor();assert.equal(await page.locator('body').evaluate(n=>n.classList.contains('tv')),true);
+    await page.goto(`${origin}/darts`);await page.click('[data-mobile-section=today]');await page.selectOption('#favoriteTeam','all');
+    fail=true;fallbackEnabled=true;await page.reload();
+    await page.getByText('Alternative 3K-Verbindung aktiv',{exact:true}).waitFor();
+    assert.match(await page.locator('#todayGrid').innerText(),/121/);
+    assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('clubiq_darts_last_ticker')).items.find(m=>m.id===901).score),'8:3','stale server live state must not overwrite the independent fresh source');
+    assert.equal((await page.evaluate(()=>localStorage.getItem('clubiq_darts_last_ticker'))).includes('private@example.test'),false);
+    assert.equal(await page.locator('#matchCenterGrid .match-center-card').count(),4,'season snapshot survives both server failures');
+    fail=false;fallbackEnabled=false;await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+    await page.waitForFunction(()=>document.querySelector('#liveDataStatus').textContent==='3K-Daten aktuell');
+    assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('clubiq_darts_last_ticker')).source||null),null,'healthy server replaces browser fallback');
     assert.deepEqual(errors,[]);
     console.log('Browser: homepage, two boards, favorites, filters, saved player/type preferences, reconnect, mobile OK');
   } finally {await browser.close();server.close();}

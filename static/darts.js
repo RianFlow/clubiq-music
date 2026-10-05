@@ -702,6 +702,7 @@ function initDarts() {
     if (!group?.groupKey) return null;
     const matchId=Number(group.meta?.id || group.groupKey);
     const existing=(tickerData.items||[]).find(entry=>entry.id===matchId);
+    if (group.stale||tickerData.source==='browser-3k') return existing || null;
     if(!group.finished&&!dartsLiveGroupActive(group))return existing || null;
     if(existing?.kind==='final'&&!group.finished)return existing;
     const latest=(group.matches || []).slice().sort((a,b)=>(b.lastUpdateNs||0)-(a.lastUpdateNs||0))[0];
@@ -735,8 +736,9 @@ function initDarts() {
   }
   function applyServerLiveGroup(group) {
     if (!group?.groupKey) return;
-    if (!demoLive && !group.stale && Array.isArray(group.events)) window.DartsBroadcast?.ingest(group.events);
     serverLiveGroups.set(String(group.groupKey),group);
+    if (group.stale||tickerData.source==='browser-3k') return;
+    if (!demoLive && !group.stale && Array.isArray(group.events)) window.DartsBroadcast?.ingest(group.events);
     const serverCenters=[...serverLiveGroups.values()].filter(entry=>dartsLiveGroupActive(entry)).map(liveGroupAsCenter);
     const ids=new Set(serverCenters.flatMap(center=>center.barverMatches.map(match=>match.id)));
     liveCenters=[...serverCenters,...liveCenters.filter(center=>!center.liveGroup&&!(center.barverMatches || []).some(match=>ids.has(match.id)))];
@@ -1029,35 +1031,57 @@ function initDarts() {
     if (tickerLoading) return;
     if (document.hidden) { tickerTimer=setTimeout(loadTicker,tickerDelay); return; }
     tickerLoading=true;
-    const controller = new AbortController(), timeout=setTimeout(()=>controller.abort(),8000);
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),8000);
+    let payload=null;
     try {
-      const response = await fetch('/api/v1/darts/ticker',{headers:{Accept:'application/json'},signal:controller.signal});
-      if (!response.ok) throw new Error('ticker unavailable');
-      const payload=await response.json(); const rendered=demoLive?demoTicker(payload):payload; renderTicker(rendered); tickerDelay=30000;
-      if (!demoLive) { try { localStorage.setItem('clubiq_darts_last_ticker',JSON.stringify(payload)); } catch (_) {} }
-      updateFreshness();
-      if (demoLive || (rendered.items || []).some(item=>item.kind==='live')) loadLiveDetails();
-      else {
-        liveCenters=[]; updateFreshness();
+      try {
+        const response=await fetch('/api/v1/darts/ticker',{headers:{Accept:'application/json'},cache:'no-store',signal:controller.signal});
+        if (!response.ok) throw new Error('ticker unavailable');
+        payload=await response.json();
+        if (!Array.isArray(payload.items)) throw new Error('invalid ticker');
+      } catch (_) { /* Try the independent public connection below. */ }
+      clearTimeout(timeout);
+      const serverFresh=payload&&!payload.stale&&Date.now()-Date.parse(payload.updatedAt||'')<180000;
+      if (!demoLive&&!serverFresh&&window.DartsSourceFallback) {
+        try {payload=await window.DartsSourceFallback.load();}
+        catch (_) { /* Keep the server snapshot or previously displayed data. */ }
       }
+      if (!payload) throw new Error('no connection');
+      const rendered=demoLive?demoTicker(payload):payload;
+      renderTicker(rendered);tickerDelay=payload.stale?60000:30000;
+      if (!demoLive&&!payload.stale) {try {localStorage.setItem('clubiq_darts_last_ticker',JSON.stringify(payload));} catch (_) {}}
+      updateFreshness();
+      if (demoLive||(rendered.items||[]).some(item=>item.kind==='live')) loadLiveDetails();
+      else {liveCenters=[];updateFreshness();}
     } catch (_) {
-      tickerDelay=Math.min(120000,tickerDelay*2); updateFreshness(true);
-    } finally { tickerLoading=false; clearTimeout(timeout); tickerTimer=setTimeout(loadTicker,tickerDelay); }
+      tickerData={...tickerData,stale:true};
+      tickerDelay=Math.min(120000,tickerDelay*2);updateFreshness(true);
+    } finally {tickerLoading=false;clearTimeout(timeout);tickerTimer=setTimeout(loadTicker,tickerDelay);}
   }
   let tickerTimer, tickerLoading=false;
   function updateFreshness(reconnecting=false) {
     const age=Date.now()-Date.parse(tickerData.updatedAt||'');
     const detailsAge=Date.now()-(liveDetailsLoadedAt||liveDetailsFirstAttempt);
-    const detailsStale=(tickerData.items||[]).some(m=>m.kind==='live') && liveDetailsFirstAttempt>0 && detailsAge>180000;
-    const activeServerGroups=[...serverLiveGroups.values()].filter(group=>!group.finished);
+    const directDetailsFailed=tickerData.source==='browser-3k'&&(tickerData.centers||[]).some(center=>center.stale);
+    const detailsStale=directDetailsFailed||((tickerData.items||[]).some(m=>m.kind==='live')&&liveDetailsFirstAttempt>0&&detailsAge>180000);
+    const activeServerGroups=[...serverLiveGroups.values()].filter(group=>!group.finished&&!group.stale);
     const upstreamLiveConnected=activeServerGroups.some(group=>group.connected);
     const serverFallback=activeServerGroups.length>0&&(!serverLiveConnected||!upstreamLiveConnected);
     const serverUpdates=activeServerGroups.map(group=>Date.parse(group.lastSuccess||group.lastUpdate||'')).filter(Number.isFinite);
-    const serverLiveStale=serverUpdates.length>0&&Date.now()-Math.max(...serverUpdates)>180000;
-    const stale=!Number.isFinite(age)||age>180000||detailsStale||serverLiveStale;
+    const serverLiveStale=tickerData.source!=='browser-3k'&&serverUpdates.length>0&&Date.now()-Math.max(...serverUpdates)>180000;
+    const stale=tickerData.stale||!Number.isFinite(age)||age>180000||detailsStale||serverLiveStale;
     const status=q('#liveDataStatus'); status.dataset.state=stale?'warn':reconnecting?'wait':'ok';
-    status.textContent=demoLive?'Demo-Live aktiv':!Number.isFinite(age)?'Verbindung wird aufgebaut':detailsStale||serverLiveStale?'Live-Punkte veraltet · neuer Versuch automatisch':stale?`Datenstand ${Math.max(1,Math.floor(age/60000))} Min. alt · neuer Versuch automatisch`:serverFallback?'Live-Fallback aktiv · letzter Stand sichtbar':activeServerGroups.length?'Live-Verbindung aktiv':reconnecting||tickerData.stale?'Verbindung wird erneuert · letzter Stand sichtbar':'3K-Daten aktuell';
-    status.title=tickerData.updatedAt?`Letzter Datenabruf: ${new Date(tickerData.updatedAt).toLocaleString('de-DE')}`:'Noch kein Datenabruf erfolgreich';
+    if (demoLive) status.textContent='Demo-Live aktiv';
+    else if (!Number.isFinite(age)) status.textContent='Verbindung wird aufgebaut';
+    else if (tickerData.stale||age>180000) status.textContent=`Letzter Stand: ${Math.max(1,Math.floor(age/60000))} Min. alt · erneuter Abruf automatisch`;
+    else if (directDetailsFailed) status.textContent='Live-Punkte nicht erreichbar · Spielstand aktuell';
+    else if (detailsStale||serverLiveStale) status.textContent='Live-Punkte veraltet · erneuter Abruf automatisch';
+    else if (tickerData.source==='browser-3k') status.textContent='Alternative 3K-Verbindung aktiv';
+    else if (serverFallback) status.textContent='Live-Fallback aktiv · letzter Stand sichtbar';
+    else if (activeServerGroups.length) status.textContent='Live-Verbindung aktiv';
+    else if (reconnecting) status.textContent='Verbindung wird erneuert · letzter Stand sichtbar';
+    else status.textContent='3K-Daten aktuell';
+    status.title=tickerData.updatedAt?`Letzter Datenabruf: ${new Date(tickerData.updatedAt).toLocaleString('de-DE')}${tickerData.source==='browser-3k'?' · Liga-Ergebnisse direkt von 3K. Saison und Einzelpartien haben einen eigenen Datenstand.':''}`:'Noch kein Datenabruf erfolgreich';
   }
   let highlightsLoading=false, highlightsLoadedAt=0;
   async function loadHighlights() {
@@ -1083,6 +1107,12 @@ function initDarts() {
   window.setInterval(()=>{if (!document.hidden) {updateFreshness();loadHighlights();}},30000);
   let liveDetailsLoading=false, liveDetailsLoadedAt=0, liveDetailsFirstAttempt=0;
   async function loadLiveDetails(force=false) {
+    if (tickerData.source==='browser-3k'&&Array.isArray(tickerData.centers)) {
+      liveCenters=tickerData.centers;
+      if (!liveDetailsFirstAttempt) liveDetailsFirstAttempt=Date.now();
+      if (liveCenters.every(center=>!center.stale)) liveDetailsLoadedAt=Date.parse(tickerData.updatedAt);
+      renderToday(tickerData);updateFreshness();return;
+    }
     if (liveDetailsLoading || (!force && Date.now()-liveDetailsLoadedAt < 40000)) return;
     liveDetailsLoading=true;
     if (!liveDetailsFirstAttempt) liveDetailsFirstAttempt=Date.now();
@@ -1133,8 +1163,8 @@ function initDarts() {
   }
   let seasonData=null, seasonStatus='upcoming', seasonLoading=false, seasonPromise=null;
   let clubMembers=null, membersLoading=false, membersPromise=null, membersError='';
-  try { const saved=JSON.parse(localStorage.getItem('clubiq_darts_last_ticker')||'null'); if (Array.isArray(saved?.items)) {renderTicker(saved);updateFreshness(true);} } catch (_) {}
-  try { const saved=JSON.parse(localStorage.getItem('clubiq_darts_last_season')||'null'); if (Array.isArray(saved?.matches)&&Array.isArray(saved?.teams)) {seasonData=saved;renderSeason();renderHomeSchedule();renderCompleteMatchCenter();} } catch (_) {}
+  try { const saved=JSON.parse(localStorage.getItem('clubiq_darts_last_ticker')||'null'); if (Array.isArray(saved?.items)) {renderTicker({...saved,stale:true});updateFreshness(true);} } catch (_) {}
+  try { const saved=JSON.parse(localStorage.getItem('clubiq_darts_last_season')||'null'); if (Array.isArray(saved?.matches)&&Array.isArray(saved?.teams)) {seasonData={...saved,stale:true};renderSeason();renderHomeSchedule();renderCompleteMatchCenter();} } catch (_) {}
   loadTicker(); initServerLiveStream();
   runWhenIdle(()=>{ loadHighlights(); loadPlayerData(); });
   for (const id of ['#homeTeam','#homeLeague','#homeDate']) q(id).addEventListener('change',renderHomeSchedule);
@@ -1535,8 +1565,11 @@ function initDarts() {
     try {
       const response=await fetch('/api/v1/darts/season',{headers:{Accept:'application/json'},cache:force?'reload':'default',signal:AbortSignal.timeout(45000)});
       if (!response.ok) throw new Error('season unavailable');
-      seasonData=await response.json();
-      if (!demoLive) { try {localStorage.setItem('clubiq_darts_last_season',JSON.stringify(seasonData));} catch (_) {} }
+      const incoming=await response.json();
+      if (!Array.isArray(incoming.matches)||!Array.isArray(incoming.teams)) throw new Error('invalid season');
+      if (incoming.degraded&&seasonData?.matches?.length) throw new Error('partial season');
+      seasonData=incoming;
+      if (!demoLive&&!seasonData.stale&&!seasonData.degraded) { try {localStorage.setItem('clubiq_darts_last_season',JSON.stringify(seasonData));} catch (_) {} }
       if (demoLive) {
         const liveById=new Map((tickerData.items || []).filter(item=>item.kind==='live').map(item=>[item.id,item]));
         for (const item of seasonData.matches || []) if (liveById.has(item.id)) Object.assign(item,liveById.get(item.id),{kind:'live'});
@@ -1553,8 +1586,8 @@ function initDarts() {
       q('#seasonFreshness').textContent=freshnessText; q('#seasonFreshness').dataset.state=freshnessState;
       q('#cupFreshness').textContent=freshnessText; q('#cupFreshness').dataset.state=freshnessState;
     } catch (_) {
-      q('#seasonFreshness').textContent='3K gerade nicht erreichbar'; q('#seasonFreshness').dataset.state='warn';
-      q('#cupFreshness').textContent='3K gerade nicht erreichbar'; q('#cupFreshness').dataset.state='warn';
+      q('#seasonFreshness').textContent=seasonData?'Letzter verfügbarer Stand · erneuter Abruf automatisch':'3K gerade nicht erreichbar'; q('#seasonFreshness').dataset.state='warn';
+      q('#cupFreshness').textContent=seasonData?'Letzter verfügbarer Stand · erneuter Abruf automatisch':'3K gerade nicht erreichbar'; q('#cupFreshness').dataset.state='warn';
       if (!seasonData) q('#seasonMatches').innerHTML='<p class="panel-loading">Der Saisonspielplan konnte gerade nicht geladen werden.</p>';
     } finally { seasonLoading=false; }
     })();
@@ -1771,7 +1804,7 @@ function initDarts() {
       if (!response.ok) throw new Error('match unavailable');
       activeMatchDetailData=await response.json();
       const group=serverLiveGroups.get(String(matchId));
-      if (group) activeMatchDetailData={...activeMatchDetailData,liveGames:normalizedLiveGames(group)};
+      if (group&&!group.stale&&tickerData.source!=='browser-3k') activeMatchDetailData={...activeMatchDetailData,liveGames:normalizedLiveGames(group)};
       renderMatchDetail(activeMatchDetailData);
     } catch (_) { q('#matchDetail').innerHTML='<p class="error">Der Spielbericht konnte gerade nicht geladen werden. Bitte später erneut versuchen.</p>'; }
   }

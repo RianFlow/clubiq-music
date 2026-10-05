@@ -40,6 +40,7 @@ jobs:
           node tests/test_darts_history.cjs
           node tests/test_darts_experience.cjs
           node tests/test_darts_usability.cjs
+          node tests/test_darts_source_fallback.cjs
       - name: Getrennte Musikbereiche im Browser prüfen
         run: |
           npm install --prefix "$RUNNER_TEMP/music-browser-tests" --no-audit --no-fund --package-lock=false playwright@1.62.1
@@ -65,3 +66,5 @@ jobs:
           docker compose run --rm --no-deps -e SOUNDBOARD_TEST_POSTGRES=1 web python -m unittest discover -s tests -p test_soundboard_postgres.py
           docker compose run --rm --no-deps -e ARCHIVE_TEST_POSTGRES=1 web python -m unittest discover -s tests -p test_archive_postgres.py
           docker compose run --rm --no-deps -e ARCHIVE_TEST_POSTGRES=1 web python -m unittest discover -s tests -p test_library_postgres.py
+      - name: Dauerhaften Darts-Datenstand mit PostgreSQL prüfen
+        run: docker compose run --rm --no-deps -e DARTS_TEST_POSTGRES=1 web python -m unittest discover -s tests -p test_darts_snapshots_postgres.py
