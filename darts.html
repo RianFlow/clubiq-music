@@ -11,12 +11,13 @@
   <link rel="preload" href="/pics/sv-barver-darts-tight-512.webp" as="image" type="image/webp">
   <link rel="stylesheet" href="/static/darts.css?v=20261002-home4">
   <link rel="stylesheet" href="/static/darts-broadcast.css?v=20261004-alias1">
-  <link rel="stylesheet" href="/static/darts-theme.css?v=20261005-dbd-ranking">
+  <link rel="stylesheet" href="/static/darts-theme.css?v=20261005-usability1">
   <script defer src="/static/darts-broadcast.js?v=20261004-alias1"></script>
   <script defer src="/static/darts-social-icons.js?v=20261004-clear1"></script>
   <script defer src="/static/darts-experience.js?v=20261004-experience1"></script>
-  <script defer src="/static/darts.js?v=20261005-dbd-ranking"></script>
-<link rel="stylesheet" href="/static/darts-typography.css?v=20261004-type1"></head>
+  <script defer src="/static/darts-usability.js?v=20261005-usability1"></script>
+  <script defer src="/static/darts.js?v=20261005-usability1"></script>
+<link rel="stylesheet" href="/static/darts-typography.css?v=20261004-type1"><link rel="stylesheet" href="/static/darts-usability.css?v=20261005-usability1"></head>
 <body>
   <header class="darts-header">
     <a class="brand" href="/darts" aria-label="Zur Darts-Startseite"><img src="/pics/sv-barver-darts-tight-512.webp" alt="" width="58" height="58" fetchpriority="high" decoding="async"><span><small>SV BARVER</small><b>DARTS</b><em>Spielpläne und Ergebnisse</em></span></a>
@@ -29,6 +30,7 @@
           <button id="membersView" type="button">Mitglieder</button>
           <button id="rankingView" type="button">DBD Rangliste</button>
           <button id="trainingView" type="button">Training</button>
+          <button id="joinView" type="button">Mitspielen & Probetraining</button>
           <button id="personalSettingsToggle" type="button">Meine Darts</button>
         </div>
       </details>
@@ -67,6 +69,10 @@
   </section>
   <aside id="sponsorTop" class="sponsor-slot sponsor-slot-top" data-placement="top" aria-label="Werbepartner" hidden></aside>
   <main>
+    <section id="homeTeamPanel" class="home-team-panel" aria-labelledby="homeTeamHeading">
+      <div class="home-team-head"><div><p class="eyebrow">Dein Verein auf einen Blick</p><h1 id="homeTeamHeading">Meine Mannschaft</h1></div><label for="favoriteTeam">Meine Mannschaft<select id="favoriteTeam"><option value="all">Alle Mannschaften</option><option value="A">Barver A</option><option value="B">Barver B</option><option value="C">Barver C</option><option value="D">Barver D</option></select></label></div>
+      <div id="homeTeamOverview" class="home-team-overview"><p class="panel-loading">Mannschaftsdaten werden geladen …</p></div>
+    </section>
     <section id="nextAppointments" class="next-appointments" aria-labelledby="nextAppointmentsHeading"><div class="next-appointments-head"><div><p class="eyebrow">Spiele und Vereinstermine</p><h2 id="nextAppointmentsHeading">Das steht als Nächstes an</h2></div><span id="nextAppointmentsNote">Termine werden geladen …</span></div><div id="nextAppointmentsList" class="next-appointments-list"></div></section>
     <section class="intro">
       <div class="intro-copy"><p class="eyebrow">SV Barver Darts</p><h1>BARVER<br><span>DARTS</span></h1><p><strong>Saison 2026 / 2027</strong> · Vier Mannschaften mit Spielplänen, Ergebnissen und Bestleistungen.</p></div>
@@ -92,7 +98,7 @@
     <aside id="sponsorInline" class="sponsor-slot sponsor-slot-inline" data-placement="inline" aria-label="Werbepartner" hidden></aside>
     <p id="pageStatus" class="message" role="status" hidden></p>
     <section id="todayPanel" class="sports-panel" aria-labelledby="todayHeading" hidden>
-      <div class="sports-panel-head"><div><p class="eyebrow">Live-Spiele</p><h2 id="todayHeading">Heute spielen</h2><p id="todaySubtitle">Live-Spiele und die nächsten Begegnungen.</p></div><div class="today-actions"><span id="liveDataStatus" class="live-data-status">3K wird geladen</span><label for="favoriteTeam">Meine Mannschaft<select id="favoriteTeam"><option value="all">Alle Mannschaften</option><option value="A">Barver A</option><option value="B">Barver B</option><option value="C">Barver C</option><option value="D">Barver D</option></select></label></div></div>
+      <div class="sports-panel-head"><div><p class="eyebrow">Live-Spiele</p><h2 id="todayHeading">Heute spielen</h2><p id="todaySubtitle">Live-Spiele und die nächsten Begegnungen.</p></div><div class="today-actions"><span id="liveDataStatus" class="live-data-status">3K wird geladen</span></div></div>
       <div id="tvTeamControls" class="tv-team-controls" aria-label="Mannschaften im TV-Modus auswählen">
         <span>Mannschaften im TV-Modus</span>
         <div role="group" aria-label="Mannschaftsauswahl">
@@ -119,6 +125,7 @@
         <details id="scheduleDetails" class="schedule-details"><summary>Weitere Spiele und letzte Ergebnisse</summary><div id="homeSchedule" class="home-schedule"></div></details>
       </section>
     </section>
+    <aside id="joinTeaser" class="join-teaser"><div><h2>Lust auf Darts?</h2><p>Lerne unseren Verein beim Training kennen.</p></div><button id="joinTeaserButton" type="button">Zum Probetraining</button></aside>
     <section id="leaguePanel" class="sports-panel" aria-labelledby="leagueHeading" hidden>
       <div class="sports-panel-head"><div><p class="eyebrow">Saison 2026 / 2027</p><h2 id="leagueHeading">Tabellen und Spieltage</h2><p>Spielpläne, Tabellen und Bestleistungen aus 3K Darts.</p></div><span class="club-logo panel-club-logo" aria-hidden="true"></span></div>
       <div id="leagueOverview" class="league-overview">
@@ -174,10 +181,17 @@
       <div class="team-head"><span class="team-letter">R</span><div><h2 id="rankingHeading">DBD Rangliste 2026</h2><p>Die gemeinsame Turnierserie von Barver, Diepholz und Drebber.</p></div></div>
       <div class="team-tools"><button id="reloadRanking" type="button">Aktualisieren</button><a class="external" href="https://portal.3k-darts.com/frontend/events/5/ranking/1931/series/1282/list" target="_blank" rel="noopener noreferrer">Gesamtwertung bei 3K ↗</a></div>
       <p id="rankingStatus" role="status">Rangliste wird beim Öffnen geladen.</p>
+      <div class="ranking-player-filter" role="group" aria-label="Spielerauswahl"><button type="button" data-ranking-filter="all" aria-pressed="true">Alle Spieler</button><button type="button" data-ranking-filter="ours" aria-pressed="false">Unsere Spieler</button></div>
       <div class="ranking-controls"><label>Spieler suchen<input id="rankingSearch" type="search" placeholder="Name eingeben" autocomplete="off"></label><label>Punkte einer Runde<select id="rankingRound"><option value="">Alle Runden</option></select></label></div>
       <p class="subtle">Platz und Gesamtpunkte entsprechen der offiziellen 3K-Gesamtwertung. Die Rundenauswahl zeigt zusätzlich die Punkte dieser Runde.</p>
       <div class="ranking-table-wrap" tabindex="0" role="region" aria-label="DBD-Gesamtwertung"><table class="ranking-table"><thead><tr><th scope="col">Platz</th><th scope="col">Spieler</th><th scope="col">Punkte</th><th scope="col">Teilnahmen</th><th scope="col">Ø Punkte</th><th id="rankingRoundHeading" scope="col" hidden>Rundenpunkte</th></tr></thead><tbody id="rankingRows"></tbody></table></div>
-      <h3>Turnierrunden</h3><p id="rankingNext"></p><div id="rankingEvents" class="next-appointments-list"></div>
+      <nav class="ranking-pagination" aria-label="Seiten der Rangliste"><button id="rankingPrevious" type="button">← Zurück</button><span id="rankingPageStatus" role="status"></span><button id="rankingNextPage" type="button">Weiter →</button></nav>
+      <h3>Turnierrunden</h3><p id="rankingNext"></p><div id="rankingEvents" class="ranking-rounds"></div>
+    </section>
+    <section id="joinPanel" class="sports-panel join-panel" aria-labelledby="joinHeading" hidden>
+      <div class="join-heading"><p class="eyebrow">SV Barver Darts</p><h1 id="joinHeading">Mitspielen & Probetraining</h1><p>Du möchtest Darts ausprobieren oder suchst eine Mannschaft? Hier findest du die wichtigsten Infos für deinen Einstieg.</p></div>
+      <div class="join-info-grid"><article><span class="info-mark" aria-hidden="true">01</span><h2>Wann trainieren wir?</h2><p><strong>Dienstag & Donnerstag</strong><br>jeweils um 19:30 Uhr</p><div id="joinCalendar"></div></article><article><span class="info-mark" aria-hidden="true">02</span><h2>Wo spielen wir?</h2><p id="joinAddress">Die Vereinsadresse wird geladen …</p><a id="joinRoute" class="external" target="_blank" rel="noopener noreferrer" hidden>Route öffnen ↗</a></article><article><span class="info-mark" aria-hidden="true">03</span><h2>Vorher kurz melden</h2><p>Fragen zum Einstieg oder zum Probetraining? Schreib uns über den Vereinskontakt.</p><a class="primary-action" href="mailto:allgemein@sportverein-barver.de?subject=Probetraining%20Darts">Vereinskontakt per E-Mail</a><p class="subtle">allgemein@sportverein-barver.de</p></article></div>
+      <div class="join-follow"><h2>Bleib auf dem Laufenden</h2><p>Termine und Einblicke findest du auch auf unseren Vereinskanälen.</p><div id="joinSocialLinks" class="appointment-actions"></div></div>
     </section>
     <section id="trainingPanel" class="team-card" aria-labelledby="trainingHeading" hidden>
       <div class="team-head"><span class="team-letter">T</span><div><h2 id="trainingHeading">Vereinstraining</h2><p id="trainingLabel">Training 22.09.2026</p></div></div>
@@ -196,6 +210,9 @@
     <aside id="sponsorFooter" class="sponsor-slot sponsor-slot-footer" data-placement="footer" aria-label="Unsere Partner" hidden></aside>
     <footer><span>ClubIQ zeigt öffentliche 3K-Ergebnisse in einer eigenen Ansicht. 3K bleibt die offizielle Quelle.</span><nav aria-label="Rechtliches und Verwaltung"><a href="/darts-admin">Verwaltung</a><a href="/impressum">Impressum</a><a href="/datenschutz">Datenschutz</a><a href="https://portal.3k-darts.com/frontend/events" target="_blank" rel="noopener noreferrer">3K Darts öffnen ↗</a></nav></footer>
   </main>
+<nav class="mobile-navigation" aria-label="Handy-Navigation"><button type="button" data-mobile-section="today" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/></svg><span>Start</span></button><button type="button" data-mobile-section="teams" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18m-12 4h2m4 0h2"/></svg><span>Spiele</span></button><button type="button" data-mobile-section="league" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10h4v10m2 0V4h4v16m2 0v-7h4v7M2 21h20"/></svg><span>Tabellen</span></button><button type="button" data-mobile-section="more" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg><span>Mehr</span></button></nav>
+  <dialog id="mobileMenuDialog" class="navigation-dialog" aria-labelledby="mobileMenuHeading"><div class="dialog-head"><h2 id="mobileMenuHeading">Mehr entdecken</h2><button id="closeMobileMenu" type="button" aria-label="Menü schließen">×</button></div><nav class="mobile-menu-options" aria-label="Weitere Bereiche"><button type="button" data-menu-target="rankingView">DBD Rangliste<span>Gesamtwertung und Turnierrunden</span></button><a href="/turnier">Turnieranzeige<span>Live-Boards, Gruppen und Ergebnisse</span></a><button type="button" data-menu-target="cupView">Pokal<span>Spiele unserer Mannschaften</span></button><button type="button" data-menu-target="membersView">Mitglieder<span>Unsere Spieler kennenlernen</span></button><button type="button" data-menu-target="trainingView">Training<span>Trainingsspiele und Ergebnisse</span></button><button type="button" data-menu-target="joinView">Mitspielen & Probetraining<span>Zeiten, Adresse und Kontakt</span></button><button type="button" data-menu-target="fullscreen">TV-Ansicht starten<span>Mannschaftsspiele oder Turnier auswählen</span></button><button type="button" data-menu-target="personalSettingsToggle">Meine Darts<span>Lieblingsmannschaft und Meldungen</span></button></nav></dialog>
+  <dialog id="tvLauncher" class="tv-launcher" aria-labelledby="tvLauncherHeading"><div class="dialog-head"><div><p class="eyebrow">Für Bildschirm und Beamer</p><h2 id="tvLauncherHeading">TV-Ansicht starten</h2></div><button id="closeTvLauncher" type="button" aria-label="TV-Auswahl schließen">×</button></div><form id="tvLauncherForm"><fieldset><legend>Was möchtest du anzeigen?</legend><label><input type="radio" name="tvType" value="teams" checked> Mannschaftsspiele</label><label><input type="radio" name="tvType" value="tournament"> Turnier</label></fieldset><label id="tvTeamField">Mannschaft<select id="tvTeamChoice"><option value="all">Alle Mannschaften</option><option value="A">Barver A</option><option value="B">Barver B</option><option value="C">Barver C</option><option value="D">Barver D</option></select></label><label id="tvTournamentField" hidden>Turnier<select id="tvTournamentChoice"><option value="">Aktuelles Vereinsturnier</option></select></label><p id="tvLauncherNote" class="subtle">Die TV-Ansicht vergrößert die Spielstände und wechselt die Seiten automatisch.</p><button type="submit" class="primary-action">TV-Ansicht starten</button></form></dialog>
   <dialog id="matchDialog" class="native-match-dialog" aria-labelledby="matchHeading">
     <div class="dialog-head"><div><p class="eyebrow">Spielbericht</p><h2 id="matchHeading">Begegnung</h2></div><button id="closeMatch" type="button" aria-label="Schließen">×</button></div>
     <div id="matchDetail"><p class="panel-loading">Spielbericht wird geladen …</p></div>

@@ -481,7 +481,7 @@ function initDarts() {
   fetch('/api/v1/darts/social-links',{headers:{Accept:'application/json'},signal:AbortSignal.timeout(8000)})
     .then(response=>response.ok?response.json():Promise.reject(new Error('events unavailable')))
     .then(config=>{
-      const links=dartsSocialLinks(config),target=q('#socialLinksList');clubSocialLinks=links;
+      const links=dartsSocialLinks(config),target=q('#socialLinksList');clubSocialLinks=links;renderJoin();
       target.replaceChildren(...links.map(item=>{const link=document.createElement('a');link.href=item.href;const copy=document.createElement('span');const label=document.createElement('strong');label.textContent=item.label;copy.append(label);if(item.showInBanner){const hint=document.createElement('small');hint.textContent=item.teaser;copy.append(hint);}link.append(window.DartsSocialIcons.create(item.platform),copy);link.target='_blank';link.rel='noopener noreferrer';link.dataset.platform=item.platform;return link;}));
       q('#socialLinks').hidden=!links.length;
       const eventLink=q('#clubEventLink'),match=links.find(item=>item.href===eventLink.href);
@@ -894,6 +894,31 @@ function initDarts() {
     }
     target.replaceChildren(fragment);
   }
+  const resultSnapshots=new Map(),recentResults=new Map();
+  function rememberResults(matches){
+    const now=Date.now();
+    for(const match of matches){const previous=resultSnapshots.get(match.id),fingerprint=`${match.kind}:${match.score||''}`;if(previous&&previous!==fingerprint&&match.kind==='final')recentResults.set(match.id,now);resultSnapshots.set(match.id,fingerprint);}
+    for(const [id,time] of recentResults)if(now-time>60000)recentResults.delete(id);
+    while(resultSnapshots.size>256)resultSnapshots.delete(resultSnapshots.keys().next().value);
+  }
+  function resultBadge(match,code){
+    const result=window.DartsUsability.outcome(match,code);if(!result)return null;
+    const badge=document.createElement('span');badge.className=`result-badge result-${result.kind}`;badge.textContent=`${result.symbol} ${result.label}`;badge.setAttribute('aria-label',`${result.label} für Barver ${code}`);return badge;
+  }
+  function renderHomeTeam(matches){
+    const target=q('#homeTeamOverview');target.replaceChildren();const team=teamByCode(favorite);
+    q('#homeTeamHeading').textContent=team?team.name:'Mein Verein';
+    if(!team){const copy=document.createElement('p');copy.textContent=favorite==='all'?'Wähle deine Mannschaft. Ihre Termine, Ergebnisse und der Tabellenplatz erscheinen dann hier.':'Mannschaftsdaten werden geladen …';target.append(copy);const choices=document.createElement('div');choices.className='home-team-choices';for(const code of ['A','B','C','D']){const button=document.createElement('button');button.type='button';button.textContent=`Barver ${code}`;button.addEventListener('click',()=>selectFavorite(code));choices.append(button);}target.append(choices);return;}
+    const next=[...matches].filter(match=>(match.barverTeams||[barverTeam(match)]).includes(favorite)&&['upcoming','live'].includes(match.kind)).sort((a,b)=>Date.parse(a.plannedAt)-Date.parse(b.plannedAt))[0];
+    const last=[...matches].filter(match=>match.kind==='final'&&(match.barverTeams||[barverTeam(match)]).includes(favorite)).sort((a,b)=>Date.parse(b.plannedAt||b.updatedAt||0)-Date.parse(a.plannedAt||a.updatedAt||0))[0];
+    const rank=document.createElement('article');rank.className='home-team-fact';const label=document.createElement('small');label.textContent='Tabellenplatz';const number=document.createElement('strong');number.className='home-team-rank';number.textContent=team.rank||'–';const league=document.createElement('span');league.textContent=team.league?.name||'Saison 2026 / 2027';const open=document.createElement('button');open.type='button';open.textContent='Mannschaft ansehen';open.addEventListener('click',()=>openTeamByCode(favorite));rank.append(label,number,league,open);target.append(rank);
+    for(const [match,title] of [[next,next?.kind==='live'?'Aktuelles Spiel':'Nächstes Spiel'],[last,'Letztes Ergebnis']]){const card=document.createElement('article');card.className='home-team-fact';const label=document.createElement('small');label.textContent=title;card.append(label);if(match){card.append(makeProfileMatch(match,favorite));if(match===next){const location=appointmentLocation({kind:'match',match});if(location){const address=document.createElement('p');address.className='home-team-address';address.textContent=location;card.append(address);const route=document.createElement('a');route.className='external home-team-route';route.href=`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(location)}`;route.target='_blank';route.rel='noopener noreferrer';route.textContent='Route öffnen ↗';card.append(route);}}}else{const empty=document.createElement('p');empty.textContent=title==='Letztes Ergebnis'?'Noch kein Ergebnis veröffentlicht.':'Noch kein weiteres Spiel veröffentlicht.';card.append(empty);}target.append(card);}
+  }
+  function renderJoin(){
+    const location=appointmentLocation({kind:'training'});q('#joinAddress').textContent=location||'Die Vereinsadresse konnte noch nicht geladen werden. Bitte frage beim Vereinskontakt nach.';q('#joinRoute').hidden=!location;if(location)q('#joinRoute').href=`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(location)}`;
+    const next=window.DartsExperience.nextTraining();next.location=location;q('#joinCalendar').replaceChildren(calendarButton(next));
+    const links=document.createDocumentFragment();for(const item of clubSocialLinks){const link=document.createElement('a');link.href=item.href;link.target='_blank';link.rel='noopener noreferrer';link.textContent=item.label;link.prepend(window.DartsSocialIcons.create(item.platform));links.append(link);}q('#joinSocialLinks').replaceChildren(links);
+  }
   function appointmentLocation(item) {
     if(item.location)return item.location;
     const code=item.kind==='training'?'A':dartsTeamCode(item.match?.home||'');
@@ -906,12 +931,13 @@ function initDarts() {
   }
   let experienceSignature='';
   function renderExperience() {
-    const target=q('#nextAppointmentsList');if(!target||!window.DartsExperience)return;
+    const target=q('#nextAppointmentsList');if(!target||!window.DartsExperience)return;for(const [id,time] of recentResults)if(Date.now()-time>60000)recentResults.delete(id);
     const matches=new Map((seasonData?.matches||[]).map(m=>[m.id,m]));for(const m of tickerData.items||[])matches.set(m.id,{...matches.get(m.id),...m});
     const items=window.DartsExperience.agenda([...matches.values()],calendarEvents===null?clubEvents:calendarEvents,favorite);
     for(const item of items)item.location=appointmentLocation(item);
     const selectedTeam=teamByCode(favorite);const lastResult=[...matches.values()].filter(m=>m.kind==='final'&&(m.barverTeams||[barverTeam(m)]).includes(favorite)).sort((a,b)=>Date.parse(b.plannedAt||b.updatedAt||0)-Date.parse(a.plannedAt||a.updatedAt||0))[0];
-    const signature=JSON.stringify([favorite,selectedTeam?.name,selectedTeam?.rank,items.map(item=>[item.id,item.title,item.start,item.location,item.href]),lastResult?.id,lastResult?.score,lastResult?.plannedAt]);if(signature===experienceSignature)return;experienceSignature=signature;
+    const signature=JSON.stringify([favorite,selectedTeam?.name,selectedTeam?.rank,items.map(item=>[item.id,item.title,item.start,item.location,item.href]),lastResult?.id,lastResult?.score,lastResult?.plannedAt,[...recentResults.keys()]]);if(signature===experienceSignature)return;experienceSignature=signature;
+    renderHomeTeam([...matches.values()]);renderJoin();
     target.replaceChildren();
     for(const item of items){const card=document.createElement('article');card.className='appointment-card';const type=document.createElement('small');type.textContent={match:'Mannschaftsspiel',training:'Training',event:'Veranstaltung'}[item.kind];const title=document.createElement('h3');title.textContent=item.title;const date=document.createElement('time');date.dateTime=item.start;date.textContent=new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',weekday:'short',day:'2-digit',month:'2-digit',...(item.allDay?{}:{hour:'2-digit',minute:'2-digit'})}).format(new Date(item.start))+(item.allDay?' · ganztägig':' Uhr');const location=document.createElement('p');location.textContent=item.location||'Spielort noch nicht hinterlegt';const actions=document.createElement('div');actions.className='appointment-actions';actions.append(calendarButton(item));if(item.location){const route=document.createElement('a');route.href=`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(item.location)}`;route.target='_blank';route.rel='noopener noreferrer';route.textContent='Route öffnen';actions.append(route);}if(item.match){const open=document.createElement('button');open.type='button';open.textContent='Spiel ansehen';open.addEventListener('click',()=>openMatch(item.match.id));actions.append(open);}else if(item.kind==='training'){const open=document.createElement('button');open.type='button';open.textContent='Trainingsbereich öffnen';open.addEventListener('click',()=>setSection('training'));actions.append(open);}else if(item.href){const open=document.createElement('a');open.href=item.href;open.target='_blank';open.rel='noopener noreferrer';open.textContent='Mehr erfahren';actions.append(open);}card.append(type,title,date,location,actions);target.append(card);}
     q('#nextAppointmentsNote').textContent=favorite==='all'?'Alle Mannschaften und der Verein':`Barver ${favorite} und der Verein`;
@@ -929,6 +955,7 @@ function initDarts() {
   function renderHomeSchedule() {
     const byId=new Map((seasonData?.matches||[]).map(item=>[item.id,item]));
     for (const item of tickerData.items||[]) byId.set(item.id,{...byId.get(item.id),...item});
+    rememberResults([...byId.values()]);
     const groups=dartsHomeGroups([...byId.values()],{team:q('#homeTeam').value,league:q('#homeLeague').value,date:q('#homeDate').value});
     const filterSummary=q('#homeFilterSummary');
     const filters=[q('#homeTeam').value==='all'?'Alle Mannschaften':`Barver ${q('#homeTeam').value}`,q('#homeLeague').selectedOptions[0].textContent];
@@ -1205,7 +1232,7 @@ function initDarts() {
     const meta=document.createElement('span'); meta.textContent=`${competitionLabel(item)} · ${item.round?.name || 'Spiel'} · ${matchLocation(item,code)} · ${matchDate(item)}`;
     if(item.kind==='pending')meta.textContent+=' · Vorläufig beendet – Bestätigung ausstehend';
     const score=document.createElement('strong'); score.append(clubNameNode(item.home,'span'),`  ${item.score || 'vs'}  `,clubNameNode(item.away,'span'));
-    row.append(meta,score); row.addEventListener('click',()=>{ q('#teamDialog').close(); openMatch(item.id); });
+    row.append(meta,score);const outcome=resultBadge(item,code);if(outcome)row.append(outcome);if(recentResults.has(item.id)){row.classList.add('fresh-result');const badge=document.createElement('span');badge.className='new-result-badge';badge.textContent='Neues Ergebnis';row.append(badge);} row.addEventListener('click',()=>{ q('#teamDialog').close(); openMatch(item.id); });
     return row;
   }
   function playerInitials(name) {
@@ -1428,7 +1455,7 @@ function initDarts() {
       const home=clubNameNode(item.home);
       const score=document.createElement('b'); score.textContent=item.score || 'vs';
       const away=clubNameNode(item.away);
-      const state=document.createElement('span'); state.className='native-match-state'; state.textContent=item.kind==='live'?'LIVE':item.kind==='final'?'Endstand':item.kind==='pending'?'Vorläufig beendet · Bestätigung ausstehend':'Geplant';
+      const state=document.createElement('span'); state.className='native-match-state'; state.textContent=item.kind==='live'?'LIVE':item.kind==='final'?'Endstand':item.kind==='pending'?'Vorläufig beendet · Bestätigung ausstehend':'Geplant';const result=resultBadge(item,team==='all'?barverTeam(item):team);if(result)state.replaceChildren(result);if(recentResults.has(item.id))row.classList.add('fresh-result');
       teams.append(home,score,away); row.append(info,teams,state);
       row.addEventListener('click',()=>openMatch(item.id)); fragment.append(row);
     }
@@ -1784,8 +1811,15 @@ function initDarts() {
     if (!training[q('#trainingMode').value]) q('#trainingMode').value = 'participants';
     q('#trainingExternal').href = training[q('#trainingMode').value];
   }
+  function openJoin(){setSection('join');renderJoin();loadSeason().then(renderJoin);}
+  q('#joinView').addEventListener('click',openJoin);q('#joinTeaserButton').addEventListener('click',openJoin);
+  function focusSection(){const ids={today:'homeTeamHeading',teams:'seasonHeading',league:'leagueHeading',ranking:'rankingHeading',join:'joinHeading',members:'membersHeading',training:'trainingHeading',cup:'cupHeading'};const heading=q(`#${ids[currentSection]||'homeTeamHeading'}`);if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});heading.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth'});}}
+  const mobileTargets={today:'todayView',teams:'gridView',league:'leagueView'};
+  for(const button of document.querySelectorAll('[data-mobile-section]'))button.addEventListener('click',()=>{const section=button.dataset.mobileSection;if(section==='more')q('#mobileMenuDialog').showModal();else{q(`#${mobileTargets[section]}`).click();focusSection();}});
+  q('#closeMobileMenu').addEventListener('click',()=>q('#mobileMenuDialog').close());
+  for(const button of document.querySelectorAll('[data-menu-target]'))button.addEventListener('click',()=>{q('#mobileMenuDialog').close();q(`#${button.dataset.menuTarget}`).click();if(!['personalSettingsToggle','fullscreen'].includes(button.dataset.menuTarget))focusSection();});
   function loadTraining() {
-    syncTraining();
+      syncTraining();
     const iframe = document.createElement('iframe');
     iframe.title = `Vereinstraining – ${q('#trainingMode').selectedOptions[0].textContent}`;
     iframe.referrerPolicy = 'no-referrer';
@@ -1868,15 +1902,16 @@ function initDarts() {
       if (error.name!=='AbortError') message('Der 3K-Spieltag konnte gerade nicht geladen werden. Bitte noch einmal aktualisieren.');
     }
   }
-  let rankingData=null, rankingLoading=false;
+  let rankingData=null, rankingLoading=false,rankingPage=0,rankingOurs=false;
   const rankingNumber=value=>typeof value==='number'&&Number.isFinite(value)?new Intl.NumberFormat('de-DE',{maximumFractionDigits:1}).format(value):'–';
   function renderRanking() {
     if(!rankingData)return;
     const search=q('#rankingSearch').value.trim().toLocaleLowerCase('de-DE'),roundId=Number(q('#rankingRound').value)||null;
     q('#rankingRoundHeading').hidden=!roundId;
     const fragment=document.createDocumentFragment();
-    for(const row of rankingData.rows||[]){
-      if(search&&!row.name.toLocaleLowerCase('de-DE').includes(search))continue;
+    const result=window.DartsUsability.rankingPage(rankingData.rows,{search,ours:rankingOurs,names:memberDirectory().map(member=>member.name),page:rankingPage});rankingPage=result.page;
+    q('#rankingPrevious').disabled=rankingPage===0;q('#rankingNextPage').disabled=rankingPage+1>=result.pages;q('#rankingPageStatus').textContent=result.total?`${result.from}–${result.to} von ${result.total} ${result.total===1?'Spieler':'Spielern'}`:'Keine passenden Spieler';
+    for(const row of result.rows){
       const tr=document.createElement('tr');
       for(const value of [rankingNumber(row.rank),row.name,rankingNumber(row.points),rankingNumber(row.appearances),rankingNumber(row.average)]){const cell=document.createElement('td');cell.textContent=value;tr.append(cell);}
       if(roundId){const round=(row.rounds||[]).find(item=>item.id===roundId);const cell=document.createElement('td');cell.textContent=round?(rankingNumber(round.points)+(round.rated?'':' · nicht gewertet')):'–';tr.append(cell);}
@@ -1897,7 +1932,7 @@ function initDarts() {
       const fragment=document.createDocumentFragment();let hasFuture=false;
       for(const event of events){
         const option=document.createElement('option');option.value=event.id;option.textContent=event.name;q('#rankingRound').append(option);
-        const card=document.createElement('article');card.className='appointment-card';const title=document.createElement('h4');title.textContent=event.name;const date=document.createElement('p');const validDate=Number.isFinite(Date.parse(event.start));date.textContent=validDate?new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(event.start))+' Uhr':'Termin noch nicht hinterlegt';const location=document.createElement('p');location.textContent=event.city||'Ort noch nicht hinterlegt';const link=document.createElement('a');link.className='external';link.href=event.sourceUrl;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Ergebnisse bei 3K';const display=document.createElement('a');display.className='external';display.href=`/turnier?event=${event.id}`;display.textContent='In der Turnieranzeige öffnen';card.append(title,date,location,display,link);if(validDate&&Date.parse(event.start)>Date.now()){hasFuture=true;link.textContent='Turnier bei 3K öffnen';card.append(calendarButton({id:`dbd-${event.id}`,title:event.name,start:event.start,location:event.city}));}fragment.append(card);
+        const card=document.createElement('details');card.className='ranking-round';const summary=document.createElement('summary');const title=document.createElement('span');title.textContent=event.name;summary.append(title);card.append(summary);const date=document.createElement('p');const validDate=Number.isFinite(Date.parse(event.start));date.textContent=validDate?new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(event.start))+' Uhr':'Termin noch nicht hinterlegt';const location=document.createElement('p');location.textContent=event.city||'Ort noch nicht hinterlegt';const link=document.createElement('a');link.className='external';link.href=event.sourceUrl;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Ergebnisse bei 3K';const display=document.createElement('a');display.className='external';display.href=`/turnier?event=${event.id}`;display.textContent='In der Turnieranzeige öffnen';const content=document.createElement('div');content.className='ranking-round-content';content.append(date,location,display,link);card.append(content);if(validDate&&Date.parse(event.start)>Date.now()){hasFuture=true;link.textContent='Turnier bei 3K öffnen';content.append(calendarButton({id:`dbd-${event.id}`,title:event.name,start:event.start,location:event.city}));}fragment.append(card);
       }
       if([...q('#rankingRound').options].some(option=>option.value===selected))q('#rankingRound').value=selected;
       q('#rankingEvents').replaceChildren(fragment);q('#rankingNext').textContent=hasFuture?'Die veröffentlichten Termine und bisherigen Ergebnisse:':'Ein weiterer Termin ist in 3K noch nicht veröffentlicht. Hier findest du die bisherigen Runden.';
@@ -1906,11 +1941,16 @@ function initDarts() {
     }catch(_){q('#rankingStatus').textContent='Die Rangliste konnte gerade nicht geladen werden. Bitte versuche es erneut oder öffne die Gesamtwertung bei 3K.';}
     finally{rankingLoading=false;q('#reloadRanking').disabled=false;}
   }
-  q('#rankingView').addEventListener('click',()=>{setSection('ranking');loadRanking();});
+  q('#rankingView').addEventListener('click',()=>{setSection('ranking');loadRanking();loadSeason().then(()=>renderRanking());});
   q('#reloadRanking').addEventListener('click',()=>loadRanking(true));
-  q('#rankingSearch').addEventListener('input',renderRanking);q('#rankingRound').addEventListener('change',renderRanking);
+  q('#rankingSearch').addEventListener('input',()=>{rankingPage=0;renderRanking();});q('#rankingRound').addEventListener('change',renderRanking);
+  q('#rankingPrevious').addEventListener('click',()=>{rankingPage--;renderRanking();});q('#rankingNextPage').addEventListener('click',()=>{rankingPage++;renderRanking();});
+  for(const button of document.querySelectorAll('[data-ranking-filter]'))button.addEventListener('click',async()=>{rankingOurs=button.dataset.rankingFilter==='ours';rankingPage=0;for(const item of document.querySelectorAll('[data-ranking-filter]'))item.setAttribute('aria-pressed',String(item===button));if(rankingOurs)await Promise.allSettled([loadSeason(),loadClubMembers()]);renderRanking();});
   window.setInterval(()=>{if(!q('#rankingPanel').hidden)loadRanking();},60000);
+  const requestedSection=new URLSearchParams(location.search).get('view');
+  let currentSection='today',sectionNavigationReady=false;
   function setSection(section) {
+    currentSection=section;if(sectionNavigationReady){const url=new URL(location.href);if(section==='today')url.searchParams.delete('view');else url.searchParams.set('view',section);history.replaceState(null,'',url);}window.scrollTo({top:0,behavior:'instant'});
     const teams = section === 'teams';
     grid.hidden = true; q('.intro').hidden = !teams;
     q('#layoutControls').hidden = true;
@@ -1919,7 +1959,8 @@ function initDarts() {
     q('#trainingPanel').hidden = section !== 'training';
     q('#rankingPanel').hidden = section !== 'ranking';
     q('#rankingView').setAttribute('aria-pressed',String(section==='ranking'));
-    q('#todayPanel').hidden = section !== 'today';q('#nextAppointments').hidden=section!=='today';
+    q('#todayPanel').hidden = section !== 'today';q('#nextAppointments').hidden=section!=='today';q('#homeTeamPanel').hidden=section!=='today';q('#joinTeaser').hidden=section!=='today';q('#joinPanel').hidden=section!=='join';
+    for(const button of document.querySelectorAll('[data-mobile-section]'))button.setAttribute('aria-pressed',String(button.dataset.mobileSection===section||(button.dataset.mobileSection==='more'&&!['today','teams','league'].includes(section))));
     q('#leaguePanel').hidden = section !== 'league';
     q('#cupPanel').hidden = section !== 'cup';
     q('#membersPanel').hidden = section !== 'members';
@@ -2121,10 +2162,12 @@ function initDarts() {
   window.addEventListener('online',updatePresence);
   document.addEventListener('visibilitychange',()=>{ if (!document.hidden) updatePresence(); });
 
-  q('#fullscreen').addEventListener('click',async()=>{
-    try { if (document.fullscreenElement) await document.exitFullscreen(); else { setSection('today'); if (document.body.requestFullscreen) await document.body.requestFullscreen(); else message('TV-Modus wird hier nicht unterstützt. Du kannst die Heute-Ansicht normal verwenden.'); } }
-    catch (_) { message('Vollbild nicht verfügbar. Bitte die Browser-Vollbildfunktion oder „Groß“ verwenden.'); }
-  });
+  let tvChoicesLoaded=false;
+  async function loadTvChoices(){if(tvChoicesLoaded)return;try{const response=await fetch('/api/v1/darts/ranking');if(!response.ok)throw new Error();const data=await response.json();const group=document.createElement('optgroup');group.label=data.name;for(const event of [...data.events].sort((a,b)=>Date.parse(b.start)-Date.parse(a.start))){const option=document.createElement('option');option.value=event.id;option.textContent=event.name;group.append(option);}q('#tvTournamentChoice').append(group);tvChoicesLoaded=true;}catch(_){q('#tvLauncherNote').textContent='Das aktuelle Vereinsturnier ist verfügbar. Die DBD-Runden konnten gerade nicht geladen werden.';}}
+  q('#fullscreen').addEventListener('click',()=>{if(document.fullscreenElement){document.exitFullscreen().catch(()=>{});return;}q('#tvTeamChoice').value=favorite;q('#tvLauncher').showModal();loadTvChoices();});
+  q('#closeTvLauncher').addEventListener('click',()=>q('#tvLauncher').close());
+  q('#tvLauncherForm').addEventListener('change',()=>{const tournament=q('#tvLauncherForm input[name="tvType"]:checked').value==='tournament';q('#tvTeamField').hidden=tournament;q('#tvTournamentField').hidden=!tournament;});
+  q('#tvLauncherForm').addEventListener('submit',async event=>{event.preventDefault();const type=q('#tvLauncherForm input[name="tvType"]:checked').value;q('#tvLauncher').close();if(type==='tournament'){const id=q('#tvTournamentChoice').value;location.href='/turnier?tv=1'+(id?`&event=${encodeURIComponent(id)}`:'');return;}const code=q('#tvTeamChoice').value;tvTeams=code==='all'?new Set(allTvTeams):new Set([code]);rememberTvTeams();updateTvTeamControls();setSection('today');renderToday(tickerData);try{if(document.body.requestFullscreen)await document.body.requestFullscreen();else message('Vollbild wird hier nicht unterstützt. Die Spiele bleiben in der normalen Ansicht verfügbar.');}catch(_){message('Vollbild konnte nicht gestartet werden. Nutze bei Bedarf die Vollbildfunktion deines Browsers.');}});
   document.addEventListener('fullscreenchange',()=>{
     const active=Boolean(document.fullscreenElement);
     document.body.classList.toggle('tv-live',active);
@@ -2132,4 +2175,7 @@ function initDarts() {
     updateTvTeamControls(); renderToday(tickerData); refreshSponsorSlots(false);
     q('#fullscreen').textContent=active ? 'TV-Modus beenden' : 'TV-Modus';
   });
+  sectionNavigationReady=true;
+  const sectionTargets={teams:'gridView',league:'leagueView',ranking:'rankingView',join:'joinView',members:'membersView',training:'trainingView',cup:'cupView'};
+  if(sectionTargets[requestedSection])q(`#${sectionTargets[requestedSection]}`).click();
 }
