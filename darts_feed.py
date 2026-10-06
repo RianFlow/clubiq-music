@@ -5,6 +5,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 from urllib.parse import urlencode
 
+import re
+
 import requests
 
 from darts_resilience import PublicSession, source_recovery, save_snapshot, load_snapshot, last_known
@@ -404,22 +406,33 @@ def _safe_round(item: dict) -> dict:
 
 
 def _standings(matches: list[dict], team_ids: set[int]) -> list[dict]:
-    """Return only 3K's official rank and public team label, never participant metadata."""
+    """Keep public team labels when the table is unavailable; fixture seeds are not ranks."""
     entries: dict[int, dict] = {}
     for match in matches:
         for side in ("Home", "Guest"):
             participant = match.get(f"participant{side}") or {}
             participant_id = participant.get("id")
-            rank = participant.get("rankingPos")
             if not isinstance(participant_id, int):
                 continue
             entries[participant_id] = {
                 "id": participant_id,
                 "name": str(participant.get("displayName") or "Unbekannt"),
-                "rank": rank if isinstance(rank, int) and rank > 0 else None,
+                "rank": None,
                 "barver": participant_id in team_ids,
             }
-    return sorted(entries.values(), key=lambda entry: (entry["rank"] is None, entry["rank"] or 999, entry["name"]))
+    return sorted(entries.values(), key=lambda entry: entry["name"])
+
+
+def _table_placement(value) -> int | None:
+    """3K's placement is the current table place; participantRankingPos is a seed."""
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value if value > 0 else None
+    if isinstance(value, str):
+        match = re.fullmatch(r"\s*(\d+)\.?\s*", value)
+        if match:
+            rank = int(match.group(1))
+            return rank if rank > 0 else None
+    return None
 
 
 def _official_standings(payload: dict, team_ids: set[int]) -> list[dict]:
@@ -431,7 +444,8 @@ def _official_standings(payload: dict, team_ids: set[int]) -> list[dict]:
             if not isinstance(identifier, int) or isinstance(identifier, bool):
                 continue
             row = {"id": identifier, "name": str(entry.get("participantName") or "Unbekannt"),
-                   "rank": entry.get("participantRankingPos"), "barver": identifier in team_ids}
+                   "rank": _table_placement(entry.get("placement")), "rankSource": "3k-placement",
+                   "barver": identifier in team_ids}
             for public, source in (("played", "matchCount"), ("wins", "win"), ("draws", "tie"),
                                    ("losses", "lost"), ("pointsFor", "points1"), ("pointsAgainst", "points2"),
                                    ("setsFor", "sets1"), ("setsAgainst", "sets2"),
@@ -1071,6 +1085,7 @@ def _load_season(now: datetime) -> dict:
                 "name": profile.get("name") or standing.get("name") or f"SV Barver Darts {code}",
                 "league": _league_public(league),
                 "rank": standing.get("rank"),
+                "rankSource": standing.get("rankSource"),
                 "nextMatch": upcoming[0] if upcoming else None,
                 "lastMatch": results[-1] if results else None,
                 "matches": matches,

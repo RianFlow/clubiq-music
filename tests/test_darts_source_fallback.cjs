@@ -41,9 +41,13 @@ global.fetch=async(url,options)=>{
   assert.ok(!JSON.stringify(report).includes('private'));
   global.fetch=async()=>({ok:true,json:async()=>({matches:[{...past,id:11,participantHome:{id:888},participantGuest:{id:999}}]})});
   await assert.rejects(source.loadMatch({id:11,eventId:1445,roundId:3}),/does not belong/);
-  const entries=[{participantId:174110,participantName:'Barver A',participantRankingPos:3,matchCount:3,win:2,tie:1,lost:0,points1:5,points2:1,sets1:24,sets2:12,legs1:70,legs2:41,email:'private'}, {participantId:888,participantName:'Gast',participantRankingPos:1,points1:6,points2:0,phone:'private'}];
+  const entries=[{participantId:174110,participantName:'Barver A',participantRankingPos:3,placement:'1.',matchCount:3,win:2,tie:1,lost:0,points1:5,points2:1,sets1:24,sets2:12,legs1:70,legs2:41,email:'private'}, {participantId:888,participantName:'Gast',participantRankingPos:1,placement:'2.',points1:6,points2:0,phone:'private'}];
   const table={tableEntries:[{tableEntries:entries}]};
-  assert.deepEqual(source.officialStandings(table,league).map(row=>row.rank),[3,1],'preserve published ranks and order');
+  assert.deepEqual(source.officialStandings(table,league).map(row=>row.rank),[1,2],'use current placements, not participant seeds or local points sorting');
+  const tied={tableEntries:[{tableEntries:[...entries,{...entries[1],participantId:889,placement:'2.'},{...entries[1],participantId:890,placement:null}]}]};
+  assert.deepEqual(source.officialStandings(tied,league).map(row=>row.rank),[1,2,2,null],'preserve ties and missing places');
+  for(const value of [null,false,true,0,-1,'0.','-2.','2abc','1.-2.',''])assert.equal(source.tablePlacement(value),null);
+  assert.equal(source.tablePlacement(' 2. '),2);
   assert.equal(source.officialStandings(table,league)[1].played,null,'missing values are not invented');
   let tableFails=false,roundFails=false;const centerCalls=[];
   global.fetch=async(url,options)=>{

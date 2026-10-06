@@ -139,11 +139,15 @@
     })();
     return pending;
   }
+  function tablePlacement(value) {
+    if(typeof value==='string'&&/^\s*\d+\.?\s*$/.test(value))value=Number(value.trim().replace(/\.$/,''));
+    return Number.isSafeInteger(value)&&value>0?value:null;
+  }
   function officialStandings(payload, league) {
     if(!Array.isArray(payload?.tableEntries))throw new Error('Invalid official table');
     const fields={played:'matchCount',wins:'win',draws:'tie',losses:'lost',pointsFor:'points1',pointsAgainst:'points2',setsFor:'sets1',setsAgainst:'sets2',legsFor:'legs1',legsAgainst:'legs2'};
     return payload.tableEntries.flatMap(group=>(Array.isArray(group?.tableEntries)?group.tableEntries:[]).filter(entry=>Number.isSafeInteger(entry.participantId)).map(entry=>{
-      const row={id:entry.participantId,name:String(entry.participantName||'Mannschaft').slice(0,160),rank:Number.isFinite(entry.participantRankingPos)?entry.participantRankingPos:null,barver:Boolean(league.teams[entry.participantId])};
+      const row={id:entry.participantId,name:String(entry.participantName||'Mannschaft').slice(0,160),rank:tablePlacement(entry.placement),rankSource:'3k-placement',barver:Boolean(league.teams[entry.participantId])};
       for(const [field,source] of Object.entries(fields))row[field]=Number.isFinite(entry[source])?entry[source]:null;
       return row;
     }));
@@ -192,7 +196,7 @@
       return result;
     } finally {clearTimeout(timeout);signal?.removeEventListener('abort',abort);}
   }
-  const exported={load,loadMatch,loadCenter,officialStandings,normalize,relevantRounds,liveEvents,publicGame,publicPerformances};
+  const exported={load,loadMatch,loadCenter,officialStandings,tablePlacement,normalize,relevantRounds,liveEvents,publicGame,publicPerformances};
   if(typeof module!=='undefined'&&module.exports)module.exports=exported;
   else window.DartsSourceFallback=exported;
 })();
