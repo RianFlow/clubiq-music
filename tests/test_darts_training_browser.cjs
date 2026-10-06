@@ -46,7 +46,8 @@ const server=http.createServer((req,res)=>{
     assert.equal(await page.locator('#autoTrainingSearch').isChecked(),false);
     for(const width of [390,320]){await page.setViewportSize({width,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`overflow at ${width}`);}
     await page.screenshot({path:path.join(root,'outputs/training-mobile.png'),fullPage:true});
-    fail=false;await page.goto(`${origin}/training?tv=1&event=31849`);await page.locator('#boards .standings').waitFor();assert.equal(await page.locator('#trainingControls').isVisible(),false);
+    fail=false;next=true;const fresh=await browser.newPage();await fresh.clock.install({time:new Date('2026-10-06T10:00:00Z')});await fresh.goto(`${origin}/training`);await fresh.getByRole('heading',{name:'Training 33000',exact:true}).waitFor();assert.equal(await fresh.locator('#view').inputValue(),'participants');await fresh.close();
+    await page.goto(`${origin}/training?tv=1&event=31849`);await page.locator('#boards .standings').waitFor();assert.equal(await page.locator('#trainingControls').isVisible(),false);
     await page.setViewportSize({width:1920,height:1080});await page.screenshot({path:path.join(root,'outputs/training-tv.png'),fullPage:true});
     assert.deepEqual(errors,[]);console.log('Training browser: common view, results, next search, pinned history, 5-minute timer, manual validation, offline reload, TV and mobile OK');
   }finally{await browser.close();server.close();}
