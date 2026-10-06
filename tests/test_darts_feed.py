@@ -94,7 +94,7 @@ class DartsFeedTests(unittest.TestCase):
             "participantGuest": {"id": 1, "displayName": "Lohne", "rankingPos": 1, "phone": "secret"},
         }]
         standings = _standings(matches, {174110})
-        self.assertEqual([entry["rank"] for entry in standings], [1, 3])
+        self.assertEqual([entry["rank"] for entry in standings], [None, None])
         self.assertTrue(standings[1]["barver"])
         self.assertNotIn("email", str(standings))
         self.assertNotIn("phone", str(standings))
@@ -292,15 +292,32 @@ if __name__ == "__main__":
 class OfficialStandingsTests(unittest.TestCase):
     def test_official_totals_are_whitelisted_with_missing_values_not_zero(self):
         from darts_feed import _official_standings, _league_standings
-        raw = {"participantId":174110, "participantName":"Barver A", "participantRankingPos":2,
+        raw = {"participantId":174110, "participantName":"Barver A", "participantRankingPos":3, "placement":"2.",
                "matchCount":3,"win":2,"tie":1,"lost":0,"points1":5.0,"points2":1.0,
                "sets1":24,"sets2":12,"legs1":70,"legs2":41,"participant":{"email":"private"}}
         rows = _official_standings({"tableEntries":[{"tableEntries":[raw]}]}, {174110})
         self.assertEqual(rows[0]['pointsFor'],5.0)
         self.assertEqual(rows[0]['played'],3)
+        self.assertEqual(rows[0]['rank'],2)
+        self.assertEqual(rows[0]['rankSource'],'3k-placement')
         self.assertTrue(rows[0]['barver'])
         self.assertNotIn('private',str(rows))
         del raw['points1']
         self.assertIsNone(_official_standings({"tableEntries":[{"tableEntries":[raw]}]},set())[0]['pointsFor'])
         with patch('darts_feed._public_get',side_effect=requests.Timeout):
             self.assertEqual(_league_standings({'event':1,'teams':{}},[]),[])
+
+    def test_places_follow_official_placement_including_ties_and_missing_place(self):
+        from darts_feed import _official_standings
+        entries=[{"participantId":i+1,"participantName":f"Team {i}","placement":place,"participantRankingPos":seed,"points1":points}
+                 for i,(place,seed,points) in enumerate([('1.',1,6),('2.',3,6),('2.',5,2),('4.',2,4),(None,8,1)])]
+        rows=_official_standings({'tableEntries':[{'tableEntries':entries}]},set())
+        self.assertEqual([row['rank'] for row in rows],[1,2,2,4,None])
+        self.assertEqual([row['id'] for row in rows],[1,2,3,4,5])
+        self.assertEqual([row['pointsFor'] for row in rows],[6,6,2,4,1])
+
+    def test_invalid_placements_never_use_participant_seed(self):
+        from darts_feed import _table_placement
+        for value in [None,False,True,0,-1,'0.','-2.','2abc','1.-2.','']:
+            with self.subTest(value=value):self.assertIsNone(_table_placement(value))
+        for value in [2,'2',' 2. ']:self.assertEqual(_table_placement(value),2)

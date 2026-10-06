@@ -59,3 +59,12 @@ Stand sichtbar; ohne gespeicherten Stand enden alle Ladehinweise mit einer
 lesbaren Fehlermeldung, einer Möglichkeit zum erneuten Abruf und dem direkten
 Link zu 3K. Tests prüfen auch eine hängende Serveranfrage, den Ausfall nur einer
 Liga, fehlende Teilbereiche und den kompletten Ausfall nach einem Neuladen.
+
+Der aktuelle Tabellenplatz stammt ausschließlich aus `placement` (etwa `2.`).
+`participantRankingPos` und die `rankingPos` einer Spielplan-Mannschaft sind
+keine aktuellen Tabellenplätze. Die veröffentlichte Reihenfolge wird beibehalten;
+3K wertet diese Ligen unter anderem nach Punktedifferenz. Gleichplatzierte Teams
+behalten denselben offiziellen Platz. Fehlende Platzierungen bleiben unbekannt.
+Normalisierte Plätze tragen `rankSource: 3k-placement`. Ältere gespeicherte
+Rangnummern ohne diese Kennzeichnung werden nicht erneut als Tabellenplatz
+angezeigt. Das gilt auch für die Mannschaftsübersichten.

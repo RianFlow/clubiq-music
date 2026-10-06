@@ -22,6 +22,12 @@ const DARTS_FALLBACK_ROSTERS = {
   ],
 };
 const DARTS_STORAGE = 'clubiq_darts_matches_2026_27';
+function dartsTableRank(entry) {
+  return entry?.rankSource==='3k-placement'&&Number.isSafeInteger(entry.rank)&&entry.rank>0?entry.rank:null;
+}
+function dartsSeasonRanks(data) {
+  return {...data,teams:(data.teams||[]).map(team=>({...team,rank:dartsTableRank(team)}))};
+}
 const DARTS_EVENT_LABELS = {'180':'180er',high_finish:'High Finishes',leg:'Gewonnene Legs',game:'Einzel- & Doppelpartien',match:'Gesamtergebnisse'};
 function dartsPreferences(value={}) {
   const list=(key,allowed,fallback)=>Array.isArray(value?.[key])?[...new Set(value[key].filter(v=>allowed.includes(v)))]:fallback;
@@ -1164,7 +1170,7 @@ function initDarts() {
   let seasonData=null, seasonStatus='upcoming', seasonLoading=false, seasonPromise=null;
   let clubMembers=null, membersLoading=false, membersPromise=null, membersError='';
   try { const saved=JSON.parse(localStorage.getItem('clubiq_darts_last_ticker')||'null'); if (Array.isArray(saved?.items)) {renderTicker({...saved,stale:true});updateFreshness(true);} } catch (_) {}
-  try { const saved=JSON.parse(localStorage.getItem('clubiq_darts_last_season')||'null'); if (Array.isArray(saved?.matches)&&Array.isArray(saved?.teams)) {seasonData={...saved,stale:true};renderSeason();renderHomeSchedule();renderCompleteMatchCenter();} } catch (_) {}
+  try { const saved=JSON.parse(localStorage.getItem('clubiq_darts_last_season')||'null'); if (Array.isArray(saved?.matches)&&Array.isArray(saved?.teams)) {seasonData=dartsSeasonRanks({...saved,stale:true});renderSeason();renderHomeSchedule();renderCompleteMatchCenter();} } catch (_) {}
   loadTicker(); initServerLiveStream();
   runWhenIdle(()=>{ loadHighlights(); loadPlayerData(); });
   for (const id of ['#homeTeam','#homeLeague','#homeDate']) q(id).addEventListener('change',renderHomeSchedule);
@@ -1568,7 +1574,7 @@ function initDarts() {
       const incoming=await response.json();
       if (!Array.isArray(incoming.matches)||!Array.isArray(incoming.teams)) throw new Error('invalid season');
       if (incoming.degraded&&seasonData?.matches?.length) throw new Error('partial season');
-      seasonData=incoming;
+      seasonData=dartsSeasonRanks(incoming);
       if (!demoLive&&!seasonData.stale&&!seasonData.degraded) { try {localStorage.setItem('clubiq_darts_last_season',JSON.stringify(seasonData));} catch (_) {} }
       if (demoLive) {
         const liveById=new Map((tickerData.items || []).filter(item=>item.kind==='live').map(item=>[item.id,item]));
@@ -1971,7 +1977,7 @@ function initDarts() {
     const pair=(left,right)=>typeof left==='number'&&typeof right==='number'?`${number(left)}:${number(right)}`:'–';
     for(const entry of data.standings || []){
       const row=document.createElement('tr');if(entry.barver)row.className='barver';
-      const values={...entry,points:pair(entry.pointsFor,entry.pointsAgainst),sets:pair(entry.setsFor,entry.setsAgainst),legs:pair(entry.legsFor,entry.legsAgainst)};
+      const values={...entry,rank:dartsTableRank(entry),points:pair(entry.pointsFor,entry.pointsAgainst),sets:pair(entry.setsFor,entry.setsAgainst),legs:pair(entry.legsFor,entry.legsAgainst)};
       for(const [,key] of columns){const cell=document.createElement(key==='name'?'th':'td');if(key==='name')cell.scope='row';cell.textContent=key==='name'?entry.name:['points','sets','legs'].includes(key)?values[key]:number(values[key]);row.append(cell);}body.append(row);
     }
     table.append(body);
@@ -2009,7 +2015,7 @@ function initDarts() {
         if(!response.ok)throw new Error('league unavailable');
         const data=await response.json();
         if(data.league?.key!==leagueKey||!Number.isSafeInteger(data.selectedRound?.id)||(wanted!==null&&data.selectedRound.id!==wanted)||!Array.isArray(data.standings)||!Array.isArray(data.matches))throw new Error('Invalid league response');
-        if(data.standings.some(row=>!Object.hasOwn(row,'pointsFor')||!Object.hasOwn(row,'played'))){data.standingsUnavailable=true;data.degraded=true;}
+        if(data.standings.some(row=>row.rankSource!=='3k-placement'||!Object.hasOwn(row,'pointsFor')||!Object.hasOwn(row,'played'))){data.standingsUnavailable=true;data.degraded=true;}
         payload=data;
         if(current())renderLeague(data);
       } catch(_) { /* Try the independent public connection below. */ }
