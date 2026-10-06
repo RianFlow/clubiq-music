@@ -32,7 +32,8 @@ def training_model(raw):
     event_id = raw.get("id")
     if not isinstance(event_id, int) or isinstance(event_id, bool) or not 0 < event_id <= 10000000 or raw.get("dbId", 5) != 5:
         return None
-    return {"id": event_id, "name": " ".join(raw["name"].split())[:160], "date": raw.get("datetime"),
+    return {"id": event_id, "name": " ".join(str(raw["name"]).split())[:160],
+            "date": raw.get("datetime") if isinstance(raw.get("datetime"), str) else None,
             "status": str(raw.get("statusCd") or "")[:30],
             "source": f"https://portal.3k-darts.com/frontend/events/5/event/{event_id}/participants"}
 
@@ -74,7 +75,7 @@ def _discover(previous):
     def detail(event_id):
         try:
             return training_model((_public_get(f"{API}/{event_id}").get("event") or {}))
-        except (requests.RequestException, ValueError, KeyError, TypeError):
+        except (requests.RequestException, ValueError, KeyError, TypeError, AttributeError):
             return None
     stale = False
     with ThreadPoolExecutor(max_workers=4) as pool:
@@ -102,7 +103,7 @@ def get_trainings(force=False):
         try:
             _catalog = _discover(previous)
             save_snapshot("training-catalog", _catalog)
-        except (requests.RequestException, ValueError, KeyError, TypeError):
+        except (requests.RequestException, ValueError, KeyError, TypeError, AttributeError):
             _catalog = last_known(previous)
         return {**_catalog, **select_training(_catalog["events"])}
     finally:
@@ -135,7 +136,8 @@ def get_training(event_id=None):
         for key in ("performances", "placements"):
             if result.get(key + "Unavailable") and previous:
                 result[key] = previous.get(key, [])
-        save_snapshot(key, result)
+        if not result.get("degraded"):
+            save_snapshot(key, result)
         _event_cache[event_id] = (now, result)
         return result
     except InvalidTraining:

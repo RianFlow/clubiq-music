@@ -64,7 +64,7 @@
       if(!event||event.id!==id)throw new Error('Dieser Link gehört nicht zu einem Training von SV Barver.');
       const participants=await read(`${base}/participant`,controller.signal);if(!Array.isArray(participants))throw new Error('Teilnehmer konnten nicht geladen werden.');
       const result={event:{id,database:5,name:event.name,date:event.date,status:event.status},source:event.source,participants:participants.map(p=>({id:number(p.id),name:text(p.displayName),waiting:p.waitingList===true})),groups:[],matches:[],performances:[],placements:[],stale:false,updatedAt:new Date().toISOString(),sourceConnection:'browser-3k',scheduleReady:false,livePointsAvailable:false};
-      const jobs=[];
+      const jobs=[];if(!Array.isArray(detail.phases)||detail.phases.length>16)throw new Error('Trainingsphasen unvollständig');
       for(const phase of (detail.phases||[]).slice(0,16)) {
         if(!Number.isSafeInteger(phase.id)||phase.id<=0)continue;
         const data=await read(`${base}/phase/${phase.id}`,controller.signal);if(!Array.isArray(data.rounds))throw new Error('Trainingsphase unvollständig');

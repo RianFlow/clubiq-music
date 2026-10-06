@@ -26,6 +26,7 @@ class TrainingTests(TestCase):
     def test_models_only_include_barver_trainings_and_public_metadata(self):
         self.assertEqual(training.training_model(event())["id"], 32260)
         self.assertNotIn("paid", training.training_model(event()))
+        self.assertIsNone(training.training_model({**event(), "datetime": {"private": "metadata"}})["date"])
         for changes in ({"mandantKey": 9}, {"name": "DBD Runde"}, {"dbId": 10}, {"id": True}, {"id": 0}):
             self.assertIsNone(training.training_model({**event(), **changes}))
 
@@ -92,8 +93,9 @@ class TrainingTests(TestCase):
         partial = {**self.good, "performances": [], "performancesUnavailable": True, "degraded": True}
         with patch.object(training, "load_snapshot", return_value=self.good), \
              patch.object(training, "_detail", return_value=({"event": event()}, None, None, None)), \
-             patch.object(training, "_load", return_value=partial), patch.object(training, "save_snapshot"):
+             patch.object(training, "_load", return_value=partial), patch.object(training, "save_snapshot") as save:
             result = training.get_training(32260)
+        save.assert_not_called()
         self.assertEqual(result["performances"], self.good["performances"])
         self.assertTrue(result["degraded"])
 

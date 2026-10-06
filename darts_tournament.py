@@ -158,6 +158,8 @@ def _load(source=SOURCE, extras=False):
                for item in participants if isinstance(item, dict)]
     jobs = []
     phases = detail.get("phases") or []
+    if extras and (not isinstance(detail.get("phases"), list) or len(phases) > 16):
+        raise ValueError("Incomplete training phases")
     for phase in phases:
         if not isinstance(phase, dict):
             continue
