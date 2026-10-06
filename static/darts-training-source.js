@@ -6,8 +6,8 @@
   const text=value=>String(value||'').trim().replace(/\s+/g,' ').slice(0,160);
   const number=value=>Number.isFinite(value)&&value>=0&&value<=10000000?value:null;
   function source(value) {
-    const url=new URL(value),match=url.pathname.match(/^\/frontend\/events\/5\/event\/([1-9]\d{0,7})(?:\/[A-Za-z0-9/_-]*)?\/?$/);
-    if(url.protocol!=='https:'||url.hostname!=='portal.3k-darts.com'||url.username||url.password||url.port||!match||Number(match[1])>10000000)throw new Error('Bitte einen öffentlichen 3K-Trainingslink eingeben.');
+    const url=new URL(value),pattern=url.hostname==='portal.3k-darts.com'?/^\/frontend\/events\/5\/event\/([1-9]\d{0,7})(?:\/[A-Za-z0-9/_-]*)?\/?$/:url.hostname==='live.3k-darts.com'?/^\/event\/5\/([1-9]\d{0,7})\/?$/:null,match=pattern&&url.pathname.match(pattern);
+    if(url.protocol!=='https:'||url.username||url.password||url.port||!match||Number(match[1])>10000000)throw new Error('Bitte einen öffentlichen 3K-Trainingslink eingeben.');
     return Number(match[1]);
   }
   function eventModel(raw) {
@@ -35,7 +35,7 @@
         for(const raw of data.content){const item=eventModel(raw);if(item)events.set(item.id,item);}
         if(page+1>=data.totalPages)break;
       }
-      const ids=[...new Set([32260,31849,20147,...events.keys()])].slice(0,50);
+      const ids=[...new Set([32751,32260,31849,20147,...events.keys()])].slice(0,50);
       const queue=[...ids],checks=[];await Promise.all(Array.from({length:Math.min(4,queue.length)},async()=>{while(queue.length){const id=queue.shift();try{const data=await read(`${api}/${id}`,controller.signal),item=eventModel(data.event);if(!item||item.id!==id)throw new Error('Ungültiges Training');events.set(id,item);}catch(_){checks.push({status:'rejected'});}}}));
       const ordered=[...events.values()].sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)).slice(0,50),stale=checks.some(p=>p.status==='rejected');
       return {available:true,stale,degraded:stale,events:ordered,updatedAt:stale?null:new Date().toISOString(),source:'browser-3k',...select(ordered)};

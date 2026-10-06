@@ -8,6 +8,7 @@ const json=(res,body,status=200)=>{res.writeHead(status,{'Content-Type':'applica
 const server=http.createServer((req,res)=>{
   const url=new URL(req.url,'http://local'),p=url.pathname;
   if(p==='/api/v1/darts/trainings'){searches++;return json(res,catalog(),fail?503:200);}
+  if(p==='/static/darts-trainings.json')return json(res,catalog());
   if(p==='/api/v1/darts/training')return json(res,payload(Number(url.searchParams.get('event_id')||32260)),fail?503:200);
   const file=path.resolve(root,`.${['/training','/turnier'].includes(p)?'/turnier.html':p}`);
   if(!file.startsWith(root+path.sep)){res.writeHead(403);res.end();return;}
@@ -39,7 +40,7 @@ const server=http.createServer((req,res)=>{
     const before=searches;await page.clock.runFor(300010);await page.waitForFunction(()=>!trainingSearchBusy);assert.ok(searches>before);
     await page.uncheck('#autoTrainingSearch');const disabledSearches=searches;await page.clock.runFor(300010);assert.equal(searches,disabledSearches);
     await page.locator('#trainingControls summary').click();await page.fill('#trainingLink','https://portal.3k-darts.com/frontend/events/5/event/999/participants');await page.click('#trainingLinkForm button');await page.getByText('Dieser Link gehört nicht zu einem Training von SV Barver.').waitFor();assert.equal(await page.locator('#eventTitle').innerText(),'Training 31849');
-    await page.fill('#trainingLink','https://portal.3k-darts.com/frontend/events/5/event/32260/participants');await page.click('#trainingLinkForm button');await page.getByRole('heading',{name:'Training 32260',exact:true}).waitFor();assert.match(page.url(),/event=32260/);
+    await page.fill('#trainingLink','https://live.3k-darts.com/event/5/32260');await page.click('#trainingLinkForm button');await page.getByRole('heading',{name:'Training 32260',exact:true}).waitFor();assert.match(page.url(),/event=32260/);
     // Both connections fail after a complete snapshot: reload keeps the correct event.
     fail=true;await page.reload();await page.getByRole('heading',{name:'Training 32260',exact:true}).waitFor();await page.getByText(/Die letzten Daten bleiben sichtbar/).waitFor();assert.equal(await page.locator('#boards .board').count(),1);
     assert.equal(await page.locator('#autoTrainingSearch').isChecked(),false);
