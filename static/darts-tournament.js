@@ -71,7 +71,7 @@ function accept(next){
   if(data.source&&/^https:\/\/portal\.3k-darts\.com\//.test(data.source))q('#source').href=data.source;render();
 }
 async function refresh(){
-  if(busy||demo)return;busy=true;const version=selectionVersion,id=Number(selectedEvent||trainingCatalog?.selectedId||32260);requestController=new AbortController();
+  if(busy||demo)return;busy=true;const version=selectionVersion,id=Number(selectedEvent||trainingCatalog?.selectedId||32751);requestController=new AbortController();
   if(trainingPage&&!data){try{const saved=JSON.parse(localStorage.getItem(`clubiq_darts_training_event_${id}`)||'null');if(saved?.event?.id===id)accept({...saved,stale:true});}catch(_){}}
   try{
     let next;const timeout=setTimeout(()=>requestController.abort(),trainingPage?5000:30000);
@@ -93,15 +93,15 @@ async function loadTrainingChoices(force=false){
   trainingSearchBusy=true;trainingSearchAt=Date.now();q('#findTrainings').disabled=true;q('#trainingSearchStatus').textContent='Trainings werden gesucht …';
   try{
     if(!Array.isArray(trainingCatalog?.events)){try{const r=await fetch('/static/darts-trainings.json',{signal:AbortSignal.timeout(2000)});if(r.ok)trainingCatalog=await r.json();}catch(_){} }
-    renderTrainingChoices();const previousId=trainingCatalog?.selectedId;let incoming;
+    renderTrainingChoices();let incoming;
     try{const r=await fetch('/api/v1/darts/trainings'+(force?'?refresh=true':''),{cache:'no-store',signal:AbortSignal.timeout(4000)});if(!r.ok)throw Error();incoming=await r.json();if(!Array.isArray(incoming.events))throw Error();}catch(_){}
     if(!incoming||incoming.stale){try{incoming=await window.DartsTrainingSource.discover(trainingCatalog?.events||[]);}catch(_){if(!incoming)throw Error();}}
     const events=[...new Map([...(trainingCatalog?.events||[]),...incoming.events].map(e=>[e.id,e])).values()];
     trainingCatalog={...incoming,updatedAt:incoming.updatedAt||trainingCatalog?.updatedAt,events,...window.DartsTrainingSource.select(events)};renderTrainingChoices();
     if(!incoming.stale){try{localStorage.setItem('clubiq_darts_training_catalog',JSON.stringify(trainingCatalog));}catch(_){} }
     const checked=new Date(incoming.updatedAt).toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'});
-    q('#trainingSearchStatus').textContent=incoming.stale?'3K ist gerade nicht erreichbar. Die bekannten Trainings bleiben auswählbar.':`${events.length} Trainings gefunden · Suche um ${checked} Uhr. ${trainingCatalog.nextId?'Das nächste veröffentlichte Training ist verfügbar.':'Noch kein neues Training bei 3K veröffentlicht. Angezeigt wird das letzte bekannte Training.'}`;
-    if(!selectedEvent&&previousId!==trainingCatalog.selectedId&&trainingCatalog.selectedId)chooseEvent('');
+    q('#trainingSearchStatus').textContent=incoming.stale?'3K ist gerade nicht erreichbar. Die bekannten Trainings bleiben auswählbar.':`${events.length} Trainings gefunden · Suche um ${checked} Uhr. ${events.some(e=>e.id===trainingCatalog.selectedId&&['ACTIVE','RUNNING','STARTED'].includes(e.status))?'Ein laufendes Training ist verfügbar.':trainingCatalog.nextId?'Das nächste veröffentlichte Training ist verfügbar.':'Noch kein neues Training bei 3K veröffentlicht. Angezeigt wird das letzte bekannte Training.'}`;
+    if(!selectedEvent&&trainingCatalog.selectedId&&data?.event.id!==trainingCatalog.selectedId)chooseEvent('');
   }catch(_){q('#trainingSearchStatus').textContent='Die Suche ist gerade nicht erreichbar. Vorhandene Trainings bleiben auswählbar; bitte später erneut versuchen.';renderTrainingChoices();}
   finally{trainingSearchBusy=false;q('#findTrainings').disabled=false;scheduleTrainingSearch();}
 }

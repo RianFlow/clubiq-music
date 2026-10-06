@@ -93,6 +93,9 @@ def _discover(previous):
 def get_trainings(force=False):
     global _catalog, _catalog_attempt
     previous = _catalog or load_snapshot("training-catalog") or SEED
+    # Newly confirmed links must also reach visitors with an older saved catalog.
+    events = list({e["id"]: e for e in [*SEED["events"], *previous["events"]]}.values())
+    previous = {**previous, "events": events, **select_training(events)}
     age = time.monotonic() - _catalog_attempt
     if _catalog_attempt and age < (30 if force or previous.get("stale") else 300):
         return {**previous, **select_training(previous["events"])}
@@ -116,7 +119,7 @@ def get_training(event_id=None):
         raise ValueError("Ungültiges Training")
     key = f"training:{event_id}"
     cached = _event_cache.get(event_id)
-    previous = cached[1] if cached else load_snapshot(key)
+    previous = cached[1] if cached and cached[1] else load_snapshot(key)
     now = time.monotonic()
     ttl = 300 if previous and previous.get("event", {}).get("status") == "FINISH" and not previous.get("stale") and not previous.get("degraded") else 30
     if cached and now - cached[0] < ttl:

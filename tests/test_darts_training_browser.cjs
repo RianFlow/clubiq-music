@@ -8,6 +8,7 @@ const json=(res,body,status=200)=>{res.writeHead(status,{'Content-Type':'applica
 const server=http.createServer((req,res)=>{
   const url=new URL(req.url,'http://local'),p=url.pathname;
   if(p==='/api/v1/darts/trainings'){searches++;return json(res,catalog(),fail?503:200);}
+  if(p==='/static/darts-trainings.json')return json(res,catalog());
   if(p==='/api/v1/darts/training')return json(res,payload(Number(url.searchParams.get('event_id')||32260)),fail?503:200);
   const file=path.resolve(root,`.${['/training','/turnier'].includes(p)?'/turnier.html':p}`);
   if(!file.startsWith(root+path.sep)){res.writeHead(403);res.end();return;}
@@ -39,13 +40,14 @@ const server=http.createServer((req,res)=>{
     const before=searches;await page.clock.runFor(300010);await page.waitForFunction(()=>!trainingSearchBusy);assert.ok(searches>before);
     await page.uncheck('#autoTrainingSearch');const disabledSearches=searches;await page.clock.runFor(300010);assert.equal(searches,disabledSearches);
     await page.locator('#trainingControls summary').click();await page.fill('#trainingLink','https://portal.3k-darts.com/frontend/events/5/event/999/participants');await page.click('#trainingLinkForm button');await page.getByText('Dieser Link gehört nicht zu einem Training von SV Barver.').waitFor();assert.equal(await page.locator('#eventTitle').innerText(),'Training 31849');
-    await page.fill('#trainingLink','https://portal.3k-darts.com/frontend/events/5/event/32260/participants');await page.click('#trainingLinkForm button');await page.getByRole('heading',{name:'Training 32260',exact:true}).waitFor();assert.match(page.url(),/event=32260/);
+    await page.fill('#trainingLink','https://live.3k-darts.com/event/5/32260');await page.click('#trainingLinkForm button');await page.getByRole('heading',{name:'Training 32260',exact:true}).waitFor();assert.match(page.url(),/event=32260/);
     // Both connections fail after a complete snapshot: reload keeps the correct event.
     fail=true;await page.reload();await page.getByRole('heading',{name:'Training 32260',exact:true}).waitFor();await page.getByText(/Die letzten Daten bleiben sichtbar/).waitFor();assert.equal(await page.locator('#boards .board').count(),1);
     assert.equal(await page.locator('#autoTrainingSearch').isChecked(),false);
     for(const width of [390,320]){await page.setViewportSize({width,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`overflow at ${width}`);}
     await page.screenshot({path:path.join(root,'outputs/training-mobile.png'),fullPage:true});
-    fail=false;await page.goto(`${origin}/training?tv=1&event=31849`);await page.locator('#boards .standings').waitFor();assert.equal(await page.locator('#trainingControls').isVisible(),false);
+    fail=false;next=true;const fresh=await browser.newPage();await fresh.clock.install({time:new Date('2026-10-06T10:00:00Z')});await fresh.goto(`${origin}/training`);await fresh.getByRole('heading',{name:'Training 33000',exact:true}).waitFor();assert.equal(await fresh.locator('#view').inputValue(),'participants');await fresh.close();
+    await page.goto(`${origin}/training?tv=1&event=31849`);await page.locator('#boards .standings').waitFor();assert.equal(await page.locator('#trainingControls').isVisible(),false);
     await page.setViewportSize({width:1920,height:1080});await page.screenshot({path:path.join(root,'outputs/training-tv.png'),fullPage:true});
     assert.deepEqual(errors,[]);console.log('Training browser: common view, results, next search, pinned history, 5-minute timer, manual validation, offline reload, TV and mobile OK');
   }finally{await browser.close();server.close();}

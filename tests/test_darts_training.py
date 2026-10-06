@@ -71,6 +71,23 @@ class TrainingTests(TestCase):
         self.assertEqual(first["events"], second["events"])
         self.assertEqual(discover.call_count, 1)
 
+    def test_new_confirmed_training_reaches_older_saved_catalog_during_outage(self):
+        old = {"events": [training.training_model(event())], "updatedAt": self.good["updatedAt"]}
+        today = training.training_model(event(32751, "ACTIVE", "2026-10-05T22:00:00Z"))
+        with patch.object(training, "SEED", {**old, "events": [today]}), \
+             patch.object(training, "load_snapshot", return_value=old), \
+             patch.object(training, "_discover", side_effect=requests.Timeout):
+            result = training.get_trainings()
+        self.assertTrue(result["stale"])
+        self.assertEqual(result["selectedId"], 32751)
+        self.assertEqual({e["id"] for e in result["events"]}, {32260, 32751})
+
+    def test_durable_snapshot_is_used_after_a_previous_failed_request(self):
+        training._event_cache[32260] = (100, None)
+        with patch.object(training, "load_snapshot", return_value=self.good), \
+             patch.object(training.time, "monotonic", return_value=101):
+            self.assertEqual(training.get_training(32260)["event"]["id"], 32260)
+
     def test_restart_outage_keeps_matching_event_and_original_time(self):
         with patch.object(training, "load_snapshot", return_value=self.good) as load, \
              patch.object(training, "_detail", side_effect=requests.Timeout):

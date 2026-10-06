@@ -16,12 +16,14 @@ global.fetch=async url=>{
 };
 (async()=>{
   assert.equal(source.source('https://portal.3k-darts.com/frontend/events/5/event/32260/participants'),32260);
+  assert.equal(source.source('https://live.3k-darts.com/event/5/32751'),32751);
+  for(const url of ['https://live.3k-darts.com.evil.test/event/5/32751','https://live.3k-darts.com/event/10/32751','https://user:pass@live.3k-darts.com/event/5/32751','https://live.3k-darts.com/event/5/32751/other'])assert.throws(()=>source.source(url));
   for(const url of ['https://evil.test/frontend/events/5/event/1','http://portal.3k-darts.com/frontend/events/5/event/1','https://u:p@portal.3k-darts.com/frontend/events/5/event/1','https://portal.3k-darts.com/frontend/events/10/event/1'])assert.throws(()=>source.source(url));
   assert.equal(source.eventModel({...event(),mandantKey:9}),null);assert.equal(source.eventModel({...event(),name:'DBD Runde'}),null);
   const now=Date.parse('2026-10-06T10:00:00Z'),past=source.eventModel(event()),today=source.eventModel(event(33000,'CREATED','2026-10-05T22:00:00Z'));
   assert.deepEqual(source.select([past],now),{selectedId:32260,nextId:null});assert.equal(source.select([past,today],now).selectedId,33000);
   assert.equal(source.select([{...past,date:'bad'}],now).selectedId,null);
-  const catalog=await source.discover([past]);assert.deepEqual(catalog.events.map(e=>e.id).sort(),[20147,31849,32260]);assert.equal(catalog.stale,false);
+  const catalog=await source.discover([past]);assert.deepEqual(catalog.events.map(e=>e.id).sort(),[20147,31849,32260,32751]);assert.equal(catalog.stale,false);
   const result=await source.loadEvent(32260);assert.equal(result.event.id,32260);assert.equal(result.matches[0].homeLegs,3);
   assert.deepEqual(result.groups[0].entries.map(e=>e.rank),['2.','1.']);assert.equal(result.performances[0].count,2);
   assert.equal(JSON.stringify(result).includes('private'),false);assert.equal(JSON.stringify(result).includes('paid'),false);assert.equal(JSON.stringify(catalog).includes('paid'),false);
