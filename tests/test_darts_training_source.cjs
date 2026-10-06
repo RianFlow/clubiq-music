@@ -1,0 +1,32 @@
+'use strict';
+const assert=require('node:assert/strict'),source=require('../static/darts-training-source.js');
+const event=(id=32260,status='FINISH',date='2026-09-21T22:00:00Z')=>({id,statusCd:status,datetime:date,name:`Training ${id}`,mandantKey:1931,dbId:5,paid:true});
+const calls=[];let extrasFail=false;
+global.fetch=async url=>{
+  calls.push(url);const path=new URL(url).pathname;
+  let body;
+  if(path.endsWith('/page'))body={totalPages:2,content:[event(url.includes('page=0&')?31849:20147)]};
+  else if(path.endsWith('/participant'))body=[{id:1,displayName:'<script>A</script>',paid:true,email:'private'}];
+  else if(path.endsWith('/performance'))body=extrasFail?{}:{performanceCatalog:[{performanceTypeCd:'HS',playerPerformances:[{value:180,count:2,participant:{displayName:'A',paid:true}}]}]};
+  else if(path.endsWith('/placement'))body=[];
+  else if(path.endsWith('/round/8'))body={matches:[{id:44,statusCd:'FINISH',participantHome:{displayName:'A'},participantGuest:{displayName:'B'},legsHome:3,legsAway:1}],tableInfo:{tableEntries:[{name:'Gruppe 1',tableEntries:[{placement:'2.',participantName:'B'},{placement:'1.',participantName:'A'}]}]}};
+  else if(path.endsWith('/phase/7'))body={rounds:[{id:8}]};
+  else body={event:event(Number(path.split('/').at(-1))),phases:[{id:7}]};
+  return {ok:true,json:async()=>body};
+};
+(async()=>{
+  assert.equal(source.source('https://portal.3k-darts.com/frontend/events/5/event/32260/participants'),32260);
+  for(const url of ['https://evil.test/frontend/events/5/event/1','http://portal.3k-darts.com/frontend/events/5/event/1','https://u:p@portal.3k-darts.com/frontend/events/5/event/1','https://portal.3k-darts.com/frontend/events/10/event/1'])assert.throws(()=>source.source(url));
+  assert.equal(source.eventModel({...event(),mandantKey:9}),null);assert.equal(source.eventModel({...event(),name:'DBD Runde'}),null);
+  const now=Date.parse('2026-10-06T10:00:00Z'),past=source.eventModel(event()),today=source.eventModel(event(33000,'CREATED','2026-10-05T22:00:00Z'));
+  assert.deepEqual(source.select([past],now),{selectedId:32260,nextId:null});assert.equal(source.select([past,today],now).selectedId,33000);
+  assert.equal(source.select([{...past,date:'bad'}],now).selectedId,null);
+  const catalog=await source.discover([past]);assert.deepEqual(catalog.events.map(e=>e.id).sort(),[20147,31849,32260]);assert.equal(catalog.stale,false);
+  const result=await source.loadEvent(32260);assert.equal(result.event.id,32260);assert.equal(result.matches[0].homeLegs,3);
+  assert.deepEqual(result.groups[0].entries.map(e=>e.rank),['2.','1.']);assert.equal(result.performances[0].count,2);
+  assert.equal(JSON.stringify(result).includes('private'),false);assert.equal(JSON.stringify(result).includes('paid'),false);assert.equal(JSON.stringify(catalog).includes('paid'),false);
+  assert.ok(calls.every(url=>url.startsWith('https://backend4.3k-darts.com/2k-backend4/api/v1/frontend/event/')));
+  extrasFail=true;const partial=await source.loadEvent(32260);assert.equal(partial.degraded,true);assert.equal(partial.performancesUnavailable,true);assert.equal(partial.matches.length,1);
+  global.fetch=async()=>{throw new Error('offline');};await assert.rejects(()=>source.discover([past]));
+  console.log('Training source: safe links, discovery, Berlin dates, exact phases, official ranks, privacy and partial failures OK');
+})().catch(error=>{console.error(error);process.exitCode=1;});
