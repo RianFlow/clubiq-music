@@ -1,7 +1,7 @@
 # Automatische Erholung bei 3K-Ausfällen
 
 Der Server speichert ausschließlich die bereits normalisierten öffentlichen
-Ticker-, Saison- und Spieltagsdaten in `darts_feed_snapshots`. Der ursprüngliche
+Ticker-, Saison-, Spieltags- und Spielberichtsdaten in `darts_feed_snapshots`. Der ursprüngliche
 Zeitpunkt des Abrufs bleibt erhalten. Alte oder unvollständige Antworten
 überschreiben keinen vollständigen Stand. Die Daten bleiben nach einem
 Container-Neustart verfügbar; `bootstrap.py` ergänzt die Tabelle idempotent.
@@ -25,7 +25,7 @@ Anfrage, haben eine Gesamtfrist von 15 Sekunden und erfolgen höchstens alle
 
 Die Anzeige unterscheidet „Alternative 3K-Verbindung aktiv“, nicht erreichbare
 Live-Punkte und den letzten bekannten Stand mit seinem Alter. Die Alternative
-aktualisiert Liga-Ergebnisse und Live-Punkte; Saison, Einzelberichte, Rangliste,
+aktualisiert Liga-Ergebnisse, Live-Punkte und Spielberichte; Saison, Rangliste,
 Turniere und Push-Meldungen benötigen weiterhin ihre jeweilige Serverquelle.
 Bei vollständigem Netzausfall bleiben gespeicherte Daten sichtbar, ohne einen
 aktuellen Spielstand vorzutäuschen.
@@ -33,3 +33,12 @@ aktuellen Spielstand vorzutäuschen.
 Tests decken Ausfall, begrenzte Wiederholung, nur einen Wiederverbindungsversuch,
 Neustart, unvollständige Saisonantworten, PostgreSQL-Speicherung, öffentliche
 Feldfreigabe und den Wechsel zwischen Server und Browser-Verbindung ab.
+
+Kommende Begegnungen öffnen sofort eine Vorschau mit Mannschaften, Termin,
+Spielort, Kalenderexport und Route. Ein unveröffentlichter Spielbericht ist kein
+Fehler. Bei einer gestörten Serververbindung validiert die Browser-Alternative
+die Begegnung in ihrem offiziellen Ligaspieltag und lädt vorhandene Einzelpartien,
+öffentliche Live-Punkte und Highlights. Falls beide Quellen ausfallen, bleiben
+die bekannten Begegnungsdaten sichtbar. Anfragen haben begrenzte Laufzeiten;
+eine geschlossene oder gewechselte Begegnung wird nicht durch späte Antworten
+überschrieben. Gültige normalisierte Spielberichte werden dauerhaft gespeichert.

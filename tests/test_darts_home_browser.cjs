@@ -12,7 +12,7 @@ const matches=[
 if(process.argv.includes('--quiet'))for(const match of matches)if(match.kind==='live'){match.kind='upcoming';delete match.score;}
 const teams=['A','B','C','D'].map((code,i)=>({code,rank:i+2,name:`SV Barver Darts ${code}`,league:{name:code==='D'?'Kreisklasse 11':'Kreisligen 04'},record:{},matches:matches.filter(m=>m.barverTeam===code),roster:[{id:89027+i,name:code==='A'?'Jannik Kläning':`Demo-Spieler ${code}`,role:'Kapitän'}],venue:{name:'Testspielstätte',street:'Teststraße 1',postalCode:'49453',city:'Barver'}}));
 teams[1].roster=[{id:89029,name:'Patrick Lammers',role:'Kapitän'}];
-let fail=false,tvEmpty=false,fallbackEnabled=false;
+let fail=false,tvEmpty=false,fallbackEnabled=false,futureMode=false;
 const server=http.createServer((req,res)=>{
   const url=new URL(req.url,'http://localhost'),p=url.pathname;
   if(p.startsWith('/api/')) {
@@ -60,7 +60,7 @@ const server=http.createServer((req,res)=>{
     await context.route('https://backend-ddv.3k-darts.com/**',async route=>{
       if(!fallbackEnabled)return route.abort();
       const url=route.request().url(),event=url.includes('/event/1445/')?1445:1460;
-      const body=url.includes('/round/')?{matches:[{id:event===1445?901:902,eventId:event,statusCd:'OPEN',setsHome:8,setsAway:3,datePlanned:day(0),participantHome:{id:event===1445?174110:174266,displayName:event===1445?'SV Barver Darts A':'SV Barver Darts D',email:'private@example.test'},participantGuest:{id:888,displayName:'Alternative Gäste'}}]}:{rounds:[{id:123,dateFrom:day(-1),dateTo:day(1)}]};
+      const body=url.includes('/round/')?{matches:[{id:event===1445?901:902,eventId:event,statusCd:'OPEN',setsHome:futureMode?null:8,setsAway:futureMode?null:3,datePlanned:day(futureMode?2:0),participantHome:{id:event===1445?174110:174266,displayName:event===1445?'SV Barver Darts A':'SV Barver Darts D',email:'private@example.test'},participantGuest:{id:888,displayName:'Alternative Gäste'}}]}:{rounds:[{id:123,dateFrom:day(-1),dateTo:day(1)}]};
       await route.fulfill({status:200,headers:{'access-control-allow-origin':'*'},contentType:'application/json',body:JSON.stringify(body)});
     });
     await context.route('https://live.3k-darts.com/**',async route=>{
@@ -282,6 +282,33 @@ const server=http.createServer((req,res)=>{
     fail=false;fallbackEnabled=false;await page.evaluate(()=>window.dispatchEvent(new Event('online')));
     await page.waitForFunction(()=>document.querySelector('#liveDataStatus').textContent==='3K-Daten aktuell');
     assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('clubiq_darts_last_ticker')).source||null),null,'healthy server replaces browser fallback');
+    // The exact reported failure: upcoming match opens despite a failed server report.
+    fail=true;fallbackEnabled=true;futureMode=true;await page.reload();
+    await page.getByText('Alternative 3K-Verbindung aktiv',{exact:true}).waitFor();
+    const nextA=page.locator('#nextAppointmentsList .appointment-card').filter({hasText:'SV Barver Darts A'});
+    await nextA.getByRole('button',{name:'Spiel ansehen'}).click();
+    await page.locator('#matchDialog').getByText('Direkt von 3K geladen',{exact:true}).waitFor();
+    assert.match(await page.locator('#matchHeading').innerText(),/SV Barver Darts A gegen Alternative Gäste/);
+    assert.match(await page.locator('#matchDetail').innerText(),/Die Begegnung steht noch bevor/);
+    assert.match(await page.locator('#matchDetail').innerText(),/Teststraße 1/);
+    assert.equal(await page.locator('#matchDetail .error').count(),0);
+    assert.equal(await page.locator('#matchDetail [role=tablist]').count(),0,'no fabricated pre-match statistics');
+    assert.equal(await page.locator('#matchDetail .calendar-button').count(),1);
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'upcoming detail mobile overflow');
+    await page.click('#closeMatch');
+    // Both connections fail: the saved fixture still opens and keeps its real facts.
+    fallbackEnabled=false;await page.reload();
+    await nextA.getByRole('button',{name:'Spiel ansehen'}).click();
+    await page.locator('#matchDetail').getByText('Letzter verfügbarer Spielplan',{exact:true}).waitFor();
+    assert.match(await page.locator('#matchHeading').innerText(),/SV Barver Darts A gegen Alternative Gäste/);
+    assert.equal(await page.locator('#matchDetail .error').count(),0);
+    await page.click('#closeMatch');
+    await page.route('**/api/v1/darts/matches/901',async route=>{await new Promise(resolve=>setTimeout(resolve,300));await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({match:matches[0],games:[],reportAvailable:false})}).catch(()=>{});});
+    await nextA.getByRole('button',{name:'Spiel ansehen'}).click();await page.click('#closeMatch');
+    await page.locator('#nextAppointmentsList .appointment-card').filter({hasText:'SV Barver Darts D'}).getByRole('button',{name:'Spiel ansehen'}).click();
+    await page.waitForTimeout(500);
+    assert.match(await page.locator('#matchHeading').innerText(),/SV Barver Darts D/,'late response must not replace a different opened fixture');
+    await page.click('#closeMatch');
     assert.deepEqual(errors,[]);
     console.log('Browser: homepage, two boards, favorites, filters, saved player/type preferences, reconnect, mobile OK');
   } finally {await browser.close();server.close();}

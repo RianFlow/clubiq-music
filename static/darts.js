@@ -1593,8 +1593,29 @@ function initDarts() {
     })();
     return seasonPromise;
   }
+  function renderMatchSummary(data) {
+    const target=q('#matchDetail'),match=data.match||{};
+    q('#matchHeading').textContent=`${match.home||'Heim'} gegen ${match.away||'Gast'}`;
+    const summary=document.createElement('section');summary.className=`native-match-summary match-page-hero ${match.kind||''}`;
+    const status=document.createElement('b');status.className='live-data-status';status.dataset.state=data.checking?'wait':data.stale||data.reportUnavailable?'warn':'ok';
+    status.textContent=data.checking?'Spielplan wird geprüft':data.stale?'Letzter verfügbarer Spielplan':data.source==='browser-3k'?'Direkt von 3K geladen':'Mit 3K abgeglichen';
+    const matchup=document.createElement('div');matchup.className='native-match-score large';const score=document.createElement('b');score.textContent=match.score||'vs';matchup.append(clubNameNode(match.home||'Heim'),score,clubNameNode(match.away||'Gast'));
+    const facts=document.createElement('dl');facts.className='match-fixture-facts';
+    const planned=Date.parse(match.plannedAt||''),location=appointmentLocation({kind:'match',match});
+    const dateText=Number.isFinite(planned)?new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',weekday:'long',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(planned))+' Uhr':'Termin noch nicht bekannt';
+    for(const [label,value] of [['Termin',dateText],['Spielort',location||'Spielort noch nicht hinterlegt']]) {const row=document.createElement('div'),term=document.createElement('dt'),text=document.createElement('dd');term.textContent=label;text.textContent=value;row.append(term,text);facts.append(row);}
+    const note=document.createElement('p');note.className='match-detail-empty';
+    note.textContent=match.kind==='upcoming'?'Die Begegnung steht noch bevor. Aufstellung und Ergebnisse folgen, sobald sie bei 3K veröffentlicht sind.':data.checking?'Der Spielbericht wird geladen. Die bekannten Begegnungsdaten bleiben sichtbar.':'Der Spielbericht ist gerade nicht erreichbar. Angezeigt werden die bekannten Begegnungsdaten.';
+    const actions=document.createElement('div');actions.className='appointment-actions';
+    if(Number.isFinite(planned))actions.append(calendarButton({id:match.id,title:`${match.home} gegen ${match.away}`,start:match.plannedAt,location}));
+    if(location){const route=document.createElement('a');route.href=`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(location)}`;route.target='_blank';route.rel='noopener noreferrer';route.textContent='Route öffnen';actions.append(route);}
+    try {const url=new URL(data.sourceUrl||match.url);if(url.protocol==='https:'&&url.hostname==='portal.3k-darts.com'&&!url.username&&!url.password){const source=document.createElement('a');source.href=url.href;source.target='_blank';source.rel='noopener noreferrer';source.textContent='Bei 3K öffnen';actions.append(source);}} catch(_){}
+    const retry=document.createElement('button');retry.type='button';retry.textContent='Aktualisieren';retry.addEventListener('click',()=>openMatch(match.id));actions.append(retry);
+    summary.append(status,matchup,facts,note,actions);target.replaceChildren(summary);
+  }
   function renderMatchDetail(data) {
     const target=q('#matchDetail'), match=data.match || {};
+    if ((data.reportAvailable===false&&!(data.liveGames||[]).length)||(!(data.games||[]).length&&!(data.liveGames||[]).length)) {renderMatchSummary(data);return;}
     q('#matchHeading').textContent=`${match.home || 'Heim'} ${match.score || '–'} ${match.away || 'Gast'}`;
     const finished=(data.games || []).filter(game=>game.status==='FINISH'&&Number.isInteger(game.homeLegs)&&Number.isInteger(game.awayLegs));
     const homeWins=finished.filter(game=>game.homeLegs>game.awayLegs).length, awayWins=finished.filter(game=>game.awayLegs>game.homeLegs).length;
@@ -1736,7 +1757,7 @@ function initDarts() {
     const header=document.createElement('section'); header.className=`native-match-summary match-page-hero ${match.kind || ''}`;
     const metaRow=document.createElement('div'); metaRow.className='match-page-meta';
     const meta=document.createElement('span'); appendTeamCodes(meta,(match.barverTeams || [match.barverTeam]).filter(Boolean)); meta.append(` · ${matchLocation(match)} · ${competitionLabel(match)} · ${match.round?.name || ''} · ${matchDate(match)}`);
-    const freshness=document.createElement('b'); freshness.textContent=`${match.kind==='live'?'● LIVE':match.kind==='final'?'ENDSTAND':match.kind==='pending'?'VORLÄUFIG BEENDET · Bestätigung durch den Veranstalter ausstehend':'GEPLANT'} · ${data.stale?'letzter verfügbarer Stand':'mit 3K abgeglichen'}`; metaRow.append(meta,freshness);
+    const freshness=document.createElement('b'); freshness.textContent=`${match.kind==='live'?'● LIVE':match.kind==='final'?'ENDSTAND':match.kind==='pending'?'VORLÄUFIG BEENDET · Bestätigung durch den Veranstalter ausstehend':'GEPLANT'} · ${data.stale?'letzter verfügbarer Stand':data.source==='browser-3k'?'direkt von 3K geladen':'mit 3K abgeglichen'}`; metaRow.append(meta,freshness);
     const matchup=document.createElement('div'); matchup.className='native-match-score large';
     const home=clubNameNode(match.home || 'Heim'); const score=document.createElement('b'); score.textContent=match.score || 'vs'; const away=clubNameNode(match.away || 'Gast'); matchup.append(home,score,away);
     const progress=document.createElement('small'); progress.textContent=`${finished.length} von ${(data.games || []).length || 12} Partien beendet`;
@@ -1785,28 +1806,55 @@ function initDarts() {
       : [{id:9010,matchKey:'demo-10',home:{name:'Gegner Eins',remaining:410,legs:1},away:{name:'Jannik Beispiel',remaining:320,legs:2},currentSide:'away',lastUpdated:new Date().toISOString()},{id:9011,matchKey:'demo-11',home:{name:'Gegner Drei',remaining:298,legs:0},away:{name:'Tim Beispiel',remaining:201,legs:1},currentSide:'home',lastUpdated:new Date(Date.now()-1000).toISOString()}];
     return {available:true,stale:false,demo:true,match,games,liveGames,performances:[{type:'180',player:'Jannik Beispiel',count:2,value:180},{type:'high_finish',player:'Dennis Beispiel',count:1,value:121}],sourceUrl:base.url || '#'};
   }
+  let matchLoadSequence=0,matchRequestController=null;
   async function openMatch(matchId) {
-    if (!Number.isInteger(Number(matchId)) || Number(matchId)<=0) return;
-    q('#matchDialog').dataset.matchId=String(matchId); activeMatchDetailData=null;
-    const sponsorSlot=q('#sponsorMatch');
-    const knownMatch=(seasonData?.matches || []).find(item=>item.id===Number(matchId)) || (tickerData.items || []).find(item=>item.id===Number(matchId));
-    sponsorSlot.dataset.matchId=String(matchId);
-    sponsorSlot.dataset.teams=(knownMatch?.barverTeams || [barverTeam(knownMatch)]).filter(Boolean).join(',');
-    refreshSponsorSlots(false);
-    q('#matchHeading').textContent='Begegnung wird geladen'; q('#matchDetail').innerHTML='<p class="panel-loading">Spielbericht wird geladen …</p>';
-    if (!q('#matchDialog').open) q('#matchDialog').showModal();
+    matchId=Number(matchId);if(!Number.isSafeInteger(matchId)||matchId<=0)return;
+    const sequence=++matchLoadSequence;
+    matchRequestController?.abort();
+    const controller=new AbortController();matchRequestController=controller;
+    q('#matchDialog').dataset.matchId=String(matchId);
+    const scheduled=(seasonData?.matches||[]).find(item=>item.id===matchId);
+    const latest=(tickerData.items||[]).find(item=>item.id===matchId);
+    const knownMatch=scheduled||latest?{...scheduled,...latest}:null;
+    const summary=knownMatch?{available:true,stale:true,checking:true,reportAvailable:false,match:knownMatch,games:[],liveGames:[],performances:[],sourceUrl:knownMatch.url}:null;
+    const sponsorSlot=q('#sponsorMatch');sponsorSlot.dataset.teams=(knownMatch?.barverTeams||[barverTeam(knownMatch)]).filter(Boolean).join(',');refreshSponsorSlots(false);
+    activeMatchDetailData=summary;
+    if(summary)renderMatchDetail(summary);
+    else {q('#matchHeading').textContent='Begegnung';q('#matchDetail').innerHTML='<p class="panel-loading">Spielbericht wird geladen …</p>';}
+    if(!q('#matchDialog').open)q('#matchDialog').showModal();
+    let payload=null;
     try {
-      if (demoLive) {
-        const base=(seasonData?.matches || []).find(item=>item.id===Number(matchId)) || (tickerData.items || []).find(item=>item.id===Number(matchId));
-        if (base?.kind==='live') { renderMatchDetail(demoMatchData(base)); q('#matchHeading').textContent=`DEMO · ${q('#matchHeading').textContent}`; return; }
+      if(demoLive&&knownMatch?.kind==='live'){activeMatchDetailData=demoMatchData(knownMatch);renderMatchDetail(activeMatchDetailData);q('#matchHeading').textContent=`DEMO · ${q('#matchHeading').textContent}`;return;}
+      const timeout=setTimeout(()=>controller.abort(),6000);
+      try {
+        const response=await fetch(`/api/v1/darts/matches/${matchId}`,{headers:{Accept:'application/json'},cache:'no-store',signal:controller.signal});
+        if(!response.ok)throw new Error('match unavailable');
+        payload=await response.json();
+        if(payload.match?.id!==matchId)throw new Error('wrong match');
+      } catch(_) { /* Try the independent public source or retain known facts. */ }
+      finally {clearTimeout(timeout);}
+      if(sequence!==matchLoadSequence||!q('#matchDialog').open)return;
+      if((!payload||payload.stale||payload.reportAvailable===false)&&knownMatch&&window.DartsSourceFallback?.loadMatch){
+        // The server timeout must not cancel the independent connection.
+        const directController=new AbortController();matchRequestController=directController;
+        try {
+          const scheduledNow=(seasonData?.matches||[]).find(item=>item.id===matchId);
+          const direct=await window.DartsSourceFallback.loadMatch({...scheduledNow,...payload?.match,...knownMatch},directController.signal);
+          if(direct.reportAvailable||!payload?.games?.length)payload=direct;
+        } catch(_) { /* The known fixture remains useful if both sources fail. */ }
       }
-      const response=await fetch(`/api/v1/darts/matches/${encodeURIComponent(matchId)}`,{headers:{Accept:'application/json'},cache:'no-store'});
-      if (!response.ok) throw new Error('match unavailable');
-      activeMatchDetailData=await response.json();
+      if(sequence!==matchLoadSequence||!q('#matchDialog').open)return;
+      if(!payload&&summary)payload={...summary,checking:false,reportUnavailable:true};
+      if(!payload)throw new Error('no known match');
+      activeMatchDetailData=payload;
       const group=serverLiveGroups.get(String(matchId));
-      if (group&&!group.stale&&tickerData.source!=='browser-3k') activeMatchDetailData={...activeMatchDetailData,liveGames:normalizedLiveGames(group)};
+      if(group&&!group.stale&&payload.source!=='browser-3k'&&tickerData.source!=='browser-3k')activeMatchDetailData={...payload,liveGames:normalizedLiveGames(group)};
       renderMatchDetail(activeMatchDetailData);
-    } catch (_) { q('#matchDetail').innerHTML='<p class="error">Der Spielbericht konnte gerade nicht geladen werden. Bitte später erneut versuchen.</p>'; }
+    } catch(_) {
+      if(sequence!==matchLoadSequence||!q('#matchDialog').open)return;
+      if(summary){activeMatchDetailData={...summary,checking:false,reportUnavailable:true};renderMatchDetail(activeMatchDetailData);}
+      else q('#matchDetail').innerHTML='<p class="error">Für diese Begegnung sind gerade keine Daten verfügbar.</p>';
+    }
   }
   const activityUrl = 'https://portal.3k-darts.com/frontend/events/5/mandant/1931';
   let activityLoaded = false;
@@ -2199,6 +2247,7 @@ function initDarts() {
   q('#loadAll').addEventListener('click',()=>{ focusTeam(null); DARTS_TEAMS.filter(t=>layout.selected.includes(t.id)).forEach(load); });
   q('#gridView').addEventListener('click',()=>{ setSection('teams'); loadSeason(); });
   q('#closeMatch').addEventListener('click',()=>q('#matchDialog').close());
+  q('#matchDialog').addEventListener('close',()=>{if(!q('#matchDialog').open){matchLoadSequence++;matchRequestController?.abort();activeMatchDetailData=null;}});
   q('#closeTeamProfile').addEventListener('click',()=>q('#teamDialog').close());
   q('#closePlayerProfile').addEventListener('click',()=>q('#playerDialog').close());
   async function presentTeamRoster(code) {

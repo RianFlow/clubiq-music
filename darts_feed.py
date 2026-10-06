@@ -1156,6 +1156,16 @@ def get_darts_match(match_id: int, now: datetime | None = None) -> dict:
         event_id = int((league or {}).get("event") or 0)
     if not event_id:
         raise ValueError("Für diese Begegnung fehlt die 3K-Wettbewerbskennung.")
+    summary = {
+        "available": True, "stale": bool(season.get("stale")),
+        "updatedAt": season.get("updatedAt"), "match": match,
+        "games": [], "liveGames": [], "performances": [],
+        "reportAvailable": False, "sourceUrl": match.get("url"),
+        "source": "last-known" if season.get("stale") else "3k",
+    }
+    if match["kind"] == "upcoming":
+        # A scheduled game is useful without an as-yet unpublished report.
+        return summary
     try:
         report = _public_get(f"{API}/{event_id}/match/{match_id}/report")
         if not isinstance(report, list):
@@ -1180,16 +1190,20 @@ def get_darts_match(match_id: int, now: datetime | None = None) -> dict:
             "liveGames": live_games,
             "performances": performances,
             "sourceUrl": match["url"],
+            "reportAvailable": bool(report or live_games),
         }
         with _lock:
             _match_cache[match_id] = (now.timestamp(), result)
+        if result["reportAvailable"]:
+            save_snapshot(f"match:{event_id}:{match_id}", result)
         return result
     except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
         with _lock:
             cached = _match_cache.get(match_id)
-        if cached:
-            return {**cached[1], "stale": True}
-        raise DartsFeedUnavailable("Der 3K-Spielbericht ist gerade nicht erreichbar.") from exc
+        previous = cached[1] if cached else load_snapshot(f"match:{event_id}:{match_id}")
+        if previous:
+            return last_known(previous)
+        return {**summary, "reportUnavailable": True}
 
 
 def _player_names(value: str) -> list[str]:
