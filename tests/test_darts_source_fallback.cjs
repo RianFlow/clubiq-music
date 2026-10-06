@@ -68,5 +68,12 @@ global.fetch=async(url,options)=>{
   assert.equal(tableOnly.matchesUnavailable,true);assert.equal(tableOnly.standings.length,2,'standings recover independently of schedule');
   tableFails=true;await assert.rejects(source.loadCenter('kl04',4),/unavailable/);
   const aborted=new AbortController();aborted.abort();await assert.rejects(source.loadCenter('kl04',3,aborted.signal),/cancelled/);
-  console.log('3K fallback: public allowlist, real scores, pending fixtures, single flight and bounded polling OK');
+  const playerRows=[{displayName:'Jannik Kläning',team:{name:'SV Barver Darts A'},scoreTotal:11421,dartsTotal:520,matchesTotal:6,matchesWon:6,legCount:18,legCountOpponent:5,count180:3,checkoutMax:91,email:'private'}, {displayName:'Jannik Kläning & Zweiter Spieler',team:{name:'SV Barver Darts A'}}, {displayName:'Jannik Kläning',team:{name:'Anderer Verein A'},phone:'private'}];
+  global.fetch=async(url,options)=>{assert.equal(options.credentials,'omit');return {ok:true,json:async()=>url.includes('/1445/statistics')?playerRows:[]};};
+  const playerStats=await source.loadPlayerStats([{id:89027,name:'Jannik Kläning',team:'A'}]);
+  assert.equal(Object.keys(playerStats.players).length,1);assert.equal(playerStats.players['89027'].average,65.9);assert.equal(playerStats.players['89027'].gamesPlayed,6);assert.equal(playerStats.players['89027'].count180,3);assert.equal(playerStats.statsSchema,1);assert.equal(playerStats.stale,false);assert.ok(!JSON.stringify(playerStats).includes('private'));
+  global.fetch=async url=>{if(url.includes('/1460/'))throw new Error('offline');return {ok:true,json:async()=>playerRows};};
+  const partialStats=await source.loadPlayerStats([{id:89027,name:'Jannik Kläning',team:'A'}]);assert.equal(partialStats.degraded,true);assert.equal(partialStats.players['89027'].average,65.9);
+  global.fetch=async()=>{throw new Error('offline');};await assert.rejects(source.loadPlayerStats([]),/unavailable/);
+  console.log('3K fallback: public allowlist, verified player stats, real scores and bounded polling OK');
 })().catch(error=>{console.error(error);process.exitCode=1});

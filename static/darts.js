@@ -174,7 +174,7 @@ function dartsPlayerStats(config) {
       legsFor:integer(item.legsFor),legsAgainst:integer(item.legsAgainst),singlesPlayed:integer(item.singlesPlayed),
       count180:integer(item.count180),highFinishes:integer(item.highFinishes),highFinish,
       winRate:Number.isInteger(item.winRate)&&item.winRate>=0&&item.winRate<=100?item.winRate:null,
-      statsUpdatedAt:typeof config.updatedAt==='string'?config.updatedAt:'',statsStale:config.stale===true,
+      statsUpdatedAt:typeof item.statsUpdatedAt==='string'?item.statsUpdatedAt:typeof config.updatedAt==='string'?config.updatedAt:'',statsStale:config.stale===true||item.statsStale===true,
     };
     if (item.statsSource==='3k') {
       parsed.statsSource='3k';
@@ -495,14 +495,14 @@ function initDarts() {
     }).catch(()=>{});
   updateTvTeamControls();
   let playerProfiles={}, playerProfileBase={}, playerStatCache={};
-  let playerDataPromise=null;
+  let playerDataLoader=null,activePlayerProfile=null,activeTeamProfile=null;
   const runWhenIdle=callback=>{
     if ('requestIdleCallback' in window) window.requestIdleCallback(callback,{timeout:2200});
     else window.setTimeout(callback,1200);
   };
   const mergePlayerProfiles=()=>{
     const ids=new Set([...Object.keys(playerProfileBase),...Object.keys(playerStatCache)]);
-    playerProfiles=Object.fromEntries([...ids].map(id=>[id,{...(playerProfileBase[id]||{}),...(playerStatCache[id]||{})}]));
+    playerProfiles=Object.fromEntries([...ids].map(id=>[id,{...(playerProfileBase[id]||{}),...(playerStatCache[id]||{}),playerNumber:playerProfileBase[id]?.playerNumber||playerStatCache[id]?.playerNumber||''}]));
   };
   const syncProfileRosters=()=>{
     for (const [id,profile] of Object.entries(playerProfileBase)) {
@@ -513,19 +513,21 @@ function initDarts() {
       if(index>=0) DARTS_FALLBACK_ROSTERS[profile.team][index]=member; else DARTS_FALLBACK_ROSTERS[profile.team].push(member);
     }
   };
-  function loadPlayerData() {
-    if (playerDataPromise) return playerDataPromise;
-    const profiles=fetch('/api/v1/darts/player-profiles',{headers:{Accept:'application/json'}})
-      .then(response=>response.ok?response.json():Promise.reject(new Error('player profiles unavailable')))
-      .catch(()=>fetch('/static/darts-players.json',{headers:{Accept:'application/json'}}).then(response=>response.ok?response.json():Promise.reject(new Error('player photos unavailable'))))
-      .then(config=>{ playerProfileBase=dartsPlayerProfiles(config); syncProfileRosters(); mergePlayerProfiles(); })
-      .catch(()=>{ playerProfileBase={}; mergePlayerProfiles(); });
-    const stats=fetch('/api/v1/darts/player-stats',{headers:{Accept:'application/json'}})
-      .then(response=>response.ok?response.json():Promise.reject(new Error('player stats unavailable')))
-      .then(config=>{ playerStatCache=dartsPlayerStats(config); mergePlayerProfiles(); })
-      .catch(()=>{ playerStatCache={}; mergePlayerProfiles(); });
-    playerDataPromise=Promise.allSettled([profiles,stats]);
-    return playerDataPromise;
+  function applyPlayerData(state) {
+    playerProfileBase=state.profiles.players;playerStatCache=state.stats.players;
+    syncProfileRosters();mergePlayerProfiles();
+    if(activePlayerProfile&&q('#playerDialog').open)renderPlayerProfile(activePlayerProfile.member,activePlayerProfile.team);
+    if(activeTeamProfile&&q('#teamDialog').open)renderTeamProfile(activeTeamProfile);
+  }
+  function loadPlayerData(force=false) {
+    if(!playerDataLoader) {
+      let storage;try{storage=window.localStorage;}catch(_){}
+      playerDataLoader=window.DartsPlayerData.create({parseProfiles:dartsPlayerProfiles,parseStats:dartsPlayerStats,storage,
+        knownPlayers:()=>['A','B','C','D'].flatMap(code=>dartsTeamRoster(seasonData?.teams?.find(team=>team.code===code)||{code}).map(member=>({id:member.id,name:member.name,team:code}))),
+        directStats:players=>window.DartsSourceFallback.loadPlayerStats(players),onUpdate:applyPlayerData});
+      applyPlayerData(playerDataLoader.state);
+    }
+    return playerDataLoader.load(force);
   }
   let livePushAlertTimer=0;
   function closeLivePushAlert() {
@@ -1285,14 +1287,16 @@ function initDarts() {
     } else { avatar.textContent=playerInitials(member?.name); avatar.classList.add('avatar-fallback'); }
     return avatar;
   }
-  async function openPlayerProfile(member, team) {
+  function openPlayerProfile(member, team) {
     if (!member || !team) return;
+    activePlayerProfile={member,team,returnMatch:profileReturnMatch};profileReturnMatch=null;
     q('#playerProfileHeading').textContent=member.name;
-    const target=q('#playerProfile');
-    const loading=document.createElement('p'); loading.className='panel-loading'; loading.textContent='Spielerprofil wird geladen …';
-    target.replaceChildren(loading);
+    renderPlayerProfile(member,team);
     if (!q('#playerDialog').open) q('#playerDialog').showModal();
-    await loadPlayerData();
+    loadPlayerData();
+  }
+  function renderPlayerProfile(member,team) {
+    const target=q('#playerProfile');
     const profile=playerProfiles[String(member.id || '')] || {};
     const hero=document.createElement('section'); hero.className='player-profile-hero';
     const copy=document.createElement('div'); copy.className='player-profile-identity';
@@ -1348,9 +1352,10 @@ function initDarts() {
       source.textContent=profile.statsSource==='3k'
         ? `Werte aus der offiziellen 3K-Ligastatistik${profile.statsStale?' · letzter gespeicherter Stand':''}.`
         : `Aus den bisherigen Einzelpartien berechnet${profile.statsStale?' · letzter gespeicherter Stand':''}.`;
+      const observed=new Date(profile.statsUpdatedAt);if(Number.isFinite(observed.getTime()))source.textContent+=` Stand: ${observed.toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} Uhr.`;
       performance.append(performanceBody,source);
     } else {
-      const loading=document.createElement('p'); loading.className='player-profile-copy'; loading.textContent='Die Saisonwerte werden gerade geladen.';
+      const loading=document.createElement('p'); loading.className='player-profile-copy'; loading.textContent=playerDataLoader?.state.stats.loading?'Saisonwerte werden geladen …':playerDataLoader?.state.stats.error?'Die Saisonwerte sind gerade nicht erreichbar. Wir versuchen es automatisch erneut.':'Für diesen Spieler liegen noch keine Saisonwerte vor.';
       performance.append(loading);
     }
     const personal=profile.personal || {};
@@ -1384,18 +1389,23 @@ function initDarts() {
     for (const item of recent) results.append(makeProfileMatch(item,team.code));
     if (!recent.length) { const empty=document.createElement('p'); empty.className='panel-loading'; empty.textContent='Noch keine Ergebnisse vorhanden.'; results.append(empty); }
     const back=document.createElement('button'); back.type='button'; back.className='primary'; back.textContent=`Zurück zu Barver ${team.code}`; back.addEventListener('click',()=>{ q('#playerDialog').close(); openTeamProfile(team); });
-    const actions=document.createElement('div'); actions.className='player-profile-actions'; actions.append(back);if(profileReturnMatch){const returnId=profileReturnMatch;profileReturnMatch=null;const returnButton=document.createElement('button');returnButton.type='button';returnButton.textContent='Zurück zum Spielbericht';returnButton.addEventListener('click',()=>{q('#playerDialog').close();openMatch(returnId);});actions.append(returnButton);}
-    grid.append(sport,results); target.replaceChildren(hero,facts,performance,personalSection,grid,actions);
-    if (!q('#playerDialog').open) q('#playerDialog').showModal();
+    const actions=document.createElement('div'); actions.className='player-profile-actions'; actions.append(back);if(activePlayerProfile?.returnMatch){const returnId=activePlayerProfile.returnMatch;const returnButton=document.createElement('button');returnButton.type='button';returnButton.textContent='Zurück zum Spielbericht';returnButton.addEventListener('click',()=>{q('#playerDialog').close();openMatch(returnId);});actions.append(returnButton);}
+    const status=document.createElement('div');status.className='player-data-status';status.setAttribute('role','status');
+    const note=document.createElement('small'),state=playerDataLoader?.state;
+    note.textContent=state?.profiles.error?'Profilangaben: letzter gespeicherter Stand. Wir versuchen es automatisch erneut.':state?.profiles.loading?'Profilangaben werden aktualisiert …':state?.stats.loading?'Saisonwerte werden aktualisiert …':profile.statsStale?'Saisonwerte: letzter gespeicherter Stand. Wir versuchen es automatisch erneut.':'';
+    const retry=document.createElement('button');retry.type='button';retry.textContent='Daten aktualisieren';retry.disabled=Boolean(state?.profiles.loading||state?.stats.loading);retry.addEventListener('click',()=>loadPlayerData(true));status.append(note,retry);
+    grid.append(sport,results); target.replaceChildren(hero,status,facts,performance,personalSection,grid,actions);
   }
-  async function openTeamProfile(team) {
+  function openTeamProfile(team) {
     if (!team) return;
+    activeTeamProfile=team;
     q('#teamProfileHeading').textContent=team.name;
-    const target=q('#teamProfile');
-    const loading=document.createElement('p'); loading.className='panel-loading'; loading.textContent='Mannschaft wird geladen …';
-    target.replaceChildren(loading);
+    renderTeamProfile(team);
     if (!q('#teamDialog').open) q('#teamDialog').showModal();
-    await loadPlayerData();
+    loadPlayerData();
+  }
+  function renderTeamProfile(team) {
+    const target=q('#teamProfile');
     const record=team.record || {}, rosterMembers=dartsTeamRoster(team);
     const hero=document.createElement('section'); hero.className='team-profile-hero';
     const identity=document.createElement('div');
@@ -1454,7 +1464,6 @@ function initDarts() {
     if (venue.boards) { const boards=document.createElement('small'); boards.textContent=`${venue.boards} Boards an der Spielstätte`; venueSection.append(boards); }
     const filter=document.createElement('button'); filter.type='button'; filter.className='primary'; filter.textContent='Nur Spiele dieser Mannschaft anzeigen'; filter.addEventListener('click',()=>{ q('#teamDialog').close(); q('#seasonTeam').value=team.code; renderSeason(); q('#seasonMatches').scrollIntoView({behavior:'smooth',block:'start'}); }); venueSection.append(filter);
     grid.append(schedule,squad,venueSection); target.replaceChildren(hero,...(teamPhoto?[teamPhoto]:[]),stats,grid);
-    if (!q('#teamDialog').open) q('#teamDialog').showModal();
   }
   function renderSeasonTeams() {
     const target=q('#seasonTeams');
@@ -2323,6 +2332,11 @@ function initDarts() {
   q('#matchDialog').addEventListener('close',()=>{if(!q('#matchDialog').open){matchLoadSequence++;matchRequestController?.abort();activeMatchDetailData=null;}});
   q('#closeTeamProfile').addEventListener('click',()=>q('#teamDialog').close());
   q('#closePlayerProfile').addEventListener('click',()=>q('#playerDialog').close());
+  q('#playerDialog').addEventListener('close',()=>{if(!q('#playerDialog').open)activePlayerProfile=null;});
+  q('#teamDialog').addEventListener('close',()=>{if(!q('#teamDialog').open)activeTeamProfile=null;});
+  window.setInterval(()=>{if(!document.hidden)loadPlayerData();},30000);
+  window.addEventListener('online',()=>loadPlayerData(true));
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)loadPlayerData();});
   async function presentTeamRoster(code) {
     try {
       if (!seasonData) await loadSeason();

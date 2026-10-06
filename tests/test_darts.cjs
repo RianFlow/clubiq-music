@@ -195,7 +195,7 @@ assert.match(script,/\/api\/v1\/darts\/push\/subscribe/);
 assert.match(script,/clubiq-darts-push/);
 assert.match(script,/setTimeout\(closeLivePushAlert,15000\)/);
 assert.match(script,/\/api\/v1\/darts\/members/);
-assert.match(script,/\/api\/v1\/darts\/player-profiles/);
+assert.match(fs.readFileSync('static/darts-player-data.js','utf8'),/\/api\/v1\/darts\/player-profiles/);
 assert.doesNotMatch(script,/Besondere Leistung laut 3K-Spielbericht/);
 assert.doesNotMatch(script,/\/api\/v1\/music\/.*command/,'darts view does not control music');
 assert.match(script,/fetch\('\/api\/v1\/darts\/ticker'/);
