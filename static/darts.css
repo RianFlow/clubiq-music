@@ -1372,3 +1372,9 @@ body.tv-live .club-training { display:none; }
 .native-match-summary .appointment-actions { margin-top:16px; }
 .match-page-hero .live-data-status { color:#edf7f1; }
 .match-page-hero .live-data-status[data-state="warn"] { color:#ffe0a3; }
+
+.league-source{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);font-size:.8rem}
+.league-source a{color:inherit;text-underline-offset:3px}
+.league-source .live-data-status{margin:0;color:inherit}
+.league-source .live-data-status[data-state="warn"]{color:#8a3f10}
+[data-theme="dark"] .league-source .live-data-status[data-state="warn"]{color:#ffe0a3}

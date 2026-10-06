@@ -25,7 +25,8 @@ Anfrage, haben eine Gesamtfrist von 15 Sekunden und erfolgen höchstens alle
 
 Die Anzeige unterscheidet „Alternative 3K-Verbindung aktiv“, nicht erreichbare
 Live-Punkte und den letzten bekannten Stand mit seinem Alter. Die Alternative
-aktualisiert Liga-Ergebnisse, Live-Punkte und Spielberichte; Saison, Rangliste,
+aktualisiert Liga-Ergebnisse, Spieltage, die offiziellen Gesamttabellen,
+Live-Punkte und Spielberichte; Saison, Rangliste,
 Turniere und Push-Meldungen benötigen weiterhin ihre jeweilige Serverquelle.
 Bei vollständigem Netzausfall bleiben gespeicherte Daten sichtbar, ohne einen
 aktuellen Spielstand vorzutäuschen.
@@ -42,3 +43,19 @@ die Begegnung in ihrem offiziellen Ligaspieltag und lädt vorhandene Einzelparti
 die bekannten Begegnungsdaten sichtbar. Anfragen haben begrenzte Laufzeiten;
 eine geschlossene oder gewechselte Begegnung wird nicht durch späte Antworten
 überschrieben. Gültige normalisierte Spielberichte werden dauerhaft gespeichert.
+
+Jede Liga lädt unabhängig mit einer Serverfrist von sechs Sekunden. Danach
+prüft die Browser-Alternative den Spieltag und die offizielle Gesamttabelle
+parallel, mit einer Gesamtfrist von zwölf Sekunden. Die Auswahl akzeptiert nur
+Spieltage aus der jeweiligen offiziellen Liga. Tabellenplätze, Punkte, Spiele,
+Siege, Unentschieden, Niederlagen, Sets und Legs werden unverändert aus der
+3K-Tabelle übernommen; fehlende Werte bleiben als Strich sichtbar.
+
+Normalisierte Spieltagsansichten werden auch auf dem Gerät gespeichert. Eine
+gestörte Tabelle entfernt keine bereits verfügbare Tabelle, während ein neuer
+Spieltag weiterhin laden kann. Übernommene ältere Tabellen erhalten ihren
+ursprünglichen Zeitpunkt. Bei vollständigem Ausfall bleibt der datierte letzte
+Stand sichtbar; ohne gespeicherten Stand enden alle Ladehinweise mit einer
+lesbaren Fehlermeldung, einer Möglichkeit zum erneuten Abruf und dem direkten
+Link zu 3K. Tests prüfen auch eine hängende Serveranfrage, den Ausfall nur einer
+Liga, fehlende Teilbereiche und den kompletten Ausfall nach einem Neuladen.

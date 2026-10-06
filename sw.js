@@ -1,9 +1,9 @@
 "use strict";
 
-const CACHE = "clubiq-music-shell-20261006-match-recovery1";
+const CACHE = "clubiq-music-shell-20261006-match-recovery2";
 const SHELL = [
   "/", "/remote", "/party", "/darts", "/impressum", "/datenschutz", "/manifest.webmanifest",
-  "/static/darts.css?v=20261006-match-recovery1", "/static/darts.js?v=20261006-match-recovery1", "/static/darts-source-fallback.js?v=20261006-match-recovery1", "/static/darts-broadcast.js?v=20261002-content1", "/static/darts-broadcast.css?v=20261002-content1", "/static/darts-sponsors.json", "/static/darts-events.json", "/static/darts-players.json", "/pics/sv-barver-darts-tight-512.webp", "/pics/events/barver-dart-open-2026.webp", "/pics/teams/barver-b-team-cutout.webp?v=20260927-2",
+  "/static/darts.css?v=20261006-match-recovery2", "/static/darts.js?v=20261006-match-recovery2", "/static/darts-source-fallback.js?v=20261006-match-recovery2", "/static/darts-broadcast.js?v=20261002-content1", "/static/darts-broadcast.css?v=20261002-content1", "/static/darts-sponsors.json", "/static/darts-events.json", "/static/darts-players.json", "/pics/sv-barver-darts-tight-512.webp", "/pics/events/barver-dart-open-2026.webp", "/pics/teams/barver-b-team-cutout.webp?v=20260927-2",
   "/static/app.css?v=20260915-1", "/static/app.js?v=20260919-1",
   "/static/song-info.js?v=20260917-1", "/static/comfort.js?v=20260919-1", "/static/comfort.css?v=20260917-1",
   "/static/reliability.js?v=20260919-1",

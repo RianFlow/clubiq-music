@@ -1910,6 +1910,20 @@ function initDarts() {
     q('#trainingNote').textContent = 'Das Training wird direkt aus 3K Darts angezeigt. Falls die Ansicht leer bleibt, wähle „Bei 3K öffnen“.';
   }
   const centerControllers = new Map();
+  const savedCenters = new Map();
+  const visibleCenters = new Map();
+  try {
+    const saved=JSON.parse(localStorage.getItem('clubiq_darts_last_centers')||'[]');
+    for(const data of Array.isArray(saved)?saved.slice(-12):[])if(['kl04','kk11'].includes(data?.league?.key)&&Number.isSafeInteger(data.selectedRound?.id)&&Array.isArray(data.matches)&&Array.isArray(data.standings))savedCenters.set(`${data.league.key}:${data.selectedRound.id}`,data);
+  } catch(_) { /* Stored public data is optional. */ }
+  function storedCenter(key,roundId) {
+    const candidates=[...savedCenters.values()].filter(data=>data.league.key===key&&(roundId===null||data.selectedRound.id===Number(roundId)));
+    return candidates.sort((a,b)=>Date.parse(b.updatedAt)-Date.parse(a.updatedAt))[0];
+  }
+  function centerStatus(block,text,warn=false) {
+    const status=block.querySelector('[data-role="source-status"]');
+    status.textContent=text;status.dataset.state=warn?'warn':'ok';
+  }
   function formatDate(value, options={weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'}) {
     try { return new Intl.DateTimeFormat('de-DE',options).format(new Date(value)); } catch (_) { return ''; }
   }
@@ -1918,12 +1932,16 @@ function initDarts() {
     if (!block) return;
     const inside=selector=>block.querySelector(selector);
     const round = data.selectedRound || {};
+    visibleCenters.set(data.league.key,data);
+    const partial=data.degraded||data.matchesUnavailable||data.standingsUnavailable||data.eventsUnavailable;
+    const checked=formatDate(data.updatedAt,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    centerStatus(block,data.stale?`Letzter verfügbarer Stand · ${checked}`:partial?'Ein Teil der Daten ist gerade nicht erreichbar.':data.source==='browser-3k'?'Direkt von 3K geladen':'3K-Daten aktuell',Boolean(data.stale||partial));
     inside('[data-role="round-heading"]').textContent = `${round.name || 'Spieltag'} · ${data.league.short}`;
     inside('[data-role="round-date"]').textContent = formatDate(round.dateFrom);
     const roundStatus=inside('[data-role="round-status"]'), status=data.roundStatus || {};
     if (roundStatus) {
       roundStatus.dataset.state=status.complete?'complete':'open';
-      roundStatus.textContent=status.complete
+      roundStatus.textContent=data.matchesUnavailable?'Spielstatus nicht verfügbar':status.complete
         ? 'Spieltag abgeschlossen'
         : `${status.openMatches || 0} Spiel${status.openMatches===1?'':'e'} offen${status.movedMatches?` · ${status.movedMatches} verlegt`:''}`;
     }
@@ -1942,9 +1960,9 @@ function initDarts() {
       const state=document.createElement('small'); state.textContent=item.kind==='final'?'Endstand':item.kind==='live'?'Live':item.kind==='pending'?'Vorläufig beendet · Bestätigung ausstehend':tickerTime(item);
       link.append(home,score,away,state); games.append(link);
     }
-    inside('[data-role="matches"]').replaceChildren(games.childNodes.length ? games : Object.assign(document.createElement('p'),{className:'panel-loading',textContent:'Keine Begegnungen an diesem Spieltag.'}));
+    inside('[data-role="matches"]').replaceChildren(games.childNodes.length ? games : Object.assign(document.createElement('p'),{className:'panel-loading',textContent:data.matchesUnavailable?'Die Begegnungen sind gerade nicht erreichbar.':'Keine Begegnungen an diesem Spieltag.'}));
     const table=document.createElement('table');table.className='league-standings-table';
-    const caption=document.createElement('caption');caption.textContent='Offizielle 3K-Tabelle · aktueller Gesamtstand';table.append(caption);
+    const caption=document.createElement('caption');caption.textContent=data.stale||data.standingsStale?`Offizielle 3K-Tabelle · letzter verfügbarer Stand (${formatDate(data.standingsUpdatedAt||data.updatedAt,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})})`:'Offizielle 3K-Tabelle · aktueller Gesamtstand';table.append(caption);
     const columns=[['Pl.','rank'],['Mannschaft','name'],['Punkte','points'],['Sp.','played'],['S','wins'],['U','draws'],['N','losses'],['Sets','sets'],['Legs','legs']];
     const head=document.createElement('thead'),header=document.createElement('tr');
     for(const [label] of columns){const th=document.createElement('th');th.scope='col';th.textContent=label;header.append(th);}head.append(header);table.append(head);
@@ -1958,7 +1976,7 @@ function initDarts() {
     }
     table.append(body);
     const root=inside('[data-role="standings"]');
-    root.replaceChildren(body.childNodes.length?table:Object.assign(document.createElement('p'),{className:'panel-loading',textContent:'Noch keine Tabelle verfügbar.'}));
+    root.replaceChildren(body.childNodes.length?table:Object.assign(document.createElement('p'),{className:'panel-loading',textContent:data.standingsUnavailable?'Die Tabelle ist gerade nicht erreichbar.':'Noch keine Tabelle verfügbar.'}));
     const eventList=document.createDocumentFragment();
     for (const item of data.events || []) {
       const event=document.createElement('div'); event.className=`darts-event ${item.type}`;
@@ -1967,20 +1985,69 @@ function initDarts() {
       const copy=document.createElement('div'); const title=document.createElement('strong'); title.textContent=item.title; const text=document.createElement('span'); text.textContent=item.text;
       copy.append(title,text); event.append(icon,copy); eventList.append(event);
     }
+    if(data.eventsUnavailable)eventList.append(Object.assign(document.createElement('p'),{className:'panel-loading',textContent:'Weitere Highlights sind gerade nicht erreichbar.'}));
     inside('[data-role="events"]').replaceChildren(eventList.childNodes.length ? eventList : Object.assign(document.createElement('p'),{className:'panel-loading',textContent:'Für diesen Spieltag sind noch keine Highlights erfasst.'}));
   }
   async function loadLeague(leagueKey,roundId=null) {
+    if(!['kl04','kk11'].includes(leagueKey))return;
     centerControllers.get(leagueKey)?.abort();
     const controller=new AbortController(); centerControllers.set(leagueKey,controller);
     const block=q(`.league-block[data-league="${leagueKey}"]`); if (!block) return;
-    const round=/^\d+$/.test(String(roundId || '')) ? `&round_id=${encodeURIComponent(roundId)}` : '';
-    block.querySelector('[data-role="matches"]').innerHTML='<p class="panel-loading">Spiele werden geladen …</p>';
+    const wanted=/^\d+$/.test(String(roundId || ''))?Number(roundId):null;
+    const round=wanted!==null?`&round_id=${wanted}`:'';
+    const cached=storedCenter(leagueKey,wanted);
+    if(cached)renderLeague({...cached,stale:true});
+    centerStatus(block,'Daten werden aktualisiert …');
+    const reload=block.querySelector('[data-role="reload"]');reload.disabled=true;
+    const current=()=>centerControllers.get(leagueKey)===controller&&!controller.signal.aborted;
+    let payload=null;
     try {
-      const response=await fetch(`/api/v1/darts/center?league=${encodeURIComponent(leagueKey)}${round}`,{headers:{Accept:'application/json'},signal:controller.signal});
-      if (!response.ok) throw new Error('league unavailable');
-      renderLeague(await response.json());
+      const primary=new AbortController(),abort=()=>primary.abort(),timeout=setTimeout(abort,6000);
+      controller.signal.addEventListener('abort',abort,{once:true});
+      try {
+        const response=await fetch(`/api/v1/darts/center?league=${encodeURIComponent(leagueKey)}${round}`,{headers:{Accept:'application/json'},signal:primary.signal});
+        if(!response.ok)throw new Error('league unavailable');
+        const data=await response.json();
+        if(data.league?.key!==leagueKey||!Number.isSafeInteger(data.selectedRound?.id)||(wanted!==null&&data.selectedRound.id!==wanted)||!Array.isArray(data.standings)||!Array.isArray(data.matches))throw new Error('Invalid league response');
+        if(data.standings.some(row=>!Object.hasOwn(row,'pointsFor')||!Object.hasOwn(row,'played'))){data.standingsUnavailable=true;data.degraded=true;}
+        payload=data;
+        if(current())renderLeague(data);
+      } catch(_) { /* Try the independent public connection below. */ }
+      finally {clearTimeout(timeout);controller.signal.removeEventListener('abort',abort);}
+      if(!current())return;
+      if((!payload||payload.stale||payload.degraded||Date.now()-Date.parse(payload.updatedAt)>120000)&&window.DartsSourceFallback?.loadCenter) {
+        centerStatus(block,payload?'Letzter verfügbarer Stand · Verbindung wird geprüft …':'Alternative Verbindung wird geprüft …',Boolean(payload));
+        try {
+          const direct=await window.DartsSourceFallback.loadCenter(leagueKey,wanted,controller.signal);
+          if(!current())return;
+          const previous=payload||storedCenter(leagueKey,direct.selectedRound.id);
+          const tablePrevious=previous||visibleCenters.get(leagueKey);
+          if(direct.standingsUnavailable&&tablePrevious?.standings?.length){direct.standings=tablePrevious.standings;direct.standingsStale=true;direct.standingsUpdatedAt=tablePrevious.standingsUpdatedAt||tablePrevious.updatedAt;}
+          if(direct.matchesUnavailable&&previous?.selectedRound.id===direct.selectedRound.id&&previous.matches?.length){direct.matches=previous.matches;direct.matchesStale=true;direct.matchesUpdatedAt=previous.matchesUpdatedAt||previous.updatedAt;}
+          payload=direct;
+        } catch(_) { /* Keep the dated server or browser snapshot. */ }
+      }
+      if(!current())return;
+      if(!payload&&cached)payload={...cached,stale:true};
+      if(!payload)throw new Error('League sources unavailable');
+      renderLeague(payload);
+      if(!payload.stale) {
+        savedCenters.set(`${leagueKey}:${payload.selectedRound.id}`,payload);
+        if(savedCenters.size>12)savedCenters.delete(savedCenters.keys().next().value);
+        try{localStorage.setItem('clubiq_darts_last_centers',JSON.stringify([...savedCenters.values()]));}catch(_){}
+      }
     } catch (error) {
-      if (error.name!=='AbortError') message('Der 3K-Spieltag konnte gerade nicht geladen werden. Bitte noch einmal aktualisieren.');
+      if(!current())return;
+      const previous=visibleCenters.get(leagueKey);
+      if(previous){renderLeague({...previous,stale:true});centerStatus(block,'Der gewählte Spieltag ist gerade nicht erreichbar. Der letzte verfügbare Stand bleibt sichtbar.',true);}
+      else {
+        for(const role of ['matches','standings','events'])block.querySelector(`[data-role="${role}"]`).replaceChildren(Object.assign(document.createElement('p'),{className:'panel-loading',textContent:'Die Daten sind gerade nicht erreichbar. Bitte später aktualisieren oder bei 3K öffnen.'}));
+        block.querySelector('[data-role="round"]').replaceChildren(Object.assign(document.createElement('option'),{textContent:'Spieltag nicht verfügbar',value:''}));
+        block.querySelector('[data-role="round-status"]').textContent='Nicht erreichbar';
+        centerStatus(block,'Beide Verbindungen sind gerade nicht erreichbar.',true);
+      }
+    } finally {
+      if(centerControllers.get(leagueKey)===controller)reload.disabled=false;
     }
   }
   let rankingData=null, rankingLoading=false,rankingPage=0,rankingOurs=false;
@@ -2085,12 +2152,12 @@ function initDarts() {
   }
   syncTraining();
   q('#todayView').addEventListener('click',()=>setSection('today'));
-  q('#leagueView').addEventListener('click',async()=>{
+  q('#leagueView').addEventListener('click',()=>{
     setSection('league');
-    await loadSeason();
+    loadSeason();
     for (const block of q('#leagueOverview').querySelectorAll('.league-block')) {
       const league=seasonData?.leagues?.find(item=>item.league?.key===block.dataset.league);
-      const selected=league?.selectedRound?.id || block.querySelector('[data-role="round"]').value || null;
+      const selected=visibleCenters.get(block.dataset.league)?.selectedRound.id || league?.selectedRound?.id || block.querySelector('[data-role="round"]').value || null;
       loadLeague(block.dataset.league,selected);
     }
   });

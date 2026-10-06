@@ -41,5 +41,28 @@ global.fetch=async(url,options)=>{
   assert.ok(!JSON.stringify(report).includes('private'));
   global.fetch=async()=>({ok:true,json:async()=>({matches:[{...past,id:11,participantHome:{id:888},participantGuest:{id:999}}]})});
   await assert.rejects(source.loadMatch({id:11,eventId:1445,roundId:3}),/does not belong/);
+  const entries=[{participantId:174110,participantName:'Barver A',participantRankingPos:3,matchCount:3,win:2,tie:1,lost:0,points1:5,points2:1,sets1:24,sets2:12,legs1:70,legs2:41,email:'private'}, {participantId:888,participantName:'Gast',participantRankingPos:1,points1:6,points2:0,phone:'private'}];
+  const table={tableEntries:[{tableEntries:entries}]};
+  assert.deepEqual(source.officialStandings(table,league).map(row=>row.rank),[3,1],'preserve published ranks and order');
+  assert.equal(source.officialStandings(table,league)[1].played,null,'missing values are not invented');
+  let tableFails=false,roundFails=false;const centerCalls=[];
+  global.fetch=async(url,options)=>{
+    centerCalls.push(url);assert.equal(options.credentials,'omit');
+    if(url.endsWith('/table'))return {ok:!tableFails,json:async()=>table};
+    if(url.includes('/round/'))return {ok:!roundFails,json:async()=>({matches:[future,{...future,id:12,participantHome:{id:777,displayName:'Fremder Verein'}}]})};
+    return {ok:true,json:async()=>({rounds:[{id:3,name:'Spieltag 3',dateFrom:new Date(now-1000).toISOString(),dateTo:new Date(now+86400000).toISOString()},{id:4,name:'Spieltag 4'}]})};
+  };
+  const center=await source.loadCenter('kl04',3);
+  assert.equal(center.source,'browser-3k');assert.equal(center.matches.length,2,'include all league fixtures');assert.equal(center.barverMatches.length,1);
+  assert.equal(center.standings.length,2);assert.equal(center.standings[0].pointsFor,5);assert.ok(!JSON.stringify(center).includes('private'));
+  await source.loadCenter('kl04',3);assert.equal(centerCalls.length,3,'bounded league polling');
+  await assert.rejects(source.loadCenter('foreign',3),/Unsupported/);
+  await assert.rejects(source.loadCenter('kl04',999),/does not belong/);
+  tableFails=true;const partial=await source.loadCenter('kl04',4);
+  assert.equal(partial.matches.length,2);assert.equal(partial.standingsUnavailable,true);assert.equal(partial.degraded,true);
+  tableFails=false;roundFails=true;const tableOnly=await source.loadCenter('kl04',4);
+  assert.equal(tableOnly.matchesUnavailable,true);assert.equal(tableOnly.standings.length,2,'standings recover independently of schedule');
+  tableFails=true;await assert.rejects(source.loadCenter('kl04',4),/unavailable/);
+  const aborted=new AbortController();aborted.abort();await assert.rejects(source.loadCenter('kl04',3,aborted.signal),/cancelled/);
   console.log('3K fallback: public allowlist, real scores, pending fixtures, single flight and bounded polling OK');
 })().catch(error=>{console.error(error);process.exitCode=1});

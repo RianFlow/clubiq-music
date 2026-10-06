@@ -15,9 +15,9 @@
     const after=dated.filter(r=>date(r.dateFrom)>=now).sort((a,b)=>date(a.dateFrom)-date(b.dateFrom))[0];
     return [...new Map([before,after].filter(Boolean).map(r=>[r.id,r])).values()];
   }
-  function normalize(raw, league, roundId, now) {
+  function normalize(raw, league, roundId, now, allTeams=false) {
     const homeId=raw.participantHome?.id,awayId=raw.participantGuest?.id;
-    if (!Number.isSafeInteger(raw.id)||!homeId||!awayId||raw.byeHome||raw.byeAway||(!league.teams[homeId]&&!league.teams[awayId])) return null;
+    if (!Number.isSafeInteger(raw.id)||!homeId||!awayId||raw.byeHome||raw.byeAway||(!allTeams&&!league.teams[homeId]&&!league.teams[awayId])) return null;
     const home=String(raw.participantHome?.displayName||'Unbekannt').slice(0,160),away=String(raw.participantGuest?.displayName||'Unbekannt').slice(0,160);
     const scored=Number.isInteger(raw.setsHome)&&Number.isInteger(raw.setsAway);
     const plannedAt=iso(raw.datePlanned),updatedAt=iso(raw.endDate||raw.lastUpdate)||plannedAt;
@@ -139,7 +139,60 @@
     })();
     return pending;
   }
-  const exported={load,loadMatch,normalize,relevantRounds,liveEvents,publicGame,publicPerformances};
+  function officialStandings(payload, league) {
+    if(!Array.isArray(payload?.tableEntries))throw new Error('Invalid official table');
+    const fields={played:'matchCount',wins:'win',draws:'tie',losses:'lost',pointsFor:'points1',pointsAgainst:'points2',setsFor:'sets1',setsAgainst:'sets2',legsFor:'legs1',legsAgainst:'legs2'};
+    return payload.tableEntries.flatMap(group=>(Array.isArray(group?.tableEntries)?group.tableEntries:[]).filter(entry=>Number.isSafeInteger(entry.participantId)).map(entry=>{
+      const row={id:entry.participantId,name:String(entry.participantName||'Mannschaft').slice(0,160),rank:Number.isFinite(entry.participantRankingPos)?entry.participantRankingPos:null,barver:Boolean(league.teams[entry.participantId])};
+      for(const [field,source] of Object.entries(fields))row[field]=Number.isFinite(entry[source])?entry[source]:null;
+      return row;
+    }));
+  }
+  const centerCache=new Map();
+  async function loadCenter(leagueKey, requestedRound, signal) {
+    const league=leagues.find(item=>item.key===leagueKey),wanted=requestedRound==null?null:Number(requestedRound);
+    if(!league||(wanted!==null&&(!Number.isSafeInteger(wanted)||wanted<=0)))throw new Error('Unsupported league source');
+    if(signal?.aborted)throw new Error('League request cancelled');
+    const key=`${leagueKey}:${wanted||'latest'}`,cached=centerCache.get(key);
+    if(cached&&Date.now()-Date.parse(cached.updatedAt)<30000)return cached;
+    const controller=new AbortController(),abort=()=>controller.abort(),timeout=setTimeout(abort,12000),now=Date.now();
+    signal?.addEventListener('abort',abort,{once:true});
+    const phaseUrl=`${api}/${league.event}/phase/${league.phase}`;
+    try {
+      const phase=await read(phaseUrl,controller.signal);
+      if(!Array.isArray(phase.rounds))throw new Error('Invalid league rounds');
+      const rounds=phase.rounds.filter(round=>Number.isSafeInteger(round.id)&&round.id>0).map(round=>({id:round.id,name:String(round.name||'Spieltag').slice(0,100),dateFrom:iso(round.dateFrom),dateTo:iso(round.dateTo)}));
+      const ordered=[...rounds].sort((a,b)=>(date(a.dateFrom)||0)-(date(b.dateFrom)||0));
+      const chosen=wanted!==null?rounds.find(round=>round.id===wanted):ordered.find(round=>date(round.dateFrom)<=now&&date(round.dateTo)>=now)||ordered.find(round=>date(round.dateFrom)>=now)||ordered.at(-1);
+      if(!chosen)throw new Error('Round does not belong to league');
+      // Schedule and official season standings can recover independently.
+      const parts=await Promise.allSettled([
+        read(`${phaseUrl}/round/${chosen.id}`,controller.signal),
+        read(`${api}/${league.event}/phase/0/round/0/table`,controller.signal),
+      ]);
+      const matches=parts[0].status==='fulfilled'&&Array.isArray(parts[0].value?.matches)?parts[0].value.matches.map(raw=>normalize(raw,league,chosen.id,now,true)).filter(Boolean):null;
+      let standings=null;
+      if(parts[1].status==='fulfilled') {try{standings=officialStandings(parts[1].value,league);}catch(_){} }
+      if(!matches&&!standings)throw new Error('League and table unavailable');
+      if(signal?.aborted)throw new Error('League request cancelled');
+      const result={available:true,source:'browser-3k',stale:false,updatedAt:new Date().toISOString(),league:{key:league.key,name:league.name,short:league.short,event:league.event,phase:league.phase},rounds,selectedRound:chosen,matches:matches||[],standings:standings||[],matchesUnavailable:matches===null,standingsUnavailable:standings===null,events:[],eventsUnavailable:false,barverMatches:(matches||[]).filter(match=>match.barverTeams.length),sourceUrl:`https://portal.3k-darts.com/frontend/events/10/event/${league.event}/phase/${league.phase}/group/${chosen.id}`};
+      const open=(matches||[]).filter(match=>match.kind!=='final');
+      const from=chosen.dateFrom?.slice(0,10),to=chosen.dateTo?.slice(0,10);
+      result.roundStatus={complete:Boolean(matches?.length)&&!open.length,openMatches:open.length,movedMatches:open.filter(match=>match.plannedAt&&from&&to&&(match.plannedAt.slice(0,10)<from||match.plannedAt.slice(0,10)>to)).length};
+      const highlights=await Promise.allSettled(result.barverMatches.filter(match=>['live','final'].includes(match.kind)).map(async match=>{
+        const payload=await read(`${api}/${league.event}/performance/match/${match.id}?matchReport=1`,controller.signal);
+        if(!Array.isArray(payload))throw new Error('Highlights unavailable');
+        return publicPerformances(payload,match.id).map(event=>({...event,title:event.type==='180'?`180! ${event.player}`:`High Finish: ${event.player}`,text:event.type==='180'?`${event.team} · ${event.count} × 180`:`${event.team} · ${event.value} Punkte`}));
+      }));
+      result.events=[...result.barverMatches.filter(match=>match.kind==='final').map(match=>({type:'match',title:'Mannschaftsspiel beendet',text:match.text,matchId:match.id})),...highlights.filter(part=>part.status==='fulfilled').flatMap(part=>part.value)].slice(0,12);
+      result.eventsUnavailable=matches===null||highlights.some(part=>part.status==='rejected');
+      result.degraded=result.matchesUnavailable||result.standingsUnavailable||result.eventsUnavailable;
+      if(signal?.aborted)throw new Error('League request cancelled');
+      if(!result.degraded){centerCache.set(key,result);if(centerCache.size>16)centerCache.delete(centerCache.keys().next().value);}
+      return result;
+    } finally {clearTimeout(timeout);signal?.removeEventListener('abort',abort);}
+  }
+  const exported={load,loadMatch,loadCenter,officialStandings,normalize,relevantRounds,liveEvents,publicGame,publicPerformances};
   if(typeof module!=='undefined'&&module.exports)module.exports=exported;
   else window.DartsSourceFallback=exported;
 })();
