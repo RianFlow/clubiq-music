@@ -103,6 +103,8 @@ def match_model(raw):
 def _round(job):
     base, phase, round_id = job
     payload = _get(f"{base}/phase/{phase}/round/{round_id}")
+    if not isinstance(payload.get("matches"), list):
+        raise ValueError("Incomplete match schedule")
     return {"matches": [model for raw in payload.get("matches", []) if isinstance(raw, dict) and (model := match_model(raw))],
             "groups": group_models(payload, phase, round_id)}
 
@@ -123,9 +125,34 @@ def _live_snapshot(event_id, database=5):
     return result
 
 
-def _load(source=SOURCE):
+def performance_models(payload):
+    if not isinstance(payload, dict) or not isinstance(payload.get("performanceCatalog"), list):
+        raise ValueError("Incomplete performances")
+    rows = []
+    for catalog in payload.get("performanceCatalog") or []:
+        kind = catalog.get("performanceTypeCd")
+        if kind not in {"HS", "HF", "SG", "SGD"}:
+            continue
+        for item in catalog.get("playerPerformances") or []:
+            value = _number(item.get("value"))
+            name = _text((item.get("participant") or {}).get("displayName"))
+            if name and value is not None and (kind != "HS" or value == 180):
+                rows.append({"type": kind, "name": name, "value": value, "count": _number(item.get("count"))})
+    return rows
+
+
+def placement_models(payload):
+    if not isinstance(payload, list):
+        raise ValueError("Incomplete placements")
+    return [{"rank": _text(item.get("place")), "name": _text((item.get("participant") or {}).get("displayName"))}
+            for item in payload if isinstance(item, dict) and (item.get("participant") or {}).get("displayName")]
+
+
+def _load(source=SOURCE, extras=False):
     detail, event, base, canonical = _detail(source)
     participants = _get(f"{base}/participant")
+    if not isinstance(participants, list):
+        raise ValueError("Incomplete participants")
     # Deliberately exclude payment, registration and other personal metadata.
     players = [{"id": _number(item.get("id")), "name": _text(item.get("displayName")), "waiting": item.get("waitingList") is True}
                for item in participants if isinstance(item, dict)]
@@ -137,14 +164,18 @@ def _load(source=SOURCE):
         phase_id = _number(phase.get("id"))
         if phase_id:
             data = _get(f"{base}/phase/{phase_id}")
+            if not isinstance(data.get("rounds"), list):
+                raise ValueError("Incomplete phase")
             jobs.extend((base, phase_id, round_id) for row in data.get("rounds", []) if isinstance(row, dict) and (round_id := _number(row.get("id"))))
+    if len(jobs) > 128:
+        raise ValueError("Too many tournament rounds")
     rows = {}
     groups = []
     with ThreadPoolExecutor(max_workers=4) as pool:
         for result in pool.map(_round, jobs):
             rows.update({match["id"]: match for match in result["matches"]})
             groups.extend(result["groups"])
-    live_by_match = _live_snapshot(event["id"], event["database"])
+    live_by_match = {} if extras and event["status"] == "FINISH" else _live_snapshot(event["id"], event["database"])
     for match_id, live in live_by_match.items():
         match = rows.get(match_id)
         if not match:
@@ -154,10 +185,19 @@ def _load(source=SOURCE):
         if live.get("board"):
             match["board"] = live["board"]
     live_matches = [match for match in rows.values() if match["kind"] == "live"]
-    return {"event": event, "groups": groups,
+    result = {"event": event, "groups": groups,
             "participants": players, "matches": list(rows.values()), "source": canonical,
             "updatedAt": datetime.now(timezone.utc).isoformat(), "stale": False,
             "scheduleReady": bool(jobs), "livePointsAvailable": any(match["live"] for match in live_matches)}
+    if extras:
+        for suffix, parser, key in (("performance", performance_models, "performances"), ("placement", placement_models, "placements")):
+            try:
+                result[key] = parser(_get(f"{base}/{suffix}"))
+            except (requests.RequestException, ValueError, KeyError, TypeError, AttributeError):
+                result[key] = []
+                result[key + "Unavailable"] = True
+                result["degraded"] = True
+    return result
 
 
 def get_tournament(source=SOURCE):

@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 from db_config import connection_kwargs
 from darts_ranking import get_darts_ranking
 from darts_tv import get_darts_tv
+from darts_training import get_trainings, get_training
 from darts_feed import DartsFeedUnavailable, get_darts_center, get_darts_feed, get_darts_match, get_darts_player_stats, get_darts_season
 from darts_live import darts_live_hub
 from darts_tournament import get_tournament, get_series_tournament, preview_tournament, SOURCE as DEFAULT_TOURNAMENT_SOURCE
@@ -561,6 +562,15 @@ def warm_darts_player_stats() -> None:
         print(f"[DARTS STATS] {type(exc).__name__}: Spielerstatistiken werden später erneut vorgeladen.")
 
 
+def warm_darts_trainings() -> None:
+    catalog = get_trainings()
+    if catalog.get("selectedId"):
+        try:
+            get_training(catalog["selectedId"])
+        except (RuntimeError, ValueError):
+            print("[DARTS TRAINING] Trainingsdaten werden später erneut vorgeladen.")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     scheduler = BackgroundScheduler()
@@ -573,6 +583,7 @@ async def lifespan(_: FastAPI):
     scheduler.add_job(deliver_darts_live_events, "interval", seconds=2, max_instances=1, coalesce=True)
     scheduler.add_job(warm_darts_season, "interval", minutes=9, max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(seconds=12))
     scheduler.add_job(warm_darts_player_stats, "interval", minutes=55, max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(seconds=35))
+    scheduler.add_job(warm_darts_trainings, "interval", minutes=5, max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(seconds=20))
     scheduler.start()
     yield
     darts_live_hub.stop()
@@ -595,9 +606,9 @@ async def security_headers(request: Request, call_next):
     response = await call_next(request)
     frame_sources = "https://www.youtube-nocookie.com"
     connect_sources = "'self'"
-    if request.url.path == "/darts" or is_darts_host(request):
+    if request.url.path in {"/darts", "/training", "/turnier"} or is_darts_host(request):
         frame_sources = "https://portal.3k-darts.com https://live.3k-darts.com"
-        connect_sources += " https://backend-ddv.3k-darts.com https://live.3k-darts.com"
+        connect_sources += " https://backend-ddv.3k-darts.com https://backend4.3k-darts.com https://live.3k-darts.com"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
         f"script-src 'self'; connect-src {connect_sources}; frame-src {frame_sources}; "
@@ -861,6 +872,28 @@ def darts_admin_display():
 @app.get("/turnier")
 def tournament_display():
     return FileResponse("turnier.html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/training")
+def training_display():
+    return FileResponse("turnier.html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/api/v1/darts/trainings")
+def trainings_feed(response: Response, refresh: bool = False):
+    response.headers["Cache-Control"] = "no-store"
+    return get_trainings(force=refresh)
+
+
+@app.get("/api/v1/darts/training")
+def training_feed(response: Response, event_id: int | None = Query(default=None, ge=1, le=10000000)):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return get_training(event_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/api/v1/darts/tournament")

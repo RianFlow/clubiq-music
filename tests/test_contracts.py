@@ -218,10 +218,11 @@ class SecurityContractTests(unittest.TestCase):
     def test_darts_allows_only_the_required_public_fallback_hosts(self):
         async def call_next(_request):
             return Response("ok")
-        request = Request({"type": "http", "method": "GET", "path": "/darts", "headers": []})
-        response = asyncio.run(main.security_headers(request, call_next))
-        self.assertIn("connect-src 'self' https://backend-ddv.3k-darts.com https://live.3k-darts.com;", response.headers["content-security-policy"])
-        self.assertNotIn("connect-src *", response.headers["content-security-policy"])
+        for path in ("/darts", "/training", "/turnier"):
+            request = Request({"type": "http", "method": "GET", "path": path, "headers": []})
+            response = asyncio.run(main.security_headers(request, call_next))
+            self.assertIn("connect-src 'self' https://backend-ddv.3k-darts.com https://backend4.3k-darts.com https://live.3k-darts.com;", response.headers["content-security-policy"])
+            self.assertNotIn("connect-src *", response.headers["content-security-policy"])
 
 
 class OfflineFrontendContractTests(unittest.TestCase):

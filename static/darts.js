@@ -1896,17 +1896,6 @@ function initDarts() {
     }
     for (const button of q('#teamChoices').querySelectorAll('button')) button.setAttribute('aria-pressed',String(layout.selected.includes(button.dataset.team)));
   }
-  const trainingKey = 'clubiq_darts_training';
-  const exampleTraining = 'https://portal.3k-darts.com/frontend/events/5/event/32260/participants';
-  let training = dartsTraining(exampleTraining);
-  try { const saved = localStorage.getItem(trainingKey); if (saved) training = dartsTraining(saved); } catch (_) { /* Keep the verified example; no external request. */ }
-  function syncTraining() {
-    q('#trainingUrl').value = training.source;
-    q('#trainingLabel').textContent = training.event === '32260' ? 'Training 22.09.2026' : `Training · 3K-Veranstaltung ${training.event}`;
-    q('#trainingMode').querySelector('[value="games"]').disabled = !training.games;
-    if (!training[q('#trainingMode').value]) q('#trainingMode').value = 'participants';
-    q('#trainingExternal').href = training[q('#trainingMode').value];
-  }
   function openJoin(){setSection('join');renderJoin();loadSeason().then(renderJoin);}
   q('#joinView').addEventListener('click',openJoin);q('#joinTeaserButton').addEventListener('click',openJoin);
   function focusSection(){const ids={today:'homeTeamHeading',teams:'seasonHeading',league:'leagueHeading',ranking:'rankingHeading',tv:'tvScheduleHeading',join:'joinHeading',members:'membersHeading',training:'trainingHeading',cup:'cupHeading'};const heading=q(`#${ids[currentSection]||'homeTeamHeading'}`);if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});heading.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth'});}}
@@ -1914,16 +1903,6 @@ function initDarts() {
   for(const button of document.querySelectorAll('[data-mobile-section]'))button.addEventListener('click',()=>{const section=button.dataset.mobileSection;if(section==='more')q('#mobileMenuDialog').showModal();else{q(`#${mobileTargets[section]}`).click();focusSection();}});
   q('#closeMobileMenu').addEventListener('click',()=>q('#mobileMenuDialog').close());
   for(const button of document.querySelectorAll('[data-menu-target]'))button.addEventListener('click',()=>{q('#mobileMenuDialog').close();q(`#${button.dataset.menuTarget}`).click();if(!['personalSettingsToggle','fullscreen'].includes(button.dataset.menuTarget))focusSection();});
-  function loadTraining() {
-      syncTraining();
-    const iframe = document.createElement('iframe');
-    iframe.title = `Vereinstraining – ${q('#trainingMode').selectedOptions[0].textContent}`;
-    iframe.referrerPolicy = 'no-referrer';
-    iframe.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox');
-    iframe.src = training[q('#trainingMode').value];
-    q('#trainingFrame').replaceChildren(iframe);
-    q('#trainingNote').textContent = 'Das Training wird direkt aus 3K Darts angezeigt. Falls die Ansicht leer bleibt, wähle „Bei 3K öffnen“.';
-  }
   const centerControllers = new Map();
   const savedCenters = new Map();
   const visibleCenters = new Map();
@@ -2132,6 +2111,7 @@ function initDarts() {
   const requestedSection=new URLSearchParams(location.search).get('view');
   let currentSection='today',sectionNavigationReady=false;
   function setSection(section) {
+    if(section==='training'){location.assign('/training');return;}
     currentSection=section;if(sectionNavigationReady){const url=new URL(location.href);if(section==='today')url.searchParams.delete('view');else url.searchParams.set('view',section);history.replaceState(null,'',url);}window.scrollTo({top:0,behavior:'instant'});
     const teams = section === 'teams';
     grid.hidden = true; q('.intro').hidden = !teams;
@@ -2165,7 +2145,6 @@ function initDarts() {
     q('#activityNote').textContent = 'Veranstaltungen werden direkt aus 3K Darts angezeigt. Wähle „Aktualisieren“ für neue Einträge oder „Bei 3K öffnen“, falls die Ansicht leer bleibt.';
     activityLoaded = true;
   }
-  syncTraining();
   q('#todayView').addEventListener('click',()=>setSection('today'));
   q('#leagueView').addEventListener('click',()=>{
     setSection('league');
@@ -2208,18 +2187,6 @@ function initDarts() {
   }
   q('#reloadActivity').addEventListener('click',loadActivity);
   q('#trainingView').addEventListener('click',()=>setSection('training'));
-  q('#loadTraining').addEventListener('click',loadTraining);
-  q('#trainingMode').addEventListener('change',loadTraining);
-  q('#trainingForm').addEventListener('submit',event=>{
-    event.preventDefault();
-    try {
-      training = dartsTraining(q('#trainingUrl').value);
-      q('#trainingError').hidden = true;
-      try { localStorage.setItem(trainingKey,training.source); message('Training auf diesem Gerät gespeichert.'); }
-      catch (_) { message('Training nur für diese Sitzung übernommen; dauerhaftes Speichern ist nicht möglich.'); }
-      loadTraining();
-    } catch (error) { q('#trainingError').textContent=error.message; q('#trainingError').hidden=false; }
-  });
   let editing = null;
   function message(text) { q('#pageStatus').textContent = text; q('#pageStatus').hidden = !text; }
   try {
@@ -2312,7 +2279,7 @@ function initDarts() {
   q('#todayGrid').before(q('#nextAppointments'));
   q('#todayGrid').after(q('.match-center'));
   q('.match-center').after(q('#clubEventBanner'));
-  q('#trainingForm').before(q('.club-training'));
+  q('#trainingPanel').append(q('.club-training'));
   q('#scheduleDetails').after(q('#sponsorInline'));
   q('#todayGrid').classList.add('featured-live');
   // The light ticker paints first; the complete season can arrive later.

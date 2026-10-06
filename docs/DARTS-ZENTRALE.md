@@ -66,9 +66,13 @@ Keine automatische Ermittlung des nächsten Spiels: Es gibt keine öffentliche E
 
 ## Training
 
-Über „Training“ wird ein separater Bereich geöffnet. Das verifizierte Beispiel ist Event 31849 („Training Doppel 10.09.“), Gruppe 403948 in Phase 53660. Teilnehmer, Bestleistungen und Platzierungen sind direkt wählbar; Spiele & Tabelle benötigen den Gruppenlink. Andere Trainings im 3K-Mandanten 5 können über einen validierten Portal-Link ausgewählt werden. Die Auswahl wird ausschließlich auf diesem Gerät unter `clubiq_darts_training` gespeichert. Keine Fremdverbindung vor dem Anzeigen/Übernehmen oder dem Wechsel einer Ansicht.
+`/training` verwendet dieselbe Seite, Karten, Tabellen, Bedienung und TV-Ansicht wie `/turnier`. Abgeschlossene Trainings öffnen die Gruppentabellen oder Ergebnisse, neue Trainings zunächst die Teilnehmer. Laufende Spiele, Paarungen, Teilnehmer, Bestleistungen und offizielle Platzierungen sind auswählbar. Fehlende Platzierungen werden nicht aus Gruppentabellen abgeleitet.
 
-Training bleibt bewusst als offizielle 3K-Ansicht eingebettet. Die native ClubIQ-Sportansicht und die 180er-Meldungen verwenden ausschließlich die öffentlich erreichbaren Sportdaten der fest hinterlegten Barver-Ligen. ClubIQ greift weder auf Konten noch auf interne 3K-Funktionen zu und umgeht keine Anmeldung. Fällt die öffentliche Quelle aus oder ändert 3K deren Aufbau, bleibt die offizielle Ansicht die Ausweichmöglichkeit.
+Die öffentliche 3K-Veranstalterliste von SV Barver (Mandant 1931, Datenbank 5) wird alle fünf Minuten nach Trainings durchsucht. „Neue Trainings suchen“ startet zusätzlich eine manuelle Suche. Im Browser kann die automatische Suche ausgeschaltet werden. Die automatische Auswahl nimmt ein laufendes Training, sonst das nächste veröffentlichte Training und andernfalls das letzte bekannte Training. Die Auswahl eines älteren Trainings bleibt beim Suchen erhalten.
+
+Ein Datums- oder Wochenmuster für die 3K-Veranstaltungsnummern wurde nicht gefunden. Am 06.10.2026 enthielt die öffentliche Liste nur Training 31849 vom 10.09.2026 und 20147 vom 18.11.2025. Das vom Verein bestätigte Training 32260 vom 22.09.2026 gehört ebenfalls zu SV Barver, fehlt aber in der Liste. Deshalb werden diese bekannten Links zusätzlich geprüft. Weitere nicht gelistete Trainings können über „Training mit 3K-Link öffnen“ hinzugefügt werden. Nur öffentliche Trainingslinks für SV Barver werden akzeptiert; Veranstaltungsnummern werden nicht durchprobiert.
+
+Teilnehmer, Spielplan und Gruppen werden anhand der von 3K gelieferten Phasen- und Rundenkennungen geladen. Der Server speichert ausschließlich normalisierte öffentliche Sportdaten. Zahlungs- und Registrierungsdaten werden verworfen. Bei Ausfällen bleiben erfolgreiche Stände erhalten; zusätzlich kann der Browser dieselben öffentlichen 3K-Daten direkt abrufen. Pro Training gespeicherte Browserstände halten die Veranstaltungen getrennt. Unvollständige Abrufe ersetzen keinen vollständigen gespeicherten Stand. Der offizielle 3K-Link bleibt erreichbar.
 
 ## Aktuelles von SV Barver
 

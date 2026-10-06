@@ -9,16 +9,16 @@
   <link rel="icon" href="/pics/logo.png">
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
   <link rel="preload" href="/pics/sv-barver-darts-tight-512.webp" as="image" type="image/webp">
-  <link rel="stylesheet" href="/static/darts.css?v=20261006-player-recovery1">
+  <link rel="stylesheet" href="/static/darts.css?v=20261006-training1">
   <link rel="stylesheet" href="/static/darts-broadcast.css?v=20261004-alias1">
   <link rel="stylesheet" href="/static/darts-theme.css?v=20261005-tv1">
   <script defer src="/static/darts-broadcast.js?v=20261004-alias1"></script>
   <script defer src="/static/darts-social-icons.js?v=20261004-clear1"></script>
   <script defer src="/static/darts-experience.js?v=20261004-experience1"></script>
   <script defer src="/static/darts-usability.js?v=20261005-tv1"></script>
-  <script defer src="/static/darts-source-fallback.js?v=20261006-player-recovery1"></script>
-  <script defer src="/static/darts-player-data.js?v=20261006-player-recovery1"></script>
-  <script defer src="/static/darts.js?v=20261006-player-recovery1"></script>
+  <script defer src="/static/darts-source-fallback.js?v=20261006-training1"></script>
+  <script defer src="/static/darts-player-data.js?v=20261006-training1"></script>
+  <script defer src="/static/darts.js?v=20261006-training1"></script>
 <link rel="stylesheet" href="/static/darts-typography.css?v=20261004-type1"><link rel="stylesheet" href="/static/darts-usability.css?v=20261005-tv1"></head>
 <body>
   <header class="darts-header">
@@ -206,16 +206,9 @@
       <div class="join-follow"><h2>Bleib auf dem Laufenden</h2><p>Termine und Einblicke findest du auch auf unseren Vereinskanälen.</p><div id="joinSocialLinks" class="appointment-actions"></div></div>
     </section>
     <section id="trainingPanel" class="team-card" aria-labelledby="trainingHeading" hidden>
-      <div class="team-head"><span class="team-letter">T</span><div><h2 id="trainingHeading">Vereinstraining</h2><p id="trainingLabel">Training 22.09.2026</p></div></div>
-      <form id="trainingForm" class="training-form">
-        <label for="trainingUrl">3K-Link zum Training<input id="trainingUrl" type="url" required maxlength="600" autocomplete="off"></label>
-        <button type="submit">Training übernehmen</button>
-        <p class="subtle">Einmal pro Training den Teilnehmer- oder Gruppenlink einfügen. Die Auswahl bleibt auf diesem Gerät gespeichert. Ein Gruppenlink ermöglicht den direkten Aufruf der Spiele.</p>
-        <p id="trainingError" class="error" role="alert" hidden></p>
-      </form>
-      <div class="team-tools"><select id="trainingMode" aria-label="Trainingsansicht"><option value="participants">Teilnehmer</option><option value="games">Spiele & Tabelle</option><option value="performances">Bestleistungen · 180 & Highfinish</option><option value="placement">Platzierungen</option></select><button id="loadTraining" type="button">Training anzeigen</button><a id="trainingExternal" class="external" target="_blank" rel="noopener noreferrer">Bei 3K öffnen ↗</a></div>
-      <div id="trainingFrame" class="frame-wrap"><div class="placeholder"><strong>Unser Training</strong><p>Teilnehmer, Spiele und Bestleistungen in der offiziellen 3K-Ansicht. Erst „Training anzeigen“ stellt die Verbindung her.</p></div></div>
-      <p id="trainingNote" class="frame-note">Die Ergebnisse kommen direkt aus 3K Darts. Platzierungen erscheinen nach Abschluss des Trainings.</p>
+      <div class="team-head"><span class="team-letter">T</span><div><h2 id="trainingHeading">Vereinstraining</h2><p>Trainingsspiele und Ergebnisse</p></div></div>
+      <p>Live-Boards, Gruppen, Ergebnisse und Bestleistungen in derselben Ansicht wie unsere Turniere.</p>
+      <a class="external" href="/training">Training anzeigen</a>
     </section>
     <aside id="socialLinks" class="social-links" hidden><div><h2>Unsere Vereinskanäle</h2><p>Neuigkeiten, Termine und Bilder aus dem Verein.</p></div><nav id="socialLinksList" aria-label="Unsere Vereinskanäle"></nav></aside>
     <details class="source-note"><summary>Woher kommen die Daten?</summary><p>Spielpläne, Ergebnisse und Statistiken kommen aus 3K Darts. Dort findest du auch die offiziellen Spielberichte.</p></details>
