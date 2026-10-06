@@ -12,11 +12,11 @@ const matches=[
 if(process.argv.includes('--quiet'))for(const match of matches)if(match.kind==='live'){match.kind='upcoming';delete match.score;}
 const teams=['A','B','C','D'].map((code,i)=>({code,rank:i+2,name:`SV Barver Darts ${code}`,league:{name:code==='D'?'Kreisklasse 11':'Kreisligen 04'},record:{},matches:matches.filter(m=>m.barverTeam===code),roster:[{id:89027+i,name:code==='A'?'Jannik Kläning':`Demo-Spieler ${code}`,role:'Kapitän'}],venue:{name:'Testspielstätte',street:'Teststraße 1',postalCode:'49453',city:'Barver'}}));
 teams[1].roster=[{id:89029,name:'Patrick Lammers',role:'Kapitän'}];
-let fail=false,tvEmpty=false,fallbackEnabled=false;
+let fail=false,tvEmpty=false,fallbackEnabled=false,futureMode=false,centerFailure=false,centerTableFailure=false;
 const server=http.createServer((req,res)=>{
   const url=new URL(req.url,'http://localhost'),p=url.pathname;
   if(p.startsWith('/api/')) {
-    if(fail) {res.writeHead(503);res.end('{}');return;}
+    if(fail||(centerFailure&&p.endsWith('/center')&&url.searchParams.get('league')==='kl04')) {res.writeHead(503);res.end('{}');return;}
     let data={};
     if(p==='/api/v1/darts/presence') data={online:7,windowSeconds:120,demo:true};
     if(p.endsWith('/tournament'))data={event:{id:30458,name:'DBD 9. Runde',date:day(-2)},participants:[],groups:[],matches:[],scheduleReady:false,updatedAt:now()};
@@ -24,7 +24,7 @@ const server=http.createServer((req,res)=>{
     if(p.endsWith('/tv'))data={available:true,stale:false,updatedAt:now(),events:tvEmpty?[]:[{title:'Testturnier · Runde 2',start:day(1),url:'https://www.sport1.de/tv-video/stream/test__1'},{title:'Schon vorbei',start:day(-1),url:'https://www.sport1.de/tv-video/stream/past__2'},{title:'Falscher Anbieterlink',start:day(2),url:'https://example.com/'}]};
     if(p.endsWith('/ranking')) data={name:'DBD Rangliste 2026',updatedAt:now(),events:[{id:30458,name:'DBD 9. Runde',start:day(-2),city:'Diepholz',sourceUrl:'https://portal.3k-darts.com/frontend/events/5/event/30458/participants'}],rows:[{rank:3,name:'Jannik Kläning',points:122,appearances:6,average:20.3,rounds:[{id:30458,points:0,rated:true}]},{rank:1,name:'<script>Test</script>',points:128,appearances:7,average:18.3,rounds:[]},...Array.from({length:20},(_,i)=>({rank:i+4,name:`Demo-Gast ${i+1}`,points:40-i,appearances:3,average:10,rounds:[]}))]};
     if(p.endsWith('/season')) data={matches,teams,updatedAt:now(),specialEvents:[{id:500,name:'Bezirkspokal',badge:'POKAL',matchCount:1}]};
-    if(p.endsWith('/center')) data={league:{key:url.searchParams.get('league'),short:'DEMO'},selectedRound:{id:1,name:'Spieltag 1'},rounds:[{id:1,name:'Spieltag 1'}],standings:[{id:1,rank:1,name:'Demo-Team',played:3,wins:2,draws:1,losses:0,pointsFor:5,pointsAgainst:1,setsFor:24,setsAgainst:12,legsFor:70,legsAgainst:41}],updatedAt:now(),barverMatches:matches.filter(m=>m.kind==='live'),pushEvents:matches.filter(m=>m.kind==='live').flatMap(m=>[1,2].map(i=>({type:'live_game',matchId:m.id,homeName:i===1?'Jannik Kläning':'Spieler Zwei',awayName:`Gast ${i}`,homeRemaining:i===1?320:201,awayRemaining:410,homeLegs:2,awayLegs:1,currentSide:'home'})))};
+    if(p.endsWith('/center')) data={league:{key:url.searchParams.get('league'),short:'DEMO'},selectedRound:{id:1,name:'Spieltag 1'},rounds:[{id:1,name:'Spieltag 1'}],matches:[],standings:[{id:1,rank:1,name:'Demo-Team',played:3,wins:2,draws:1,losses:0,pointsFor:5,pointsAgainst:1,setsFor:24,setsAgainst:12,legsFor:70,legsAgainst:41}],updatedAt:now(),barverMatches:matches.filter(m=>m.kind==='live'),pushEvents:matches.filter(m=>m.kind==='live').flatMap(m=>[1,2].map(i=>({type:'live_game',matchId:m.id,homeName:i===1?'Jannik Kläning':'Spieler Zwei',awayName:`Gast ${i}`,homeRemaining:i===1?320:201,awayRemaining:410,homeLegs:2,awayLegs:1,currentSide:'home'})))};
     if(p==='/api/v1/darts/matches/901')data={match:matches[0],games:[{number:1,status:'FINISH',block:'Einzel',home:{name:'Jannik Kläning',average:45},away:{name:'Gast',average:40},homeLegs:3,awayLegs:1}],liveGames:[],performances:[],sourceUrl:'https://portal.3k-darts.com/'};
     if(p.endsWith('/highlights')) data={items:[{type:'180',matchId:904,title:'180! Demo-Spieler C',body:'Barver C · Rückblick',occurredAt:day(-2)}]};
     if(p.endsWith('/config')) data={available:false};
@@ -60,7 +60,8 @@ const server=http.createServer((req,res)=>{
     await context.route('https://backend-ddv.3k-darts.com/**',async route=>{
       if(!fallbackEnabled)return route.abort();
       const url=route.request().url(),event=url.includes('/event/1445/')?1445:1460;
-      const body=url.includes('/round/')?{matches:[{id:event===1445?901:902,eventId:event,statusCd:'OPEN',setsHome:8,setsAway:3,datePlanned:day(0),participantHome:{id:event===1445?174110:174266,displayName:event===1445?'SV Barver Darts A':'SV Barver Darts D',email:'private@example.test'},participantGuest:{id:888,displayName:'Alternative Gäste'}}]}:{rounds:[{id:123,dateFrom:day(-1),dateTo:day(1)}]};
+      if(url.endsWith('/table')&&centerTableFailure)return route.abort();
+      const body=url.endsWith('/table')?{tableEntries:[{tableEntries:[{participantId:174110,participantName:'SV Barver Darts A',participantRankingPos:3,matchCount:3,win:2,tie:1,lost:0,points1:5,points2:1,sets1:24,sets2:12,legs1:70,legs2:41,email:'private@example.test'},{participantId:888,participantName:'Alternative Gäste',participantRankingPos:1,points1:6,points2:0}]}]}:url.includes('/round/')?{matches:[{id:event===1445?901:902,eventId:event,statusCd:'OPEN',setsHome:futureMode?null:8,setsAway:futureMode?null:3,datePlanned:day(futureMode?2:0),participantHome:{id:event===1445?174110:174266,displayName:event===1445?'SV Barver Darts A':'SV Barver Darts D',email:'private@example.test'},participantGuest:{id:888,displayName:'Alternative Gäste'}}]}:{rounds:[{id:123,name:'Spieltag 4',dateFrom:day(-1),dateTo:day(1)},{id:124,name:'Spieltag 5',dateFrom:day(10),dateTo:day(12)}]};
       await route.fulfill({status:200,headers:{'access-control-allow-origin':'*'},contentType:'application/json',body:JSON.stringify(body)});
     });
     await context.route('https://live.3k-darts.com/**',async route=>{
@@ -282,6 +283,66 @@ const server=http.createServer((req,res)=>{
     fail=false;fallbackEnabled=false;await page.evaluate(()=>window.dispatchEvent(new Event('online')));
     await page.waitForFunction(()=>document.querySelector('#liveDataStatus').textContent==='3K-Daten aktuell');
     assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('clubiq_darts_last_ticker')).source||null),null,'healthy server replaces browser fallback');
+    // The exact reported failure: upcoming match opens despite a failed server report.
+    fail=true;fallbackEnabled=true;futureMode=true;await page.reload();
+    await page.getByText('Alternative 3K-Verbindung aktiv',{exact:true}).waitFor();
+    const nextA=page.locator('#nextAppointmentsList .appointment-card').filter({hasText:'SV Barver Darts A'});
+    await nextA.getByRole('button',{name:'Spiel ansehen'}).click();
+    await page.locator('#matchDialog').getByText('Direkt von 3K geladen',{exact:true}).waitFor();
+    assert.match(await page.locator('#matchHeading').innerText(),/SV Barver Darts A gegen Alternative Gäste/);
+    assert.match(await page.locator('#matchDetail').innerText(),/Die Begegnung steht noch bevor/);
+    assert.match(await page.locator('#matchDetail').innerText(),/Teststraße 1/);
+    assert.equal(await page.locator('#matchDetail .error').count(),0);
+    assert.equal(await page.locator('#matchDetail [role=tablist]').count(),0,'no fabricated pre-match statistics');
+    assert.equal(await page.locator('#matchDetail .calendar-button').count(),1);
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'upcoming detail mobile overflow');
+    await page.click('#closeMatch');
+    // Both connections fail: the saved fixture still opens and keeps its real facts.
+    fallbackEnabled=false;await page.reload();
+    await nextA.getByRole('button',{name:'Spiel ansehen'}).click();
+    await page.locator('#matchDetail').getByText('Letzter verfügbarer Spielplan',{exact:true}).waitFor();
+    assert.match(await page.locator('#matchHeading').innerText(),/SV Barver Darts A gegen Alternative Gäste/);
+    assert.equal(await page.locator('#matchDetail .error').count(),0);
+    await page.click('#closeMatch');
+    await page.route('**/api/v1/darts/matches/901',async route=>{await new Promise(resolve=>setTimeout(resolve,300));await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({match:matches[0],games:[],reportAvailable:false})}).catch(()=>{});});
+    await nextA.getByRole('button',{name:'Spiel ansehen'}).click();await page.click('#closeMatch');
+    await page.locator('#nextAppointmentsList .appointment-card').filter({hasText:'SV Barver Darts D'}).getByRole('button',{name:'Spiel ansehen'}).click();
+    await page.waitForTimeout(500);
+    assert.match(await page.locator('#matchHeading').innerText(),/SV Barver Darts D/,'late response must not replace a different opened fixture');
+    await page.click('#closeMatch');
+    // A single failed league must recover without blocking its healthy neighbour.
+    fail=false;centerFailure=true;fallbackEnabled=true;futureMode=true;
+    let releaseCenter;const heldCenter=new Promise(resolve=>{releaseCenter=resolve;});
+    const holdCenter=async route=>{await heldCenter;await route.abort().catch(()=>{});};
+    await page.route('**/api/v1/darts/center?league=kl04',holdCenter);
+    await page.route('**/api/v1/darts/season',holdCenter);
+    await page.setViewportSize({width:1440,height:1080});await page.reload();await page.click('#leagueView');
+    const kl=page.locator('.league-block[data-league=kl04]'),kk=page.locator('.league-block[data-league=kk11]');
+    await kl.getByText('Direkt von 3K geladen',{exact:true}).waitFor();
+    releaseCenter();await page.unroute('**/api/v1/darts/center?league=kl04',holdCenter);
+    await page.unroute('**/api/v1/darts/season',holdCenter);
+    await kk.getByText('3K-Daten aktuell',{exact:true}).waitFor();
+    assert.equal(await kl.locator('tbody tr').count(),2);assert.match(await kl.locator('table').innerText(),/5:1/);
+    assert.equal(await kl.locator('tbody tr').first().locator('td').first().innerText(),'3','retain published order');
+    assert.match(await kl.locator('[data-role=matches]').innerText(),/Alternative Gäste/);
+    assert.equal((await page.evaluate(()=>localStorage.getItem('clubiq_darts_last_centers'))).includes('private@example.test'),false);
+    // A failed table refresh keeps the table while a different round still loads.
+    centerTableFailure=true;await kl.locator('[data-role=round]').selectOption('124');
+    await kl.getByText('Ein Teil der Daten ist gerade nicht erreichbar.',{exact:true}).waitFor();
+    assert.equal(await kl.locator('[data-role=round]').inputValue(),'124');
+    assert.match(await kl.locator('table caption').innerText(),/letzter verfügbarer Stand/);assert.equal(await kl.locator('tbody tr').count(),2);
+    // Reload with both connections down: saved round and standings stay readable.
+    fallbackEnabled=false;await page.reload();
+    await kl.locator('[data-role=source-status]').filter({hasText:'Letzter verfügbarer Stand'}).waitFor();
+    await page.waitForFunction(()=>!document.querySelector('[data-league=kl04] [data-role=reload]').disabled);
+    assert.equal(await kl.locator('tbody tr').count(),2);assert.equal(await kl.locator('[data-role=round]').inputValue(),'124');
+    assert.doesNotMatch(await kl.innerText(),/wird geladen|werden geladen|Lädt/);
+    assert.equal(await kk.locator('tbody tr').count(),1);
+    // Without a saved snapshot a failure must end every loading indicator.
+    await page.evaluate(()=>localStorage.removeItem('clubiq_darts_last_centers'));await page.reload();
+    await kl.getByText('Beide Verbindungen sind gerade nicht erreichbar.',{exact:true}).waitFor();
+    assert.doesNotMatch(await kl.innerText(),/wird geladen|werden geladen|Lädt/);assert.equal(await kk.locator('tbody tr').count(),1);
+    centerFailure=false;centerTableFailure=false;
     assert.deepEqual(errors,[]);
     console.log('Browser: homepage, two boards, favorites, filters, saved player/type preferences, reconnect, mobile OK');
   } finally {await browser.close();server.close();}

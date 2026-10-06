@@ -15,9 +15,9 @@
     const after=dated.filter(r=>date(r.dateFrom)>=now).sort((a,b)=>date(a.dateFrom)-date(b.dateFrom))[0];
     return [...new Map([before,after].filter(Boolean).map(r=>[r.id,r])).values()];
   }
-  function normalize(raw, league, roundId, now) {
+  function normalize(raw, league, roundId, now, allTeams=false) {
     const homeId=raw.participantHome?.id,awayId=raw.participantGuest?.id;
-    if (!Number.isSafeInteger(raw.id)||!homeId||!awayId||raw.byeHome||raw.byeAway||(!league.teams[homeId]&&!league.teams[awayId])) return null;
+    if (!Number.isSafeInteger(raw.id)||!homeId||!awayId||raw.byeHome||raw.byeAway||(!allTeams&&!league.teams[homeId]&&!league.teams[awayId])) return null;
     const home=String(raw.participantHome?.displayName||'Unbekannt').slice(0,160),away=String(raw.participantGuest?.displayName||'Unbekannt').slice(0,160);
     const scored=Number.isInteger(raw.setsHome)&&Number.isInteger(raw.setsAway);
     const plannedAt=iso(raw.datePlanned),updatedAt=iso(raw.endDate||raw.lastUpdate)||plannedAt;
@@ -47,6 +47,61 @@
       const home=side(0),away=side(1),score=home.legs!==null&&away.legs!==null?`${home.legs}:${away.legs}`:'–';
       return {type:'live_game',title:'Aktuelle Partie',text:`${home.name} ${score} ${away.name}`,matchId:match.id,liveGameId:Number.isSafeInteger(game.id)?game.id:0,homeName:home.name,awayName:away.name,homeLegs:home.legs,awayLegs:away.legs,homeRemaining:home.remaining,awayRemaining:away.remaining,currentSide:Number.isInteger(game.currentplayerIndex)?game.currentplayerIndex%2===0?'home':'away':null,updatedAt:iso(game.lastUpdate)};
     });
+  }
+  function publicGame(raw) {
+    const number=Number.isSafeInteger(raw.gameNr)?raw.gameNr:Number.isSafeInteger(raw.gameNrRound)?raw.gameNrRound:0;
+    const player=value=>({name:String(value?.displayName||'Noch offen').slice(0,160),average:Number.isFinite(value?.score)&&Number.isFinite(value?.darts)&&value.darts>0?Math.round(value.score*300/value.darts)/100:null});
+    const legs=(finished,live)=>Number.isInteger(finished)?finished:Number.isInteger(live)?live:null;
+    return {id:Number.isSafeInteger(raw.id)?raw.id:0,number,block:number<=4?'1. Block · Einzel':number<=6?'2. Block · Doppel':number<=10?'3. Block · Einzel':'4. Block · Doppel',status:String(raw.statusCd||'OPEN').toUpperCase().slice(0,20),home:player(raw.participantHome),away:player(raw.participantGuest),homeLegs:legs(raw.legsHome,raw.liveLegsHome),awayLegs:legs(raw.legsAway,raw.liveLegsAway)};
+  }
+  function publicPerformances(payload, matchId) {
+    if(!Array.isArray(payload))return [];
+    return payload.flatMap(raw=>{
+      const type=raw.performanceTypeCd==='HS'&&raw.value===180?'180':raw.performanceTypeCd==='HF'&&Number.isInteger(raw.value)&&raw.value>=2&&raw.value<=170?'high_finish':null;
+      return type?[{type,matchId,player:String(raw.participant?.displayName||'Spieler').slice(0,100),team:String(raw.team?.name||'Mannschaft').slice(0,120),count:Number.isInteger(raw.count)&&raw.count>0?raw.count:1,value:raw.value}]:[];
+    });
+  }
+  const matchCache=new Map();
+  async function loadMatch(known, signal) {
+    const league=leagues.find(item=>item.event===Number(known?.eventId)),roundId=known?.roundId||known?.round?.id;
+    if(!league||!Number.isSafeInteger(known?.id)||known.id<=0||!Number.isSafeInteger(roundId)||roundId<=0)throw new Error('Unsupported match source');
+    if(signal?.aborted)throw new Error('Match request cancelled');
+    const key=`${league.event}:${known.id}`,cached=matchCache.get(key);
+    if(cached&&Date.now()-Date.parse(cached.updatedAt)<(known.kind==='live'?30000:600000))return cached;
+    const controller=new AbortController(),abort=()=>controller.abort(),timeout=setTimeout(abort,12000);
+    signal?.addEventListener('abort',abort,{once:true});
+    try {
+      const round=await read(`${api}/${league.event}/phase/${league.phase}/round/${roundId}`,controller.signal);
+      if(!Array.isArray(round.matches))throw new Error('Invalid match round');
+      const raw=round.matches.find(item=>item.id===known.id),fresh=raw&&normalize(raw,league,roundId,Date.now());
+      if(!fresh)throw new Error('Match does not belong to Barver');
+      const match={...known,...fresh},result={available:true,stale:false,source:'browser-3k',updatedAt:new Date().toISOString(),match,games:[],liveGames:[],performances:[],reportAvailable:false,sourceUrl:fresh.url};
+      if(!match.homeVenue?.street&&!match.homeVenue?.city&&Number.isSafeInteger(match.homeTeamId)) {
+        try {
+          const data=await read(`${api.replace(/\/event$/,'')}/participant/${match.homeTeamId}`,controller.signal);
+          const venue=data.participant?.teamSeason?.playingVenue;
+          if(venue)match.homeVenue={name:String(venue.name||'').slice(0,160),street:String(venue.locationStreet||'').slice(0,160),postalCode:String(venue.locationPostalCode||'').slice(0,20),city:String(venue.locationCity||'').slice(0,120)};
+        } catch(_) { /* Keep known venue information if its source is unavailable. */ }
+      }
+      if(match.kind!=='upcoming') {
+        try {
+          const report=await read(`${api}/${league.event}/match/${match.id}/report`,controller.signal);
+          if(!Array.isArray(report))throw new Error('Invalid match report');
+          result.games=report.filter(item=>item&&typeof item==='object').map(publicGame).sort((a,b)=>a.number-b.number);
+          result.reportAvailable=result.games.length>0;
+        } catch(error) {if(controller.signal.aborted)throw error;result.reportUnavailable=true;}
+        const extras=await Promise.allSettled([
+          read(`${api}/${league.event}/performance/match/${match.id}?matchReport=1`,controller.signal),
+          match.kind==='live'?read(`https://live.3k-darts.com/dartsscorer-liveticker/api/v1/match/10/0/${match.id}`,controller.signal):Promise.resolve(null),
+        ]);
+        if(extras[0].status==='fulfilled')result.performances=publicPerformances(extras[0].value,match.id);
+        if(extras[1].status==='fulfilled'&&extras[1].value)result.liveGames=liveEvents(extras[1].value,match).map(event=>({id:event.liveGameId,home:{name:event.homeName,remaining:event.homeRemaining,legs:event.homeLegs},away:{name:event.awayName,remaining:event.awayRemaining,legs:event.awayLegs},currentSide:event.currentSide,lastUpdated:event.updatedAt}));
+        result.reportAvailable=result.reportAvailable||result.liveGames.length>0;
+      }
+      if(controller.signal.aborted)throw new Error('Match request cancelled');
+      if(!result.reportUnavailable) {matchCache.set(key,result);if(matchCache.size>24)matchCache.delete(matchCache.keys().next().value);}
+      return result;
+    } finally {clearTimeout(timeout);signal?.removeEventListener('abort',abort);}
   }
   async function load() {
     const now=Date.now();
@@ -84,7 +139,60 @@
     })();
     return pending;
   }
-  const exported={load,normalize,relevantRounds,liveEvents};
+  function officialStandings(payload, league) {
+    if(!Array.isArray(payload?.tableEntries))throw new Error('Invalid official table');
+    const fields={played:'matchCount',wins:'win',draws:'tie',losses:'lost',pointsFor:'points1',pointsAgainst:'points2',setsFor:'sets1',setsAgainst:'sets2',legsFor:'legs1',legsAgainst:'legs2'};
+    return payload.tableEntries.flatMap(group=>(Array.isArray(group?.tableEntries)?group.tableEntries:[]).filter(entry=>Number.isSafeInteger(entry.participantId)).map(entry=>{
+      const row={id:entry.participantId,name:String(entry.participantName||'Mannschaft').slice(0,160),rank:Number.isFinite(entry.participantRankingPos)?entry.participantRankingPos:null,barver:Boolean(league.teams[entry.participantId])};
+      for(const [field,source] of Object.entries(fields))row[field]=Number.isFinite(entry[source])?entry[source]:null;
+      return row;
+    }));
+  }
+  const centerCache=new Map();
+  async function loadCenter(leagueKey, requestedRound, signal) {
+    const league=leagues.find(item=>item.key===leagueKey),wanted=requestedRound==null?null:Number(requestedRound);
+    if(!league||(wanted!==null&&(!Number.isSafeInteger(wanted)||wanted<=0)))throw new Error('Unsupported league source');
+    if(signal?.aborted)throw new Error('League request cancelled');
+    const key=`${leagueKey}:${wanted||'latest'}`,cached=centerCache.get(key);
+    if(cached&&Date.now()-Date.parse(cached.updatedAt)<30000)return cached;
+    const controller=new AbortController(),abort=()=>controller.abort(),timeout=setTimeout(abort,12000),now=Date.now();
+    signal?.addEventListener('abort',abort,{once:true});
+    const phaseUrl=`${api}/${league.event}/phase/${league.phase}`;
+    try {
+      const phase=await read(phaseUrl,controller.signal);
+      if(!Array.isArray(phase.rounds))throw new Error('Invalid league rounds');
+      const rounds=phase.rounds.filter(round=>Number.isSafeInteger(round.id)&&round.id>0).map(round=>({id:round.id,name:String(round.name||'Spieltag').slice(0,100),dateFrom:iso(round.dateFrom),dateTo:iso(round.dateTo)}));
+      const ordered=[...rounds].sort((a,b)=>(date(a.dateFrom)||0)-(date(b.dateFrom)||0));
+      const chosen=wanted!==null?rounds.find(round=>round.id===wanted):ordered.find(round=>date(round.dateFrom)<=now&&date(round.dateTo)>=now)||ordered.find(round=>date(round.dateFrom)>=now)||ordered.at(-1);
+      if(!chosen)throw new Error('Round does not belong to league');
+      // Schedule and official season standings can recover independently.
+      const parts=await Promise.allSettled([
+        read(`${phaseUrl}/round/${chosen.id}`,controller.signal),
+        read(`${api}/${league.event}/phase/0/round/0/table`,controller.signal),
+      ]);
+      const matches=parts[0].status==='fulfilled'&&Array.isArray(parts[0].value?.matches)?parts[0].value.matches.map(raw=>normalize(raw,league,chosen.id,now,true)).filter(Boolean):null;
+      let standings=null;
+      if(parts[1].status==='fulfilled') {try{standings=officialStandings(parts[1].value,league);}catch(_){} }
+      if(!matches&&!standings)throw new Error('League and table unavailable');
+      if(signal?.aborted)throw new Error('League request cancelled');
+      const result={available:true,source:'browser-3k',stale:false,updatedAt:new Date().toISOString(),league:{key:league.key,name:league.name,short:league.short,event:league.event,phase:league.phase},rounds,selectedRound:chosen,matches:matches||[],standings:standings||[],matchesUnavailable:matches===null,standingsUnavailable:standings===null,events:[],eventsUnavailable:false,barverMatches:(matches||[]).filter(match=>match.barverTeams.length),sourceUrl:`https://portal.3k-darts.com/frontend/events/10/event/${league.event}/phase/${league.phase}/group/${chosen.id}`};
+      const open=(matches||[]).filter(match=>match.kind!=='final');
+      const from=chosen.dateFrom?.slice(0,10),to=chosen.dateTo?.slice(0,10);
+      result.roundStatus={complete:Boolean(matches?.length)&&!open.length,openMatches:open.length,movedMatches:open.filter(match=>match.plannedAt&&from&&to&&(match.plannedAt.slice(0,10)<from||match.plannedAt.slice(0,10)>to)).length};
+      const highlights=await Promise.allSettled(result.barverMatches.filter(match=>['live','final'].includes(match.kind)).map(async match=>{
+        const payload=await read(`${api}/${league.event}/performance/match/${match.id}?matchReport=1`,controller.signal);
+        if(!Array.isArray(payload))throw new Error('Highlights unavailable');
+        return publicPerformances(payload,match.id).map(event=>({...event,title:event.type==='180'?`180! ${event.player}`:`High Finish: ${event.player}`,text:event.type==='180'?`${event.team} · ${event.count} × 180`:`${event.team} · ${event.value} Punkte`}));
+      }));
+      result.events=[...result.barverMatches.filter(match=>match.kind==='final').map(match=>({type:'match',title:'Mannschaftsspiel beendet',text:match.text,matchId:match.id})),...highlights.filter(part=>part.status==='fulfilled').flatMap(part=>part.value)].slice(0,12);
+      result.eventsUnavailable=matches===null||highlights.some(part=>part.status==='rejected');
+      result.degraded=result.matchesUnavailable||result.standingsUnavailable||result.eventsUnavailable;
+      if(signal?.aborted)throw new Error('League request cancelled');
+      if(!result.degraded){centerCache.set(key,result);if(centerCache.size>16)centerCache.delete(centerCache.keys().next().value);}
+      return result;
+    } finally {clearTimeout(timeout);signal?.removeEventListener('abort',abort);}
+  }
+  const exported={load,loadMatch,loadCenter,officialStandings,normalize,relevantRounds,liveEvents,publicGame,publicPerformances};
   if(typeof module!=='undefined'&&module.exports)module.exports=exported;
   else window.DartsSourceFallback=exported;
 })();

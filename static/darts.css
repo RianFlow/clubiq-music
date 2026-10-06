@@ -1365,3 +1365,16 @@ body.tv-live .club-training { display:none; }
   #todayPanel .match-center-status { font-size:.52rem; padding:4px; }
   #todayPanel .match-center-head > span { font-size:.72rem; }
 }
+
+.match-fixture-facts { display:grid; gap:12px; margin:20px 0; }
+.match-fixture-facts dt { margin-bottom:4px; font-size:.78rem; font-weight:700; color:var(--muted); }
+.match-fixture-facts dd { margin:0; line-height:1.5; overflow-wrap:anywhere; }
+.native-match-summary .appointment-actions { margin-top:16px; }
+.match-page-hero .live-data-status { color:#edf7f1; }
+.match-page-hero .live-data-status[data-state="warn"] { color:#ffe0a3; }
+
+.league-source{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);font-size:.8rem}
+.league-source a{color:inherit;text-underline-offset:3px}
+.league-source .live-data-status{margin:0;color:inherit}
+.league-source .live-data-status[data-state="warn"]{color:#8a3f10}
+[data-theme="dark"] .league-source .live-data-status[data-state="warn"]{color:#ffe0a3}
