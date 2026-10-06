@@ -196,7 +196,33 @@
       return result;
     } finally {clearTimeout(timeout);signal?.removeEventListener('abort',abort);}
   }
-  const exported={load,loadMatch,loadCenter,officialStandings,tablePlacement,normalize,relevantRounds,liveEvents,publicGame,publicPerformances};
+  async function loadPlayerStats(knownPlayers) {
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),8000);
+    const names=new Map(knownPlayers.filter(p=>/^\d{1,12}$/.test(String(p.id))&&/^[ABCD]$/.test(p.team)&&p.name).map(p=>[`${p.team}:${p.name.trim().normalize('NFC').toLocaleLowerCase('de-DE')}`,String(p.id)]));
+    const players={},officialLeagues=[],updatedAt=new Date().toISOString();
+    const count=value=>Number.isInteger(value)&&value>=0&&value<=10000?value:0;
+    const average=(score,darts)=>Number.isFinite(score)&&score>=0&&Number.isFinite(darts)&&darts>0?Math.round(score*30/darts)/10:null;
+    try {
+      await Promise.allSettled(leagues.map(async league=>{
+        const payload=await read(`${api}/${league.event}/statistics`,controller.signal);
+        if(!Array.isArray(payload))throw new Error('Invalid player statistics');
+        officialLeagues.push(league.key);
+        for(const raw of payload) {
+          const name=String(raw?.displayName||'').trim(),teamName=String(raw?.team?.name||'').trim();
+          const team=teamName.match(/^SV Barver Darts\s+([ABCD1-4])$/i)?.[1]?.toUpperCase();
+          const code=({1:'A',2:'B',3:'C',4:'D'})[team]||team;
+          if(!Object.values(league.teams).includes(code)||!name||name.includes(' & '))continue;
+          if(!Number.isInteger(raw.matchesTotal)||raw.matchesTotal<0)continue;
+          const id=names.get(`${code}:${name.normalize('NFC').toLocaleLowerCase('de-DE')}`);if(!id)continue;
+          const gamesPlayed=count(raw.matchesTotal),gamesWon=count(raw.matchesWon),gamesLost=Math.max(0,gamesPlayed-gamesWon-count(raw.matchesDraw));
+          players[id]={average:average(raw.scoreTotal,raw.dartsTotal),average9:average(raw.scoreFirst9,raw.dartsFirst9),average12:average(raw.scoreFirst12,raw.dartsFirst12),average15:average(raw.scoreFirst15,raw.dartsFirst15),average18:average(raw.scoreFirst18,raw.dartsFirst18),gamesPlayed,gamesWon,gamesLost,singlesPlayed:gamesPlayed,legsFor:count(raw.legCount),legsAgainst:count(raw.legCountOpponent),count180:count(raw.count180),highFinish:Number.isInteger(raw.checkoutMax)&&raw.checkoutMax>=2&&raw.checkoutMax<=170?raw.checkoutMax:null,winRate:gamesPlayed?Math.round(gamesWon*100/gamesPlayed):null,statsSource:'3k',statsUpdatedAt:updatedAt,statsStale:false};
+        }
+      }));
+      if(!officialLeagues.length)throw new Error('Player statistics unavailable');
+      return {available:true,statsSchema:1,source:'browser-3k',updatedAt,officialLeagues,degraded:officialLeagues.length<leagues.length,stale:officialLeagues.length<leagues.length,players};
+    } finally {clearTimeout(timeout);}
+  }
+  const exported={load,loadMatch,loadCenter,loadPlayerStats,officialStandings,tablePlacement,normalize,relevantRounds,liveEvents,publicGame,publicPerformances};
   if(typeof module!=='undefined'&&module.exports)module.exports=exported;
   else window.DartsSourceFallback=exported;
 })();

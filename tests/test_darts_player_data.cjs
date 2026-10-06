@@ -1,0 +1,50 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const {create}=require('../static/darts-player-data.js');
+const sandbox=vm.createContext({URL});vm.runInContext(fs.readFileSync('static/darts.js','utf8'),sandbox);
+const {parseProfiles,parseStats}=vm.runInContext('({parseProfiles:dartsPlayerProfiles,parseStats:dartsPlayerStats})',sandbox);
+const memory=new Map(),storage={getItem:key=>memory.get(key),setItem:(key,value)=>memory.set(key,value)};
+const good={statsSchema:1,updatedAt:'2026-10-06T10:00:00Z',players:{1:{average:65.9,gamesPlayed:6,statsSource:'3k'}}};
+const profile={players:{1:{name:'Spieler',team:'A',image:'/pics/players/real.webp',playerNumber:'WTDU',email:'PRIVATE',personal:{throwingHand:'left'}}}};
+const response=data=>({ok:true,json:async()=>data});
+(async()=>{
+  let release,fail=false,statsCalls=0,profileCalls=0,directCalls=0;
+  global.fetch=async url=>{
+    if(url.includes('player-stats')){statsCalls++;if(fail)throw new Error();await new Promise(resolve=>release=resolve);return response(good);}
+    profileCalls++;if(fail)throw new Error();return response(profile);
+  };
+  const loader=create({parseProfiles,parseStats,knownPlayers:()=>[],directStats:async()=>{directCalls++;throw new Error();},storage});
+  await Promise.all([loader.load(),loader.load()]);
+  assert.equal(profileCalls,1);assert.equal(statsCalls,1);
+  assert.equal(loader.state.stats.loading,true,'slow statistics do not block profiles');
+  assert.equal(loader.state.profiles.players['1'].personal.throwingHand,'left');
+  release();await loader.refresh('stats');
+  assert.equal(loader.state.stats.players['1'].average,65.9);
+  assert.ok(![...memory.values()].join('').includes('PRIVATE'),'only normalized public fields persist');
+  fail=true;await loader.load(true);await loader.refresh('stats');
+  assert.equal(loader.state.profiles.players['1'].image,'/pics/players/real.webp');
+  assert.equal(loader.state.stats.players['1'].average,65.9);
+  assert.equal(loader.state.stats.players['1'].statsStale,true);
+  const calls=profileCalls+statsCalls;await loader.load();assert.equal(profileCalls+statsCalls,calls,'failed reads respect retry backoff');
+  const realNow=Date.now;Date.now=()=>realNow()+31000;
+  try{await loader.load();await loader.refresh('stats');assert.ok(profileCalls+statsCalls>calls,'automatic retry resumes after the recovery interval');}finally{Date.now=realNow;}
+  fail=false;global.fetch=async url=>response(url.includes('player-stats')?{updatedAt:good.updatedAt,matchesScanned:0,officialLeagues:[],players:{1:{average:null,gamesPlayed:0}}}:profile);
+  const restored=create({parseProfiles,parseStats,knownPlayers:()=>[],storage,directStats:async()=>{directCalls++;return good;}});
+  assert.equal(restored.state.stats.players['1'].average,65.9,'reload restores known statistics');
+  assert.equal(restored.state.stats.players['1'].statsStale,true,'restored data retains observation time and stale state');
+  await restored.load(true);await restored.refresh('stats');
+  assert.equal(restored.state.stats.players['1'].average,65.9,'unverified fresh zeroes cannot erase real statistics');
+  assert.equal(restored.state.stats.players['1'].statsStale,false);
+  assert.ok(directCalls>=2);
+  global.fetch=async url=>response(url.includes('player-stats')?good:{players:{}});
+  await restored.load(true);await restored.refresh('stats');
+  assert.equal(Object.keys(restored.state.profiles.players).length,0,'authoritative removal is respected');
+  let first=true;
+  global.fetch=async url=>{if(first)throw new Error();return response(url.includes('player-stats')?good:profile);};
+  const recovery=create({parseProfiles,parseStats,knownPlayers:()=>[],directStats:async()=>{throw new Error();}});
+  await recovery.load();await recovery.refresh('stats');assert.equal(recovery.state.profiles.error,true);
+  first=false;await recovery.load(true);await recovery.refresh('stats');assert.equal(recovery.state.profiles.error,false);assert.equal(recovery.state.stats.players['1'].average,65.9,'same-page recovery succeeds');
+  global.fetch=async()=>{throw new Error();};
+  const partial=create({parseProfiles,parseStats,knownPlayers:()=>[],storage,directStats:async()=>({...good,degraded:true,stale:true,players:{2:{average:42.3,statsSource:'3k'}}})});
+  await partial.load(true);await partial.refresh('stats');assert.equal(partial.state.stats.players['1'].average,65.9,'partial league recovery retains other league values');assert.equal(partial.state.stats.players['2'].average,42.3);assert.equal(partial.state.stats.players['1'].statsStale,true);
+  console.log('Player recovery: independent loads, retries, verified statistics and public cache OK');
+})().catch(error=>{console.error(error);process.exitCode=1;});

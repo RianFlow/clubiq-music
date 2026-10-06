@@ -352,6 +352,52 @@ const server=http.createServer((req,res)=>{
     await kl.getByText('Beide Verbindungen sind gerade nicht erreichbar.',{exact:true}).waitFor();
     assert.doesNotMatch(await kl.innerText(),/wird geladen|werden geladen|Lädt/);assert.equal(await kk.locator('tbody tr').count(),1);
     centerFailure=false;centerTableFailure=false;
+    // Independent profile loads, late responses, durable public cache and same-page recovery.
+    const playerContext=await browser.newContext({viewport:{width:1440,height:1080},serviceWorkers:'block'});
+    let playerMode='hold',releaseStats;
+    const heldStats=new Promise(resolve=>releaseStats=resolve);
+    const verifiedStats={statsSchema:1,updatedAt:now(),players:{89027:{average:65.9,gamesPlayed:6,gamesWon:6,legsFor:18,legsAgainst:5,count180:3,statsSource:'3k'},89029:{average:50.1,gamesPlayed:4,statsSource:'3k'}}};
+    await playerContext.route('**/api/v1/darts/player-profiles',route=>playerMode==='fail'?route.abort():route.continue());
+    await playerContext.route('**/api/v1/darts/player-stats',async route=>{
+      if(playerMode==='fail')return route.abort();
+      if(playerMode==='hold')await heldStats;
+      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(playerMode==='zero'?{updatedAt:now(),matchesScanned:0,officialLeagues:[],players:{89027:{average:null,gamesPlayed:0},89029:{average:null,gamesPlayed:0}}}:verifiedStats)}).catch(()=>{});
+    });
+    await playerContext.route('https://backend-ddv.3k-darts.com/**',route=>{
+      if(playerMode!=='zero'||!route.request().url().endsWith('/statistics'))return route.abort();
+      const rows=route.request().url().includes('/1445/')?[{displayName:'Jannik Kläning',team:{name:'SV Barver Darts A'},scoreTotal:11421,dartsTotal:520,matchesTotal:6,matchesWon:6,count180:3,email:'private@example.test'},{displayName:'Patrick Lammers',team:{name:'SV Barver Darts B'},scoreTotal:5010,dartsTotal:300,matchesTotal:4}]:[];
+      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(rows)});
+    });
+    await playerContext.route('https://live.3k-darts.com/**',route=>route.abort());
+    const playerPage=await playerContext.newPage();playerPage.on('pageerror',e=>errors.push(e.message));
+    await playerPage.goto(`${origin}/darts`);
+    await playerPage.locator('#matchCenterGrid [data-team-code="A"]').first().click();
+    await playerPage.getByRole('button',{name:'Jannik Kläning, Profil öffnen'}).click();
+    await playerPage.locator('#playerProfile .player-profile-visual img').waitFor({timeout:2000});
+    assert.match(await playerPage.locator('#playerProfile').innerText(),/Saisonwerte werden geladen/,'profile is usable while statistics are pending');
+    await playerPage.click('#closePlayerProfile');
+    await playerPage.locator('#matchCenterGrid [data-team-code="B"]').first().click();await playerPage.getByRole('button',{name:'Patrick Lammers, Profil öffnen'}).click();
+    await playerPage.getByText('Rechtshänder',{exact:true}).waitFor();
+    await playerPage.click('#closePlayerProfile');releaseStats();
+    await playerPage.waitForFunction(()=>JSON.parse(localStorage.getItem('clubiq_darts_public_stats_v1')||'null')?.players['89029']?.average===50.1);
+    assert.equal(await playerPage.locator('#playerDialog').evaluate(n=>n.open),false,'late data never reopens a closed profile');
+    playerMode='zero';await playerPage.evaluate(()=>window.dispatchEvent(new Event('online')));
+    await playerPage.locator('#matchCenterGrid [data-team-code="B"]').first().click();await playerPage.getByRole('button',{name:'Patrick Lammers, Profil öffnen'}).click();
+    await playerPage.locator('.player-performance-average strong').getByText('50,1',{exact:true}).waitFor();
+    await playerPage.waitForFunction(()=>!document.querySelector('.player-data-status button').disabled);
+    assert.equal((await playerPage.evaluate(()=>localStorage.getItem('clubiq_darts_public_stats_v1'))).includes('private@example.test'),false);
+    playerMode='fail';await playerPage.getByRole('button',{name:'Daten aktualisieren'}).click();
+    await playerPage.waitForFunction(()=>!document.querySelector('.player-data-status button').disabled);
+    assert.equal(await playerPage.locator('.player-performance-average strong').innerText(),'50,1');
+    assert.match(await playerPage.locator('.player-performance-note').innerText(),/letzter gespeicherter Stand/);await playerPage.getByText('Rechtshänder',{exact:true}).waitFor();
+    await playerPage.reload();await playerPage.locator('#matchCenterGrid [data-team-code="B"]').first().click();await playerPage.getByRole('button',{name:'Patrick Lammers, Profil öffnen'}).click();
+    await playerPage.getByText('Rechtshänder',{exact:true}).waitFor();assert.equal(await playerPage.locator('.player-performance-average strong').innerText(),'50,1','reload during outage retains statistics');
+    await playerPage.waitForFunction(()=>!document.querySelector('.player-data-status button').disabled);
+    playerMode='good';await playerPage.getByRole('button',{name:'Daten aktualisieren'}).click();
+    await playerPage.waitForFunction(()=>!document.querySelector('.player-data-status button').disabled);
+    assert.doesNotMatch(await playerPage.locator('.player-performance-note').innerText(),/letzter gespeicherter Stand/);
+    await playerPage.setViewportSize({width:390,height:844});assert.equal(await playerPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'player profile mobile overflow');
+    await playerPage.screenshot({path:path.join(root,'outputs/darts-player-recovery-mobile.png')});await playerContext.close();
     assert.deepEqual(errors,[]);
     console.log('Browser: homepage, two boards, favorites, filters, saved player/type preferences, reconnect, mobile OK');
   } finally {await browser.close();server.close();}

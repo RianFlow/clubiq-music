@@ -1378,3 +1378,8 @@ body.tv-live .club-training { display:none; }
 .league-source .live-data-status{margin:0;color:inherit}
 .league-source .live-data-status[data-state="warn"]{color:#8a3f10}
 [data-theme="dark"] .league-source .live-data-status[data-state="warn"]{color:#ffe0a3}
+
+.player-data-status { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:12px 0; }
+.player-data-status small { color:inherit; opacity:.85; }
+.player-data-status button { flex-shrink:0; }
+@media (max-width:600px) { .player-data-status { align-items:flex-start; flex-direction:column; } }

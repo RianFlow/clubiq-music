@@ -35,6 +35,7 @@ _season_cache: tuple[float, dict] | None = None
 _special_cache: tuple[float, dict] | None = None
 _match_cache: dict[int, tuple[float, dict]] = {}
 _player_stats_cache: tuple[float, dict] | None = None
+_player_stats_retry_at = 0.0
 _player_stats_load_lock = Lock()
 _venue_cache: dict[int, tuple[float, dict]] = {}
 _player_match_stats_cache: dict[tuple[int, int], tuple[list[dict], list[dict]]] = {}
@@ -1045,6 +1046,7 @@ def _load_season(now: datetime) -> dict:
         for entry in league["standings"]
     }
     profiles = {}
+    missing_profiles = []
     with ThreadPoolExecutor(max_workers=4) as executor:
         jobs = {
             executor.submit(_load_team_profile, team_id): (team_id, code)
@@ -1055,6 +1057,7 @@ def _load_season(now: datetime) -> dict:
             try:
                 profiles[code] = job.result()
             except (requests.RequestException, ValueError, KeyError, TypeError):
+                missing_profiles.append(code)
                 profiles[code] = {"name": "", "roster": [], "venue": {}, "weekday": None, "throwoffTime": None}
     home_venues = {
         team_id: (profiles.get(code) or {}).get("venue") or {}
@@ -1103,6 +1106,8 @@ def _load_season(now: datetime) -> dict:
         }
         for item in leagues if item.get("degraded")
     ]
+    if missing_profiles:
+        warnings.append({"missingTeamProfiles": sorted(missing_profiles), "message": "Einzelne Mannschaftskader konnten gerade nicht geladen werden."})
     return {
         "available": True,
         "stale": False,
@@ -1232,8 +1237,8 @@ def _load_player_match_stats(event_id: int, match_id: int) -> tuple[list[dict], 
     if cached:
         return cached
     report = _public_get(f"{API}/{event_id}/match/{match_id}/report")
-    if not isinstance(report, list):
-        report = []
+    if not isinstance(report, list) or not report:
+        raise ValueError("Ungültiger 3K-Spielbericht")
     try:
         performances = _public_get(f"{API}/{event_id}/performance/match/{match_id}?matchReport=1")
     except (requests.RequestException, ValueError, KeyError, TypeError):
@@ -1275,6 +1280,8 @@ def _official_league_player_stats() -> tuple[dict[tuple[str, str], dict], list[s
             team_name = str((item.get("team") or {}).get("name") or "").strip()
             code = _barver_code_from_name(team_name)
             if code not in allowed_codes:
+                continue
+            if not isinstance(item.get("matchesTotal"), int) or item["matchesTotal"] < 0:
                 continue
             matches_total = item.get("matchesTotal") if isinstance(item.get("matchesTotal"), int) else 0
             matches_won = item.get("matchesWon") if isinstance(item.get("matchesWon"), int) else 0
@@ -1413,32 +1420,49 @@ def _load_player_stats(now: datetime) -> dict:
         player["playerNumber"] = fallback_player_number
         player["winRate"] = round(player["gamesWon"] * 100 / player["gamesPlayed"]) if player["gamesPlayed"] else None
 
+    # Roster membership alone is not evidence of a zero-valued season statistic.
+    stats = {key: player for key, player in stats.items()
+             if player["gamesPlayed"] > 0 or player.get("statsSource") == "3k"}
+    if not loaded and not official_leagues:
+        raise DartsFeedUnavailable("Keine bestätigten 3K-Spielerstatistiken verfügbar.")
+    degraded = len(official_leagues) < len(LEAGUES) and (len(loaded) < len(finished) or not loaded)
+    for player in stats.values():
+        player["statsUpdatedAt"] = now.isoformat()
+        player["statsStale"] = degraded
     return {
-        "available": True, "stale": False, "updatedAt": now.isoformat(),
+        "available": True, "statsSchema": 1, "stale": degraded, "degraded": degraded, "updatedAt": now.isoformat(),
         "matchesScanned": len(loaded), "officialLeagues": official_leagues, "players": stats,
     }
 
 
 def get_darts_player_stats(now: datetime | None = None) -> dict:
-    global _player_stats_cache
+    global _player_stats_cache, _player_stats_retry_at
     now = now or datetime.now(timezone.utc)
     with _lock:
         cached = _player_stats_cache
-        if cached and now.timestamp() - cached[0] < PLAYER_STATS_CACHE_SECONDS:
+        if cached and cached[1].get("statsSchema") == 1 and now.timestamp() - cached[0] < PLAYER_STATS_CACHE_SECONDS:
             return cached[1]
-    with _player_stats_load_lock:
+    previous = cached[1] if cached and cached[1].get("statsSchema") == 1 else load_snapshot("player-stats")
+    if previous and previous.get("statsSchema") != 1:
+        previous = None
+    if now.timestamp() < _player_stats_retry_at or not _player_stats_load_lock.acquire(blocking=False):
+        if previous:
+            return last_known(previous)
+        raise DartsFeedUnavailable("Die 3K-Spielerstatistiken werden erneut geprüft.")
+    try:
+        result = _load_player_stats(now)
+        if result.get("degraded"):
+            _player_stats_retry_at = now.timestamp() + CACHE_SECONDS
+            return last_known(previous) if previous else result
         with _lock:
-            cached = _player_stats_cache
-            if cached and now.timestamp() - cached[0] < PLAYER_STATS_CACHE_SECONDS:
-                return cached[1]
-        try:
-            result = _load_player_stats(now)
-            with _lock:
-                _player_stats_cache = (now.timestamp(), result)
-            return result
-        except (requests.RequestException, ValueError, KeyError, TypeError, DartsFeedUnavailable) as exc:
-            with _lock:
-                cached = _player_stats_cache
-            if cached:
-                return {**cached[1], "stale": True}
-            raise DartsFeedUnavailable("Die 3K-Spielerstatistiken sind gerade nicht erreichbar.") from exc
+            _player_stats_cache = (now.timestamp(), result)
+            _player_stats_retry_at = 0
+        save_snapshot("player-stats", result)
+        return result
+    except (requests.RequestException, ValueError, KeyError, TypeError, DartsFeedUnavailable) as exc:
+        _player_stats_retry_at = now.timestamp() + CACHE_SECONDS
+        if previous:
+            return last_known(previous)
+        raise DartsFeedUnavailable("Die 3K-Spielerstatistiken sind gerade nicht erreichbar.") from exc
+    finally:
+        _player_stats_load_lock.release()

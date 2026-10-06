@@ -259,6 +259,17 @@ class DartsFeedTests(unittest.TestCase):
         self.assertEqual(result["warnings"][0]["league"], "two")
         self.assertEqual([item["league"]["key"] for item in result["leagues"]], ["one", "two"])
 
+    def test_missing_team_profile_marks_season_incomplete(self):
+        league = {"key": "one", "name": "Liga", "short": "L1", "event": 1, "phase": 11, "teams": {101: "A"}}
+        loaded = {"league": {"key": "one"}, "rounds": [], "standings": [], "matches": [], "degraded": False}
+        with patch.object(darts_feed, "LEAGUES", (league,)), \
+             patch.object(darts_feed, "_load_league_season", return_value=loaded), \
+             patch.object(darts_feed, "_get_special_events", return_value={}), \
+             patch.object(darts_feed, "_load_team_profile", side_effect=requests.Timeout()):
+            result = _load_season(datetime.now(timezone.utc))
+        self.assertTrue(result["degraded"])
+        self.assertEqual(result["warnings"][0]["missingTeamProfiles"], ["A"])
+
     def test_team_profile_exposes_player_id_but_no_private_registration_data(self):
         payload = {"participant": {"displayName": "SV Barver Darts B", "teamSeason": {"teamMembers": [
             {"displayName": "Berta Spielerin", "member": {"player": {"id": 89036, "genderCd": "W"}}},

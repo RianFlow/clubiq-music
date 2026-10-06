@@ -68,3 +68,26 @@ behalten denselben offiziellen Platz. Fehlende Platzierungen bleiben unbekannt.
 Normalisierte Plätze tragen `rankSource: 3k-placement`. Ältere gespeicherte
 Rangnummern ohne diese Kennzeichnung werden nicht erneut als Tabellenplatz
 angezeigt. Das gilt auch für die Mannschaftsübersichten.
+
+Spielerprofile laden unabhängig von Saisonstatistiken. Vorhandene Fotos und
+persönliche Angaben erscheinen sofort; neue Antworten aktualisieren nur das
+aktuell geöffnete Profil. Späte Antworten öffnen kein geschlossenes Fenster.
+Der Vereinsabruf hat vier Sekunden Zeit, die statische Fotoauswahl bei Bedarf
+weitere 2,5 Sekunden. Veröffentlichte Profilangaben sind maßgeblich; eine leere
+erfolgreiche Vereinsantwort entfernt zuvor veröffentlichte Angaben.
+
+Die Spielerstatistik wird auf bestätigte Quellen geprüft. Ein Kader ohne
+erfolgreichen Statistikabruf ist keine Saison mit Nullwerten. Bei Bedarf lädt
+der Browser beide offiziellen 3K-Ligastatistiken parallel innerhalb von acht
+Sekunden. Nur Einzelspieler aus dem bekannten Barver-Kader werden übernommen.
+Normalisierte öffentliche Profilangaben und Saisonwerte bleiben auf dem Gerät
+erhalten; bestätigte vollständige Statistikstände werden zusätzlich dauerhaft
+auf dem Server gespeichert. Teilausfälle überschreiben keine vollständigen
+gespeicherten Werte. Der ursprüngliche Zeitpunkt bleibt sichtbar.
+
+Fehlgeschlagene Spielerabrufe werden nach 30, 60, 120 und höchstens 300 Sekunden
+erneut versucht, solange die Seite sichtbar ist. Bei wiederhergestellter
+Verbindung erfolgt ein neuer Versuch. Parallele Profilöffnungen teilen laufende
+Anfragen. „Daten aktualisieren“ ermöglicht einen sofortigen erneuten Abruf.
+Tests prüfen langsame Statistikantworten, falsche Nullwerte, Ausfälle, Neuladen,
+Profilwechsel und erfolgreiche Wiederherstellung im selben Fenster.
