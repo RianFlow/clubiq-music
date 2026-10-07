@@ -74,6 +74,18 @@
       "role": "Spieler",
       "image": "/pics/players/till-schulze-cutout.webp",
       "alias": "Dübbeldoktor"
+    },
+    "89040": {
+      "name": "Tim Thürkow",
+      "team": "A",
+      "role": "Kapitän",
+      "image": "/pics/players/tim-thuerkow-cutout.webp"
+    },
+    "212898": {
+      "name": "Christian Fecht",
+      "team": "A",
+      "role": "Spieler",
+      "image": "/pics/players/christian-fecht-cutout.webp"
     }
   }
 }

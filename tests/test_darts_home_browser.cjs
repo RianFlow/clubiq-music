@@ -174,7 +174,7 @@ const server=http.createServer((req,res)=>{
     await page.locator('#matchCenterGrid [data-team-code="A"]').first().click();
     await page.locator('.team-group-players').waitFor();
     assert.equal(await page.locator('.team-group-wordmark strong').innerText(),'BARVER A');
-    assert.match(await page.locator('.team-group-players').getAttribute('src'),/barver-a-team-cutout.png/);
+    assert.match(await page.locator('.team-group-players').getAttribute('src'),/barver-a-team-20261007\.webp/);
     await page.waitForFunction(()=>{const image=document.querySelector('.team-group-players');return image.complete&&image.naturalWidth>0;});
     await page.locator('.team-group-photo').screenshot({path:path.join(root,'outputs/barver-a-team-desktop.png')});
     await page.setViewportSize({width:390,height:844});
