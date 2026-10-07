@@ -1425,7 +1425,7 @@ function initDarts() {
       const teamName=document.createElement('strong'); teamName.textContent=`BARVER ${team.code}`;
       wordmark.append(clubName,teamName);
       const crest=document.createElement('img'); crest.className='team-group-crest'; crest.src='/pics/sv-barver-darts-tight-512.webp'; crest.alt=''; crest.width=340; crest.height=340; crest.loading='lazy'; crest.decoding='async';
-      const image=document.createElement('img'); image.className='team-group-players'; image.src=team.code==='A'?'/pics/teams/barver-a-team-cutout.png?v=20261004-upper1':'/pics/teams/barver-b-team-cutout.webp?v=20260927-2'; image.alt=`Mannschaftsfoto SV Barver Darts ${team.code}`; image.width=team.code==='A'?1846:1600; image.height=team.code==='A'?852:738; image.loading='lazy'; image.decoding='async';
+      const image=document.createElement('img'); image.className='team-group-players'; image.src=team.code==='A'?'/pics/teams/barver-a-team-20261007.webp':'/pics/teams/barver-b-team-cutout.webp?v=20260927-2'; image.alt=`Mannschaftsfoto SV Barver Darts ${team.code}`; image.width=team.code==='A'?1846:1600; image.height=team.code==='A'?852:738; image.loading='lazy'; image.decoding='async';
       const caption=document.createElement('figcaption'); caption.textContent=`SV Barver Darts ${team.code} · Mannschaft 2026 / 2027`;
       teamPhoto.append(wordmark,crest,image,caption);
     }
