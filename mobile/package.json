@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:web": "node scripts/build.mjs --web",
+    "preview:web": "node scripts/preview-web.mjs",
+    "stage:web": "node scripts/stage-web.mjs",
     "test": "node --test tests/*.test.mjs",
     "preview": "node scripts/preview.mjs",
     "android:init": "npm run build && cap add android",

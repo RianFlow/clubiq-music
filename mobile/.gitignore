@@ -1,5 +1,6 @@
 node_modules/
 dist/
+web-dist/
 android/
 ios/
 *.keystore
@@ -9,3 +10,5 @@ ios/
 *.mobileprovision
 google-services.json
 GoogleService-Info.plist
+
+node_modules-shared

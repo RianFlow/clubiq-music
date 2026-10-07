@@ -104,3 +104,14 @@ Offizielle Grundlagen:
 - https://capacitorjs.com/docs/apis/push-notifications
 - https://capacitorjs.com/docs/getting-started/environment-setup
 - https://developer.apple.com/app-store/review/guidelines/#minimum-functionality
+
+
+## Vereinstraining
+
+Die App zeigt unter Training alle laufenden Boards mit Restpunkten, Legs und Average. Gruppen, Ergebnisse, Teilnehmer und Bestleistungen bleiben in derselben Oberfläche. Die öffentliche 3K-Verbindung dient als Ausweichweg; gespeicherte Daten werden bei einer Unterbrechung als letzter Stand angezeigt.
+
+Unter Mein Darts → Teams, Spieler & Ereignisse kann Vereinstraining zusätzlich eingeschaltet werden. Die Ereignisauswahl gilt auch fürs Training. Ohne einzelne Spieler folgt man allen Trainingsspielern; mit einer Spielerauswahl nur diesen. Bestehende Abos werden nicht automatisch erweitert. Ein Tipp auf eine Trainingsmeldung öffnet das passende Training.
+
+Der Server prüft die unabhängige 3K-Live-Quelle alle zehn Sekunden. Der erste Stand sowie ältere Stände nach längeren Unterbrechungen bilden nur eine Ausgangsbasis und erzeugen keine nachträglichen Meldungen. Versand und Geräteempfang sind getrennte Prüfungen; ein echter Geräteempfang muss vom Nutzer bestätigt werden.
+
+Web-App: npm run build:web und npm run stage:web. Android: npm run build und die vorhandene Android-Konfiguration synchronisieren. Firebase-Serverdateien gehören ausschließlich auf den Server.

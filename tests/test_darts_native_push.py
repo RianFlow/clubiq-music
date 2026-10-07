@@ -46,6 +46,16 @@ class DartsNativePushTests(unittest.TestCase):
             with self.subTest(changed=changed), self.assertRaises(Exception):
                 main.DartsNativePushRequest(**changed)
 
+    def test_all_six_event_types_and_live_start_delivery_pipeline(self):
+        request = main.DartsNativePushRequest(platform="android", token="t" * 120, deviceSecret="a" * 64, eventTypes=sorted(main.PUSH_EVENT_TYPES))
+        self.assertIn("player_start", request.eventTypes)
+        raw = {"type": "player_start", "matchId": 17, "gameId": "game-1", "playerSide": "home", "team": "SV Barver Darts A", "player": "Jannik", "board": "1"}
+        with patch.object(main.darts_live_hub, "drain_events", return_value=[raw]), patch.object(main, "_store_and_deliver_darts_events") as store:
+            main.deliver_darts_live_events()
+        event = store.call_args[0][0][0]
+        self.assertEqual(event["event_type"], "player_start")
+        self.assertTrue(event["deliver"])
+
     def test_subscription_hashes_never_return_raw_secret(self):
         request = main.DartsNativePushRequest(
             platform="android", token="t" * 120, deviceSecret="A" * 64

@@ -24,6 +24,44 @@ META = {"id": 1657285, "home": "VFL Emslage 1", "away": "SV Barver Darts 2", "ba
 
 
 class DartsLiveTests(unittest.TestCase):
+    def test_first_game_after_empty_snapshot_is_announced(self):
+        hub = DartsLiveHub()
+        hub._groups["1657285"] = hub._empty_group("1657285", META)
+        hub.apply("1657285", [], "rest")
+        players = [dict(p, legs=0, darts=0, points=501) for p in raw_match()["matchPlayers"]]
+        first = normalize_match(raw_match(stamp=datetime.now(timezone.utc).isoformat(), matchPlayers=players))
+        hub.apply("1657285", [first], "rest")
+        self.assertEqual([e["type"] for e in hub.drain_events()], ["player_start"])
+
+    def test_start_transition_and_initial_snapshot(self):
+        players = [dict(p, legs=0, darts=0, points=501) for p in raw_match()["matchPlayers"]]
+        before = normalize_match(raw_match(status=0, statusActive=False, statusComingSoon=True, matchPlayers=players))
+        after = normalize_match(raw_match(stamp=datetime.now(timezone.utc).isoformat(), matchPlayers=players))
+        self.assertEqual(detect_events(None, after, META), [])
+        events = detect_events(before, after, META)
+        self.assertEqual([e["type"] for e in events], ["player_start"])
+        self.assertEqual(events[0]["board"], "2")
+        self.assertEqual(events[0]["player"], after["guest"]["name"])
+        self.assertEqual(detect_events(after, {**after, "currentPlayerIndex": 1}, META), [])
+
+    def test_new_board_start_is_fresh_once_and_not_historical(self):
+        hub = DartsLiveHub()
+        hub._groups["1657285"] = hub._empty_group("1657285", META)
+        hub.apply("1657285", [normalize_match(raw_match())], "rest")
+        self.assertEqual(hub.drain_events(), [])
+        players = [dict(p, legs=0, darts=0, points=501, count180=0, highfinish=0) for p in raw_match()["matchPlayers"]]
+        new = normalize_match(raw_match("new-board", stamp=datetime.now(timezone.utc).isoformat(), matchPlayers=players))
+        hub.apply("1657285", [new], "rest")
+        self.assertEqual([e["type"] for e in hub.drain_events()], ["player_start"])
+        hub.apply("1657285", [new], "stomp")
+        self.assertEqual(hub.drain_events(), [])
+        late = normalize_match(raw_match("old-board", stamp=datetime.now(timezone.utc).isoformat()))
+        hub.apply("1657285", [late], "rest")
+        self.assertEqual(hub.drain_events(), [])
+        stale = {**new, "matchKey": "stale-board", "lastUpdateNs": new["lastUpdateNs"] - 61000000000}
+        hub.apply("1657285", [stale], "rest")
+        self.assertEqual(hub.drain_events(), [])
+
     def test_nanosecond_timestamp_order_is_preserved(self):
         self.assertLess(timestamp_ns("2026-09-27T13:35:52.718986397"), timestamp_ns("2026-09-27T13:35:52.718986398"))
         self.assertEqual(timestamp_ns("invalid"), 0)

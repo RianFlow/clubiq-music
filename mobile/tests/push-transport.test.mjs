@@ -15,3 +15,11 @@ test('failed ownership storage never sends a registration',async()=>{
   let sent=false;const transport=createPushTransport({identity:{secret:'a'.repeat(64)},selection:()=>({}),saveIdentity:async()=>{throw Error('storage denied');},request:async()=>{sent=true;}});
   await assert.rejects(transport.subscribe({platform:'android',token:'token'}));assert.equal(sent,false);
 });
+
+test('new selections are retained locally but only supported types reach old servers',async()=>{
+  const chosen={teams:[],players:['Jannik'],eventTypes:['180','player_start']},sent=[];
+  let advertised=['180','game','match'];
+  const transport=createPushTransport({identity:{secret:'a'.repeat(64)},selection:()=>chosen,saveIdentity:async()=>{},request:async(method,url,data)=>{if(method==='GET')return {available:true,eventTypes:advertised};sent.push(data);return {ok:true};}});
+  await transport.config();await transport.subscribe({platform:'android',token:'token'});assert.deepEqual(sent[0].eventTypes,['180']);assert.deepEqual(chosen.eventTypes,['180','player_start']);
+  advertised.push('player_start');await transport.config();await transport.subscribe({platform:'android',token:'token'});assert.deepEqual(sent[1].eventTypes,['180','player_start']);
+});

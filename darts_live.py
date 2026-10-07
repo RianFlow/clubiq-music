@@ -153,10 +153,12 @@ def _event_id(*parts) -> str:
     return hashlib.sha256("|".join(str(part) for part in parts).encode("utf-8")).hexdigest()
 
 
-def detect_events(previous: dict | None, current: dict, meta: dict) -> list[dict]:
+def detect_events(previous: dict | None, current: dict, meta: dict, new_game: bool = False) -> list[dict]:
     """Detect state transitions only; an initial snapshot never creates alerts."""
-    if not previous:
+    if not previous and not new_game:
         return []
+    had_previous = bool(previous)
+    previous = previous or {}
     group_key = int(current["groupKey"]) if current["groupKey"].isdigit() else current["groupKey"]
     team_sides = meta.get("barverSides") or {}
     events = []
@@ -167,6 +169,18 @@ def detect_events(previous: dict | None, current: dict, meta: dict) -> list[dict
         if not code:
             continue
         team_name = f"SV Barver Darts {code}"
+        starts = current.get("active") and not current.get("finished") and not current.get("comingSoon") and not previous.get("active")
+        early = all((current.get(key) or {}).get("legs") == 0 and
+                    isinstance((current.get(key) or {}).get("darts"), int) and
+                    0 <= current[key]["darts"] <= 3 for key in ("home", "guest"))
+        if starts and early and player.get("name") not in (None, "", "Noch offen"):
+            events.append({
+                "type": "player_start", "matchId": group_key, "gameId": current["matchKey"],
+                "playerSide": side, "board": current.get("board"), "team": team_name,
+                "player": player["name"], "occurred_at": occurred,
+            })
+        if not had_previous:
+            continue
         old_legs, new_legs = old_player.get("legs"), player.get("legs")
         if isinstance(old_legs, int) and isinstance(new_legs, int) and new_legs > old_legs:
             events.append({
@@ -204,6 +218,8 @@ def detect_events(previous: dict | None, current: dict, meta: dict) -> list[dict
             })
     for event in events:
         event["event_id"] = _event_id(current["groupKey"], current["matchKey"], event["type"], event.get("performanceId"), event.get("gameId"), event.get("legCount"), event.get("score"), event.get("value"))
+        if event["type"] == "player_start":
+            event["event_id"] = _event_id(event["event_id"], event["playerSide"], event["player"])
     return events
 
 
@@ -301,6 +317,7 @@ class DartsLiveHub:
         with self._lock:
             group = self._groups.setdefault(group_key, self._empty_group(group_key, {"id": int(group_key)}))
             had_matches = bool(group["matches"])
+            established_baseline = bool(group.get("observedSnapshot"))
             was_finished = bool(group.get("finished"))
             for current in matches:
                 if current.get("groupKey") != group_key:
@@ -313,9 +330,15 @@ class DartsLiveHub:
                     continue
                 if previous == current:
                     continue
-                emitted.extend(detect_events(previous, current, group.get("meta") or {}))
+                # The first full snapshot establishes a baseline. A newly seen board
+                # afterwards may announce a start only while still in its first throws.
+                stamp_age = time.time() - incoming_stamp / 1e9 if incoming_stamp else float("inf")
+                events = detect_events(previous, current, group.get("meta") or {}, new_game=established_baseline)
+                emitted.extend(event for event in events if event["type"] != "player_start" or
+                               (not group.get("retired") and not group.get("finished") and 0 <= stamp_age <= 60))
                 group["matches"][key] = current
                 changed = True
+            group["observedSnapshot"] = True
             group["source"] = source
             group["stale"] = False
             group["lastSuccess"] = now

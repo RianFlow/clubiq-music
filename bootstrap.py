@@ -219,6 +219,9 @@ CREATE TABLE IF NOT EXISTS darts_native_push_subscriptions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE darts_push_subscriptions ADD COLUMN IF NOT EXISTS training BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE darts_push_subscriptions ADD COLUMN IF NOT EXISTS last_test_at TIMESTAMPTZ;
+ALTER TABLE darts_native_push_subscriptions ADD COLUMN IF NOT EXISTS training BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS idx_darts_native_push_enabled ON darts_native_push_subscriptions(enabled);
 CREATE TABLE IF NOT EXISTS darts_native_push_outbox (
     id BIGSERIAL PRIMARY KEY,

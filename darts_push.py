@@ -47,12 +47,16 @@ def valid_push_key(value: str) -> str:
 def _event_identity(league: str, event: dict) -> tuple[str, str] | None:
     event_type = str(event.get("type") or "")
     match_id = event.get("matchId")
-    if event_type not in {"180", "high_finish", "leg", "game", "match"} or not isinstance(match_id, int):
+    if event_type not in PUSH_EVENT_TYPES or not isinstance(match_id, int):
         return None
     if event_type in {"180", "high_finish"}:
         identity = f"{event.get('performanceId') or event.get('player')}|{event.get('value')}|{event.get('count')}"
     elif event_type == "leg":
         identity = f"{event.get('gameId')}|{event.get('winnerSide')}|{event.get('legCount')}"
+    elif event_type == "player_start":
+        if not event.get("gameId") or not event.get("player"):
+            return None
+        identity = f"{event.get('gameId')}|{event.get('playerSide')}|{event.get('player')}"
     elif event_type == "game":
         identity = f"{event.get('gameId')}|{event.get('homeLegs')}|{event.get('awayLegs')}"
     else:
@@ -70,7 +74,12 @@ def barver_push_event(league: str, event: dict) -> dict | None:
     match_id = event["matchId"]
     player = str(event.get("player") or team_name).strip()[:100]
     count = event.get("count") if isinstance(event.get("count"), int) and event.get("count") > 0 else 1
-    if event_type == "180":
+    if event_type == "player_start":
+        title = f"🎯 {player} startet"
+        board = str(event.get("board") or "").strip()[:20]
+        body = f"{team_name}" + (f" · Board {board}" if board else "") + " · Partie ist jetzt live"
+        tag = f"clubiq-start-{event.get('gameId')}-{team_match.group(1)}"
+    elif event_type == "180":
         title = f"🎯 180! {player}"
         body = team_name + (f" · bereits {count}× 180" if count > 1 else "")
         tag = f"clubiq-180-{match_id}-{player.casefold().replace(' ', '-')}"
@@ -155,18 +164,60 @@ def barver_180_candidates(league: str, center: dict) -> list[dict]:
 
 def push_payload(event: dict) -> str:
     return json.dumps(
-        {key: event[key] for key in ("title", "body", "url", "tag")},
+        {**{key: event[key] for key in ("title", "body", "url", "tag")},
+         "matchId": event.get("match_id"), "eventId": event.get("event_id"),
+         **({"scope": "training", "trainingId": event["training_id"]} if event.get("scope") == "training" else {})},
         ensure_ascii=False,
         separators=(",", ":"),
     )
 
 
-PUSH_EVENT_TYPES = {"180", "high_finish", "leg", "game", "match"}
+PUSH_EVENT_TYPES = {"180", "high_finish", "leg", "game", "match", "player_start"}
 
 
-def subscription_matches(event: dict, teams: list, players: list, event_types: list) -> bool:
+def subscription_matches(event: dict, teams: list, players: list, event_types: list, training: bool = False) -> bool:
     """Teams OR followed players, always limited by the selected event types."""
     if event.get("event_type") not in event_types:
         return False
     names = {name.strip().casefold() for name in str(event.get("player") or "").split(" & ")}
+    if event.get("scope") == "training":
+        return training is True and (not players or bool(names & {name.strip().casefold() for name in players}))
     return event.get("team") in teams or bool(names & {name.strip().casefold() for name in players})
+
+
+def training_push_event(event: dict) -> dict | None:
+    event_id = event.get("trainingId")
+    if event.get("scope") != "training" or isinstance(event_id, bool) or not isinstance(event_id, int) or not 0 < event_id <= 10000000:
+        return None
+    identity = _event_identity(f"training:{event_id}", event)
+    if not identity:
+        return None
+    kind, raw_key = identity
+    key = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+    player = " ".join(str(event.get("player") or "").split())[:100]
+    if not player:
+        return None
+    titles = {"180": "Training · 180er", "high_finish": "Training · High Finish",
+              "leg": "Training · Leg gewonnen", "game": "Training · Ergebnis",
+              "player_start": "Training · Partie startet"}
+    if kind not in titles:
+        return None
+    body = event.get("text") or player
+    if kind == "high_finish":
+        value = event.get("value")
+        if isinstance(value, bool) or not isinstance(value, int) or not 100 <= value <= 170:
+            return None
+        body = f"{player} checkt {value}."
+    elif kind == "180":
+        if event.get("value") != 180:
+            return None
+        body = f"{player} wirft 180."
+    elif kind == "leg":
+        body = f"Leg {event.get('legCount')} für {player}."
+    elif kind == "player_start":
+        body = f"{player} · Board {event.get('board') or '–'}"
+    return {"event_id": key, "event_type": kind, "team": "T", "player": player,
+            "match_id": event_id, "scope": "training", "training_id": event_id,
+            "title": titles[kind], "body": str(body)[:600],
+            "url": f"https://barverdarts.clubiq.party/app/?training={event_id}",
+            "tag": f"clubiq-training-{key}"}
