@@ -32,9 +32,11 @@ from darts_ranking import get_darts_ranking
 from darts_tv import get_darts_tv
 from darts_training import get_trainings, get_training
 from darts_feed import DartsFeedUnavailable, get_darts_center, get_darts_feed, get_darts_match, get_darts_player_stats, get_darts_season
-from darts_live import darts_live_hub
+from darts_live import darts_live_hub, timestamp_ns
+from darts_web_app import router as darts_web_app_router
+from darts_training_live import training_live_monitor
 from darts_tournament import get_tournament, get_series_tournament, preview_tournament, SOURCE as DEFAULT_TOURNAMENT_SOURCE
-from darts_push import barver_push_candidates, push_payload, valid_push_endpoint, valid_push_key, subscription_matches, PUSH_EVENT_TYPES
+from darts_push import barver_push_candidates, barver_push_event, push_payload, valid_push_endpoint, valid_push_key, subscription_matches, training_push_event, PUSH_EVENT_TYPES
 from radio_directory import DirectoryUnavailable, get_station, search_stations
 from radio_logos import CACHE_SECONDS, FAILURE_SECONDS, cached_logo
 from music_library import duration_ms, register_library
@@ -94,7 +96,7 @@ def _native_fcm_send(token: str, payload: dict) -> None:
             body=str(payload.get("body") or "")[:240],
         ),
         data={key: str(payload.get(key) or "")[:500] for key in
-              ("url", "tag", "eventId", "matchId", "eventType", "team", "player")},
+              ("url", "tag", "eventId", "matchId", "eventType", "team", "player", "scope", "trainingId")},
         android=firebase_messaging.AndroidConfig(
             priority="high", ttl=300,
             notification=firebase_messaging.AndroidNotification(
@@ -374,15 +376,15 @@ def _store_and_deliver_darts_events(detected: list[dict], stale: bool = False) -
             )
             if cur.fetchone()[0] and has_event_history and event.get("deliver"):
                 new_events.append(event)
-        cur.execute("SELECT endpoint, p256dh, auth, teams, players, event_types FROM darts_push_subscriptions WHERE enabled = TRUE;")
+        cur.execute("SELECT endpoint, p256dh, auth, teams, players, event_types, training FROM darts_push_subscriptions WHERE enabled = TRUE;")
         subscriptions = cur.fetchall()
-        cur.execute("SELECT token_hash, teams, players, event_types FROM darts_native_push_subscriptions WHERE enabled = TRUE;")
+        cur.execute("SELECT token_hash, teams, players, event_types, training FROM darts_native_push_subscriptions WHERE enabled = TRUE;")
         native_subscriptions = cur.fetchall()
         for event in new_events:
             if not event.get("deliver"):
                 continue
-            for token_digest, teams, players, event_types in native_subscriptions:
-                if subscription_matches(event, teams or [], players or [], event_types or []):
+            for token_digest, teams, players, event_types, *training_filter in native_subscriptions:
+                if subscription_matches(event, teams or [], players or [], event_types or [], bool(training_filter and training_filter[0])):
                     cur.execute(
                         """INSERT INTO darts_native_push_outbox
                            (event_id, token_hash, payload, expires_at)
@@ -399,8 +401,8 @@ def _store_and_deliver_darts_events(detected: list[dict], stale: bool = False) -
         conn.commit()
     expired, sent, failed = [], 0, 0
     for event in new_events:
-        for endpoint, p256dh, auth, teams, players, event_types in subscriptions:
-            if not configured or not subscription_matches(event, teams or [], players or [], event_types or []):
+        for endpoint, p256dh, auth, teams, players, event_types, *training_filter in subscriptions:
+            if not configured or not subscription_matches(event, teams or [], players or [], event_types or [], bool(training_filter and training_filter[0])):
                 continue
             try:
                 webpush(
@@ -448,13 +450,13 @@ def deliver_native_darts_push_outbox() -> None:
             try:
                 event_payload = payload if isinstance(payload, dict) else json.loads(payload)
                 with db_connect() as conn, conn.cursor() as cur:
-                    cur.execute("SELECT teams, players, event_types FROM darts_native_push_subscriptions WHERE token_hash=%s AND enabled=TRUE;", (token_digest,))
+                    cur.execute("SELECT teams, players, event_types, training FROM darts_native_push_subscriptions WHERE token_hash=%s AND enabled=TRUE;", (token_digest,))
                     current_filters = cur.fetchone()
                 is_test = event_payload.get("isTest") is True
                 if not current_filters or (not is_test and not subscription_matches({
                     "team": event_payload.get("team"), "player": event_payload.get("player"),
-                    "event_type": event_payload.get("eventType"),
-                }, current_filters[0] or [], current_filters[1] or [], current_filters[2] or [])):
+                    "event_type": event_payload.get("eventType"), "scope": event_payload.get("scope"),
+                }, current_filters[0] or [], current_filters[1] or [], current_filters[2] or [], bool(len(current_filters) > 3 and current_filters[3]))):
                     with db_connect() as conn, conn.cursor() as cur:
                         cur.execute("UPDATE darts_native_push_outbox SET sent_at=CURRENT_TIMESTAMP WHERE id=%s;", (outbox_id,))
                         conn.commit()
@@ -546,6 +548,24 @@ def deliver_darts_live_events() -> None:
         print(f"[DARTS LIVE PUSH] {type(exc).__name__}: Ereignisse werden durch den REST-Abgleich nachgeholt.")
 
 
+def poll_darts_training_live() -> None:
+    training_live_monitor.poll()
+    events = training_live_monitor.drain_events()
+    detected = []
+    for raw in events:
+        age = datetime.now(timezone.utc).timestamp() - timestamp_ns(raw.get("occurred_at")) / 1e9
+        if not 0 <= age <= 180:
+            continue
+        event = training_push_event(raw)
+        if event:
+            detected.append({**event, "occurred_at": raw.get("occurred_at"), "deliver": True})
+    if detected:
+        try:
+            _store_and_deliver_darts_events(detected)
+        except psycopg.Error:
+            training_live_monitor.requeue_events(events)
+
+
 def warm_darts_season() -> None:
     """Keep the expensive 3K season overview ready before a visitor opens it."""
     try:
@@ -580,6 +600,7 @@ async def lifespan(_: FastAPI):
     scheduler.add_job(deliver_native_darts_push_outbox, "interval", seconds=10, max_instances=1, coalesce=True)
     scheduler.add_job(cleanup_native_darts_push, "interval", hours=24, max_instances=1, coalesce=True)
     scheduler.add_job(sync_darts_live_groups, "interval", seconds=10, max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(seconds=2))
+    scheduler.add_job(poll_darts_training_live, "interval", seconds=10, max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(seconds=3))
     scheduler.add_job(deliver_darts_live_events, "interval", seconds=2, max_instances=1, coalesce=True)
     scheduler.add_job(warm_darts_season, "interval", minutes=9, max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(seconds=12))
     scheduler.add_job(warm_darts_player_stats, "interval", minutes=55, max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(seconds=35))
@@ -591,6 +612,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="ClubIQ Music Voting API", lifespan=lifespan)
+app.include_router(darts_web_app_router)
 app.mount("/pics", StaticFiles(directory="pics"), name="pics")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -652,7 +674,8 @@ class DartsPushSubscribe(BaseModel):
     keys: DartsPushKeys
     teams: list[str] = Field(default_factory=lambda: ["A", "B", "C", "D"], max_length=4)
     players: list[str] = Field(default_factory=list, max_length=100)
-    eventTypes: list[str] = Field(default_factory=lambda: sorted(PUSH_EVENT_TYPES), max_length=5)
+    training: bool = False
+    eventTypes: list[str] = Field(default_factory=lambda: sorted(PUSH_EVENT_TYPES), max_length=6)
 
 
 class DartsPushUnsubscribe(BaseModel):
@@ -665,7 +688,8 @@ class DartsNativePushRequest(BaseModel):
     deviceSecret: str = Field(pattern=r"^[a-fA-F0-9]{64}$")
     teams: list[str] = Field(default_factory=lambda: ["A", "B", "C", "D"], max_length=4)
     players: list[Annotated[str, Field(min_length=1, max_length=100)]] = Field(default_factory=list, max_length=100)
-    eventTypes: list[str] = Field(default_factory=lambda: sorted(PUSH_EVENT_TYPES), max_length=5)
+    training: bool = False
+    eventTypes: list[str] = Field(default_factory=lambda: sorted(PUSH_EVENT_TYPES), max_length=6)
 
 
 class DartsPresenceHeartbeat(BaseModel):
@@ -877,6 +901,14 @@ def tournament_display():
 @app.get("/training")
 def training_display():
     return FileResponse("turnier.html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/api/v1/darts/training/live")
+def darts_training_live(response: Response, event_id: int = Query(ge=1, le=10000000)):
+    response.headers["Cache-Control"] = "no-store"
+    if not any(e["id"] == event_id for e in get_trainings().get("events", [])):
+        raise HTTPException(status_code=404, detail="Dieses Training ist noch nicht hinterlegt.")
+    return training_live_monitor.snapshot(event_id)
 
 
 @app.get("/api/v1/darts/trainings")
@@ -1868,12 +1900,13 @@ def darts_push_config():
     return {
         "available": bool(DARTS_VAPID_PUBLIC_KEY and DARTS_VAPID_PRIVATE_KEY and webpush),
         "publicKey": DARTS_VAPID_PUBLIC_KEY,
+        "eventTypes": sorted(PUSH_EVENT_TYPES), "trainingAvailable": True,
     }
 
 
 @app.get("/api/v1/darts/push/native/config")
 def darts_native_push_config():
-    return {"available": native_fcm_configured(), "eventTypes": sorted(PUSH_EVENT_TYPES),
+    return {"available": native_fcm_configured(), "eventTypes": sorted(PUSH_EVENT_TYPES), "trainingAvailable": True,
             "teams": ["A", "B", "C", "D"], "players": []}
 
 
@@ -1932,17 +1965,17 @@ def darts_native_push_subscribe(payload: DartsNativePushRequest, request: Reques
                     cur.execute("DELETE FROM darts_native_push_outbox WHERE token_hash=%s;", (owned[1],))
                 cur.execute("""UPDATE darts_native_push_subscriptions
                     SET token=%s, token_hash=%s, teams=%s::jsonb, players=%s::jsonb,
-                        event_types=%s::jsonb, enabled=TRUE, updated_at=CURRENT_TIMESTAMP
+                        event_types=%s::jsonb, training=%s, enabled=TRUE, updated_at=CURRENT_TIMESTAMP
                     WHERE id=%s;""",
-                    (payload.token, token_digest, json.dumps(teams), json.dumps(players), json.dumps(event_types), owned[0]))
+                    (payload.token, token_digest, json.dumps(teams), json.dumps(players), json.dumps(event_types), payload.training, owned[0]))
             else:
                 cur.execute("SELECT 1 FROM darts_native_push_subscriptions WHERE token_hash=%s;", (token_digest,))
                 if cur.fetchone():
                     raise HTTPException(status_code=403, detail="Dieses Gerät ist bereits registriert.")
                 cur.execute("""INSERT INTO darts_native_push_subscriptions
-                    (token, token_hash, secret_hash, teams, players, event_types)
-                    VALUES (%s,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb);""",
-                    (payload.token, token_digest, secret_digest, json.dumps(teams), json.dumps(players), json.dumps(event_types)))
+                    (token, token_hash, secret_hash, teams, players, event_types, training)
+                    VALUES (%s,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb,%s);""",
+                    (payload.token, token_digest, secret_digest, json.dumps(teams), json.dumps(players), json.dumps(event_types), payload.training))
             conn.commit()
     except psycopg.errors.UniqueViolation as exc:
         raise HTTPException(status_code=409, detail="Geräteregistrierung kollidiert; bitte erneut versuchen.") from exc
@@ -1973,6 +2006,11 @@ def darts_native_push_test(payload: DartsNativePushRequest, request: Request,
     test_payload = {"title": "ClubIQ Darts", "body": "Testmeldung – Push ist eingerichtet.",
                     "url": "https://barverdarts.clubiq.party/", "tag": "clubiq-test",
                     "eventId": test_id, "eventType": "test", "matchId": "", "team": "", "player": "", "isTest": True}
+    if payload.training:
+        training_id = get_trainings().get("selectedId")
+        if training_id:
+            test_payload.update(scope="training", trainingId=training_id,
+                                title="Barver Darts · Trainingstest", body="Testmeldung für dein Vereinstraining.")
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute("""UPDATE darts_native_push_subscriptions SET last_test_at=CURRENT_TIMESTAMP
                     WHERE token_hash=%s AND secret_hash=%s AND enabled=TRUE
@@ -2029,8 +2067,8 @@ def darts_push_subscribe(payload: DartsPushSubscribe, x_clubiq_push: str | None 
     with db_connect() as conn, conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO darts_push_subscriptions (endpoint, endpoint_hash, p256dh, auth, teams, players, event_types, enabled)
-            VALUES (%s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, TRUE)
+            INSERT INTO darts_push_subscriptions (endpoint, endpoint_hash, p256dh, auth, teams, players, event_types, training, enabled)
+            VALUES (%s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, TRUE)
             ON CONFLICT (endpoint) DO UPDATE SET
               endpoint_hash = EXCLUDED.endpoint_hash,
               p256dh = EXCLUDED.p256dh,
@@ -2038,13 +2076,52 @@ def darts_push_subscribe(payload: DartsPushSubscribe, x_clubiq_push: str | None 
               teams = EXCLUDED.teams,
               players = EXCLUDED.players,
               event_types = EXCLUDED.event_types,
+              training = EXCLUDED.training,
               enabled = TRUE,
               updated_at = CURRENT_TIMESTAMP;
             """,
-            (endpoint, endpoint_hash, p256dh, auth, json.dumps(teams), json.dumps(players), json.dumps(event_types)),
+            (endpoint, endpoint_hash, p256dh, auth, json.dumps(teams), json.dumps(players), json.dumps(event_types), payload.training),
         )
         conn.commit()
     return {"ok": True, "teams": teams}
+
+
+@app.post("/api/v1/darts/push/test")
+def darts_web_push_test(payload: DartsPushSubscribe, x_clubiq_push: str | None = Header(default=None)):
+    require_push_intent(x_clubiq_push)
+    if not DARTS_VAPID_PUBLIC_KEY or not DARTS_VAPID_PRIVATE_KEY or webpush is None:
+        raise HTTPException(status_code=503, detail="Push ist gerade nicht verfügbar.")
+    try:
+        endpoint = valid_push_endpoint(payload.endpoint)
+        p256dh, auth = valid_push_key(payload.keys.p256dh), valid_push_key(payload.keys.auth)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT p256dh, auth FROM darts_push_subscriptions WHERE endpoint=%s AND enabled=TRUE;", (endpoint,))
+        owned = cur.fetchone()
+        if not owned or not secrets.compare_digest(owned[0], p256dh) or not secrets.compare_digest(owned[1], auth):
+            raise HTTPException(status_code=403, detail="Geräteregistrierung nicht gefunden.")
+        cur.execute("""UPDATE darts_push_subscriptions SET last_test_at=CURRENT_TIMESTAMP
+                       WHERE endpoint=%s AND (last_test_at IS NULL OR last_test_at < CURRENT_TIMESTAMP - INTERVAL '1 minute')
+                       RETURNING id;""", (endpoint,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=429, detail="Bitte eine Minute bis zum nächsten Test warten.")
+        conn.commit()
+    notification = {"title": "Barver Darts · Test", "body": "Testmeldung – Push ist eingerichtet.",
+                    "url": "https://barverdarts.clubiq.party/app/", "tag": "clubiq-app-test",
+                    "eventId": secrets.token_hex(16), "eventType": "test"}
+    if payload.training:
+        training_id = get_trainings().get("selectedId")
+        if training_id:
+            notification.update(scope="training", trainingId=training_id,
+                                title="Barver Darts · Trainingstest", body="Testmeldung für dein Vereinstraining.")
+    try:
+        webpush(subscription_info={"endpoint": endpoint, "keys": {"p256dh": p256dh, "auth": auth}},
+                data=json.dumps(notification), vapid_private_key=DARTS_VAPID_PRIVATE_KEY,
+                vapid_claims={"sub": DARTS_VAPID_SUBJECT}, ttl=300)
+    except WebPushException as exc:
+        raise HTTPException(status_code=503, detail="Testmeldung konnte gerade nicht zugestellt werden.") from exc
+    return {"ok": True}
 
 
 @app.get("/api/v1/darts/highlights")

@@ -4,13 +4,13 @@ const {chromium}=require('playwright');
 const dist=path.resolve(__dirname,'../dist');
 let phase=0,fail=false,reportPending=true;
 const board=(id,name,points,current)=>({id,board:String(id),active:true,finished:false,lastUpdateNs:Date.now()*1e6,currentPlayerIndex:current,teamScoreHome:phase?6:5,teamScoreGuest:4,home:{name,points,legs:2,average:61.5,lastScore:180},guest:{name:'Demo-Gast '+id,points:410,legs:1,average:55.4,lastScore:60}});
-const match=()=>({id:901,home:'SV Barver Darts A',away:'Demo-Gäste',barverTeam:'A',kind:phase===2?'final':'live',score:phase===2?'8:4':'4:4',plannedAt:new Date().toISOString()});
+const match=()=>({id:901,home:'SV Barver Darts A',away:'Demo-Gäste',barverTeam:'A',kind:phase===2?'final':'live',score:phase===2?'8:4':'4:4',plannedAt:new Date().toISOString(),barverSides:{A:'home'},homeVenue:{name:'Demo-Verein',street:'Teststraße 1',postalCode:'12345',city:'Demo-Stadt'}});
 const server=http.createServer(async(req,res)=>{
   const p=new URL(req.url,'http://localhost').pathname;
   if(p.startsWith('/api/')){
     if(p.endsWith('/matches/901')){if(reportPending)await new Promise(resolve=>setTimeout(resolve,1500));res.writeHead(503,{'Content-Type':'application/json'}).end('{}');return;}
     if(fail){res.writeHead(503,{'Content-Type':'application/json'}).end('{}');return;}
-    const data=p.endsWith('/season')?{matches:[match()],teams:[{code:'A',roster:[]}]}:p.endsWith('/live')?{groups:[{groupKey:'901',matches:[board(1,'Jannik Demo',phase===3?80:phase?140:320,phase?1:0),board(2,'Gastspieler Demo',201,1)]}]}:p.endsWith('/player-profiles')?{players:{}}:{items:[]};
+    const data=p.endsWith('/season')?{matches:[match(),...Array.from({length:8},(_,i)=>({id:902+i,home:'SV Barver Darts A',away:'Demo-Gäste '+i,barverTeam:'A',kind:'upcoming',plannedAt:new Date(Date.now()+(i+1)*86400000).toISOString()}))],teams:[{code:'A',league:{key:'demo',name:'Demo-Liga'},roster:[{id:1,name:'Jannik Demo',role:'Spieler'}]}],leagues:[{league:{key:'demo',name:'Demo-Liga'},standings:[{name:'SV Barver Darts A',rank:1,played:3,pointsFor:6,pointsAgainst:0,barver:true}]}]}:p.endsWith('/live')?{groups:[{groupKey:'901',matches:[board(1,'Jannik Demo',phase===3?80:phase?140:320,phase?1:0),board(2,'Gastspieler Demo',201,1)]}]}:p.endsWith('/player-profiles')?{players:{}}:{items:[]};
     res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify(data));return;
   }
   const file=p==='/'?'index.html':p.slice(1);if(!['index.html','app.js','app.css','crest.webp'].includes(file)){res.writeHead(404).end();return;}
@@ -24,8 +24,12 @@ const server=http.createServer(async(req,res)=>{
   try{
     const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(`http://127.0.0.1:${server.address().port}/`);
+    await page.locator('.welcome').waitFor();await page.locator('.welcome .favorite-choice').filter({hasText:'Barver A'}).click();
+    await page.waitForFunction(()=>!document.querySelector('.welcome'));
     await page.getByRole('button',{name:'Spiele',exact:true}).click();
     await page.locator('main .card').filter({hasText:'SV Barver Darts A'}).first().click();
+    assert.equal(await page.getByRole('button',{name:'Route öffnen',exact:true}).count(),1);
+    const download=page.waitForEvent('download');await page.getByRole('button',{name:'Zum Kalender hinzufügen',exact:true}).click();const calendar=await download;assert.equal(calendar.suggestedFilename(),'barver-901.ics');assert.match(await fs.readFile(await calendar.path(),'utf8'),/LOCATION:Demo-Verein/);
     const live=page.getByRole('region',{name:'Live-Spielstand'});
     await live.getByText('320',{exact:true}).waitFor();
     assert.equal(await live.locator('.live-board').count(),2,'all parallel boards are visible before report completes');
@@ -54,9 +58,53 @@ const server=http.createServer(async(req,res)=>{
     assert.equal(await live.locator('.live-board').count(),0,'official finish removes obsolete live boards');
     assert.equal(await page.locator('.match-summary .score').innerText(),'8:4');
     await page.keyboard.press('Escape');await page.getByRole('button',{name:'Teams',exact:true}).click();
-    await page.getByRole('button',{name:'Barver A',exact:true}).click();
+    assert.equal(await page.locator('main .standings tbody tr').count(),1);
+    await page.locator('.team-compact').filter({hasText:'Barver A'}).click();
     assert.match(await page.locator('#detailContent').innerText(),/Kader/);
     assert.equal(await live.count(),0,'team dialog is not overwritten by match polling');
+    await page.locator('#detail summary').filter({hasText:'Kader'}).click();
+    await page.locator('#detail .member').click();
+    await page.getByRole('button',{name:'‹ Zurück zum Team',exact:true}).click();
+    assert.equal(await page.locator('#detail .member').isVisible(),true,'team roster stays expanded on return');
+    await page.keyboard.press('Escape');
+    await page.getByRole('button',{name:'Mein Darts',exact:true}).click();
+    assert.equal(await page.locator('main input').count(),0,'settings starts as compact menu');
+    await page.getByRole('button',{name:/Darstellung & Lieblingsteam/}).click();
+    await page.getByLabel('Darstellung',{exact:true}).selectOption('light');
+    assert.equal(await page.locator('html').getAttribute('data-theme'),'light');
+    await page.getByLabel('Darstellung',{exact:true}).selectOption('dark');
+    await page.reload();
+    await page.waitForFunction(()=>document.documentElement.dataset.theme==='dark');
+    await page.getByRole('button',{name:'Mein Darts',exact:true}).click();
+    await page.getByRole('button',{name:/Darstellung & Lieblingsteam/}).click();
+    assert.equal(await page.getByLabel('Darstellung',{exact:true}).inputValue(),'dark','appearance persists after reload');
+    await page.getByLabel('Darstellung',{exact:true}).selectOption('system');
+    await page.emulateMedia({colorScheme:'light'});
+    await page.waitForFunction(()=>document.documentElement.dataset.theme==='light');
+    await page.emulateMedia({colorScheme:'dark'});
+    await page.waitForFunction(()=>document.documentElement.dataset.theme==='dark');
+    await page.setViewportSize({width:320,height:740});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'settings fit narrow phones');
+    await page.getByRole('button',{name:'‹ Zurück zum Menü',exact:true}).click();
+    await page.getByRole('button',{name:/Teams, Spieler & Ereignisse/}).click();
+    await page.getByRole('button',{name:'Alle Ergebnisse meines Teams',exact:true}).click();
+    await page.locator('summary').filter({hasText:'Ereignisse'}).click();
+    assert.equal(await page.locator('[data-focus=eventTypes-game]').isChecked(),true);
+    assert.equal(await page.locator('[data-focus=eventTypes-match]').isChecked(),true);
+    assert.equal(await page.locator('[data-focus=eventTypes-player_start]').isChecked(),false);
+    await page.getByRole('button',{name:'Daten aktualisieren',exact:true}).click();
+    await page.waitForFunction(()=>!document.querySelector('#refresh').disabled);
+    assert.equal(await page.locator('[data-panel=selection-eventTypes]').getAttribute('open'),'','expanded menu survives refresh');
+    await page.getByRole('button',{name:'Spiele',exact:true}).click();
+    await page.evaluate(()=>window.scrollTo(0,240));
+    const scroll=await page.evaluate(()=>scrollY);
+    await page.getByRole('button',{name:'Mein Darts',exact:true}).click();
+    await page.getByRole('button',{name:'Spiele',exact:true}).click();
+    assert.equal(await page.evaluate(()=>scrollY),scroll,'tab scroll position restored');
+    await page.getByRole('button',{name:'Start',exact:true}).click();
+    assert.equal(await page.locator('.welcome').count(),0,'onboarding stays dismissed');
+    const preview=path.resolve(__dirname,'../../../../../2026-10-04/dies-ist-einer-von-zwei-getrennten/outputs');
+    await fs.mkdir(preview,{recursive:true});await page.screenshot({path:path.join(preview,'Barver-App-0.1.4-Start-Demo.png'),fullPage:true});
     assert.deepEqual(errors,[]);
     console.log('Browser OK: immediate 2-board live view, score updates, current thrower, report failure, reconnect warning, final, mobile/tablet, dialog navigation.');
   }finally{await browser.close();server.close();}

@@ -3,10 +3,21 @@ import unittest
 
 from datetime import datetime, timezone
 
-from darts_push import barver_180_candidates, barver_180_event, barver_push_candidates, barver_push_event, push_payload, valid_push_endpoint, valid_push_key
+from darts_push import barver_180_candidates, barver_180_event, barver_push_candidates, barver_push_event, push_payload, valid_push_endpoint, valid_push_key, subscription_matches
 
 
 class DartsPushTests(unittest.TestCase):
+    def test_player_start_is_opt_in_and_has_stable_identity(self):
+        raw = {"type": "player_start", "matchId": 12, "gameId": "board-game-1", "playerSide": "home", "board": "2", "team": "SV Barver Darts A", "player": "Jannik & Max"}
+        event = barver_push_event("live", raw)
+        self.assertIn("startet", event["title"])
+        self.assertIn("Board 2", event["body"])
+        self.assertFalse(subscription_matches(event, ["A"], [], ["game", "match"]))
+        self.assertTrue(subscription_matches(event, [], ["Max"], ["player_start"]))
+        self.assertEqual(event["event_id"], barver_push_event("live", {**raw, "board": "3"})["event_id"])
+        self.assertNotEqual(event["event_id"], barver_push_event("live", {**raw, "gameId": "board-game-2"})["event_id"])
+        self.assertIsNone(barver_push_event("live", {**raw, "gameId": ""}))
+
     def test_normalizes_barver_180_and_keeps_player_name(self):
         event = barver_180_event("kl04", {
             "type": "180", "matchId": 123, "player": "Jannik Kläning",
