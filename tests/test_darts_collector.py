@@ -194,6 +194,25 @@ class CollectorTests(unittest.TestCase):
             self.assertTrue(module.collected_snapshot("player-stats",960,later)["players"]["42"]["statsStale"])
             self.assertFalse(payload["players"]["42"]["statsStale"])
 
+    def test_names_only_table_never_overwrites_an_official_table(self):
+        good={**self.good,"league":{"key":"kl04"},"selectedRound":{"id":34272},
+              "standings":[{"rank":1,"rankSource":"3k-placement"},{"rank":3,"rankSource":"3k-placement"}]}
+        # Official placements can have gaps; the collector must preserve them.
+        self.assertEqual(module.verified_payload("center:kl04:latest",good,self.now)["standings"],good["standings"])
+        writer=Mock()
+        bad={**good,"standings":[{"name":"Team","rank":None}]}
+        status=self.collector(lambda:[("center:kl04:latest",bad)],writer).cycle()
+        self.assertFalse(status["allSourcesFresh"])
+        writer.assert_not_called()
+
+    def test_unavailable_and_nested_partial_data_are_rejected(self):
+        cases=[("ticker",{**self.good,"available":False}),
+               ("player-stats",{**self.good,"statsSchema":1,"players":{"42":{"statsStale":True}}}),
+               ("training:32751",{**self.good,"event":{"id":32751},"performancesUnavailable":True})]
+        for key,payload in cases:
+            with self.assertRaises(ValueError):
+                module.verified_payload(key,payload,self.now)
+
 
 module_collector=module.Collector
 

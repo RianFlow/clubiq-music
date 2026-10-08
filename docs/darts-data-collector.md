@@ -18,7 +18,7 @@ Ein neu beginnendes Spiel wird beim nächsten normalen Abruf erkannt. Ausfälle 
 
 ## Schutz der gespeicherten Daten
 
-Nur vollständige, frisch bestätigte Antworten werden übernommen. Veraltete Ausweichdaten, falsche Ereignisse und fehlgeschlagene Abrufe überschreiben keinen erfolgreichen Stand. Der echte Zeitpunkt des Datenabrufs bleibt erhalten. Eine ältere parallel eintreffende Antwort kann die gespeicherten Daten nicht zurücksetzen.
+Nur vollständige, frisch bestätigte Antworten werden übernommen. Veraltete Ausweichdaten, falsche Ereignisse und fehlgeschlagene Abrufe überschreiben keinen erfolgreichen Stand. Tabellen müssen ihre Platzierungen aus 3K enthalten; reine Mannschaftslisten gelten nicht als frische Tabelle. Fehlende Saisonrunden, veraltete einzelne Spielerstatistiken und nicht verfügbare Trainingsdetails werden ebenfalls abgewiesen. Der echte Zeitpunkt des Datenabrufs bleibt erhalten. Eine ältere parallel eintreffende Antwort kann die gespeicherten Daten nicht zurücksetzen.
 
 Der Helfer schreibt in die vorhandene Tabelle `darts_feed_snapshots`, mit dem getrennten Schlüsselpräfix `collector:`. Seine eingebundenen Parser dürfen keine normalen Website-Snapshots nebenbei schreiben. Im Prüfbetrieb werden überhaupt keine Datenbankdaten geändert.
 
@@ -44,11 +44,11 @@ python darts_collector.py --once --dry-run --only center-kl04 --status-file /tmp
 
 ### Optionaler anderer Serverausgang
 
-Der Helfer kann seine HTTPS-Abrufe über einen festen Proxy ausführen. Dafür wird auf dem Server `DARTS_COLLECTOR_HTTPS_PROXY` in der nicht versionierten Umgebung hinterlegt. Die zusätzliche Compose-Datei reicht diesen Wert ausschließlich an den Helfer weiter; die Website und die Datenbankverbindung erhalten ihn nicht. Ohne diesen Wert bleiben direkte Abrufe eingestellt. Es wurde noch kein Proxy bereitgestellt oder aktiviert.
+Der Helfer kann seine HTTPS-Abrufe über einen festen Proxy ausführen. Dafür wird auf dem Server `DARTS_COLLECTOR_HTTPS_PROXY` in der nicht versionierten Umgebung hinterlegt. Die zusätzliche Compose-Datei reicht diesen Wert ausschließlich an den Helfer weiter; die Website und die Datenbankverbindung erhalten ihn nicht. Ohne diesen Wert bleiben direkte Abrufe eingestellt. Ein dauerhafter Proxy ist noch nicht aktiviert; ein davon getrennter, zeitlich begrenzter Server-Test war erfolgreich.
 
 Der Proxy benötigt eine echte erreichbare Ausgangsadresse und muss die HTTPS-Verbindung zur Originalquelle unterstützen. Die normale Prüfung des 3K-Zertifikats bleibt aktiv. Ein Proxy darf nicht mit einer frei erfundenen Absender-IP verwechselt werden: Die Antworten müssen den tatsächlichen Verbindungspartner erreichen. Vor einer Umschaltung ist derselbe vollständige serverseitige Prüflauf erforderlich. Proxy-Zugangsdaten gehören ausschließlich in die geschützte Serverumgebung und dürfen nicht in Git oder Diagnoseausgaben erscheinen.
 
-Ein solcher Ausgang benötigt keinen Vereins-PC. Ob er die aktuelle Störung behebt, hängt von ihrer noch ungeklärten Ursache ab; eine bestätigte Sperre der Vereinsserver-IP liegt bislang nicht vor.
+Ein solcher Ausgang benötigt keinen Vereins-PC. Der Vergleichstest vom 8. Oktober bestätigt, dass ein anderer tatsächlicher Serverausgang die aktuelle Verbindungsstörung im geprüften Zeitraum behebt. Ob die Ursache eine IP-Filterung oder eine Störung des Verbindungswegs ist, bleibt offen.
 
 Technische Grundlage: [Requests: Proxy-Unterstützung](https://requests.readthedocs.io/en/latest/user/advanced/#proxies).
 
@@ -58,7 +58,7 @@ Der Helfer wurde als eigenes Image auf dem vorhandenen Server gebaut. Container-
 
 Der separate Container `clubiq-darts-collector-check` läuft auf dem Server mit automatischem Wiederanlauf und `--dry-run`. Er besitzt keine Datenbankzugangsdaten. Er kann selbstständig weitere Quellentests durchführen, aber verändert keine Website-Daten. Image: `clubiq-darts-collector:test-20261008`; Status: `/state/status.json`.
 
-Die Quellen sind aktuell auf dem Server nicht vollständig erreichbar:
+Über den ursprünglichen direkten Serverausgang sind die Quellen nicht vollständig erreichbar:
 
 | Ziel | IPv4-Adresse | Serververbindung zu Port 443 |
 | --- | --- | --- |
@@ -70,9 +70,15 @@ Die Quellen sind aktuell auf dem Server nicht vollständig erreichbar:
 
 Ein getrennt gestarteter Server-Browser erreicht ebenfalls das Portal, aber nicht die beiden Datenserver. Die geprüften ausgehenden Firewall-Regeln enthalten keine Sperre. Die genaue Ursache der fehlenden Verbindung ist offen; eine Filterung oder Störung außerhalb des Servers ist damit noch nicht bewiesen. Ein anderer Zeitplan, eine eigene Vereins-API oder zusätzliche Browserautomation beheben diese Verbindungsstörung nicht.
 
-Ein einmaliger Vergleichstest von einem erreichbaren anderen Anschluss konnte alle acht vorgesehenen Datenbereiche erfolgreich prüfen. Dieser Vergleich ist **kein Bestandteil des dauerhaften Betriebs**. Es ist keine PC-Weiterleitung oder PC-Automation eingerichtet.
+Ein anschließender Vergleichstest lief vollständig auf dem Vereinsserver: Ein eigener kurzlebiger Container stellte einen Cloudflare-WARP-Ausgang im lokalen Proxy-Modus bereit. Nur der separate Prüfprozess nutzte diesen Ausgang. Host-Routen, Website-Container und Datenbank blieben unverändert. Die TLS-Zertifikatsprüfung blieb bei allen Anfragen eingeschaltet.
 
-Vor dem Schreibbetrieb und der Website-Aktivierung muss ein vollständiger serverseitiger Quellentest erfolgreich sein. Zusätzlich sind die veröffentlichte Git-Version und parallele App-Arbeiten erneut abzugleichen. Der Website-Leseschalter bleibt bis dahin ausgeschaltet.
+Am 8. Oktober 2026 um 20:36 Uhr und nochmals um 20:46 Uhr (Europe/Berlin) bestanden alle acht geplanten Datenbereiche. Der erste Durchlauf enthielt 134 HTTPS-Anfragen, der zweite 181 einschließlich vier zusätzlicher Detailprüfungen; keine dieser Anfragen schlug fehl. Der direkte Vergleich um 20:37 Uhr scheiterte weiterhin an beiden Datenservern. Die vier Detailprüfungen bestätigten einen fertigen Spielbericht, einen älteren KL-04-Spieltag, Training 32260 und ein DBD-Ranglistenturnier. Sie liefen über die ursprünglichen Parser im Prüfprozess, nicht über eine bereits umgestellte Live-Website.
+
+Der zeitlich begrenzte Proxy-Test wird nach Sicherung der Ergebnisse beendet. Es ist keine PC-Weiterleitung oder PC-Automation eingerichtet. Dieser kurze Test bestätigt die technische Lösung für den Verbindungsweg, aber noch keinen dauerhaft überwachten Betrieb oder die Zustellung aktiver Live-Punkte und Push-Mitteilungen. Cloudflare nennt für seinen Linux-Client drei vCPUs; der vorhandene Server hat zwei. Der erfolgreiche Test allein ersetzt daher keine Entscheidung über einen dauerhaft passenden Proxy-Dienst.
+
+Vor dem Schreibbetrieb und der Website-Aktivierung muss ein dauerhafter Serverausgang eingerichtet und überwacht werden. Außerdem müssen Abrufe außerhalb der acht gespeicherten Bereiche (etwa historische Spielberichte und andere Turniere) gezielt denselben funktionierenden Ausgang verwenden. Eine globale Proxy-Umstellung des Website-Prozesses würde auch andere Dienste betreffen und ist dafür nicht vorgesehen. Die veröffentlichte Git-Version und parallele App-Arbeiten sind erneut abzugleichen. Der Website-Leseschalter bleibt bis zur Freigabe der Veröffentlichung ausgeschaltet.
+
+Grundlagen: [Cloudflare: Linux-Client](https://developers.cloudflare.com/warp-client/get-started/linux/), [Cloudflare: lokaler Proxy-Modus](https://developers.cloudflare.com/warp-client/warp-modes/).
 
 ## Grenzen der 3K-Anbindung
 

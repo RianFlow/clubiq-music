@@ -33,22 +33,42 @@ def live_payload(payload):
                for item in [*(payload.get("matches") or []), *(payload.get("items") or [])])
 
 
+def official_table(rows):
+    return bool(rows) and all(isinstance(row, dict) and row.get("rankSource") == "3k-placement"
+                             and isinstance(row.get("rank"), int) and not isinstance(row["rank"], bool)
+                             and row["rank"] > 0 for row in rows)
+
+
 def verified_payload(key, payload, now):
     if not DATASET.fullmatch(key) or not isinstance(payload, dict):
         raise ValueError("Invalid dataset")
-    if payload.get("stale") or payload.get("degraded"):
+    if payload.get("available") is False or payload.get("stale") or payload.get("degraded"):
         raise ValueError("Incomplete source data")
     if key == "ticker" and not isinstance(payload.get("items"), list):
         raise ValueError("Invalid ticker")
     age = (now-stamp(payload.get("updatedAt"))).total_seconds()
     if not -30 <= age <= 180:
         raise ValueError("Cached answer is not a new source observation")
-    if key == "season" and (len(payload.get("teams", [])) != 4 or not payload.get("matches")):
-        raise ValueError("Incomplete season")
+    if key == "season":
+        teams, leagues = payload.get("teams") or [], payload.get("leagues") or []
+        if len(teams) != 4 or {team.get("code") for team in teams} != {"A","B","C","D"} or not payload.get("matches"):
+            raise ValueError("Incomplete season")
+        if len(leagues) != 2 or {item.get("league",{}).get("key") for item in leagues} != {"kl04","kk11"}:
+            raise ValueError("Incomplete season leagues")
+        if payload.get("warnings") or payload.get("specialEventsAvailable") is not True:
+            raise ValueError("Incomplete season sources")
+        if any(item.get("degraded") or item.get("missingRoundIds") or not item.get("totalRoundCount")
+               or item.get("loadedRoundCount") != item["totalRoundCount"]
+               or not official_table(item.get("standings")) for item in leagues):
+            raise ValueError("Incomplete season rounds or official tables")
     if key.startswith("center:") and (payload.get("league", {}).get("key") != key.split(":")[1] or not payload.get("standings") or not payload.get("selectedRound", {}).get("id")):
         raise ValueError("Wrong or incomplete league")
+    if key.startswith("center:") and not official_table(payload["standings"]):
+        raise ValueError("Official table unavailable")
     if key == "player-stats" and (payload.get("statsSchema") != 1 or not payload.get("players")):
         raise ValueError("Incomplete player statistics")
+    if key == "player-stats" and any(player.get("statsStale") for player in payload["players"].values()):
+        raise ValueError("Stale player statistics")
     if key == "training-catalog" and not payload.get("events"):
         raise ValueError("Empty training catalog")
     if key == "ranking" and (not payload.get("events") or not payload.get("rows")):
@@ -57,6 +77,8 @@ def verified_payload(key, payload, now):
         raise ValueError("Wrong training")
     if key.startswith("training:") and int(key.split(":")[1]) > 10000000:
         raise ValueError("Invalid training identifier")
+    if key.startswith("training:") and (payload.get("performancesUnavailable") or payload.get("placementsUnavailable")):
+        raise ValueError("Incomplete training details")
     # A single canonical format also makes comparisons independent of input offsets.
     return {**payload, "updatedAt":stamp(payload["updatedAt"]).astimezone(timezone.utc).isoformat(),
             "sourceConnection":"collector", "collectorObservedAt":now.isoformat()}
