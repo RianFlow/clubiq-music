@@ -71,6 +71,12 @@ class CollectorTests(unittest.TestCase):
         self.assertIsNone(status["datasets"]["ticker"]["lastSuccess"])
         self.assertNotIn("do-not-print",json.dumps(status))
 
+    def test_ranking_without_complete_calendar_is_not_written(self):
+        payload={**self.good,"events":[{"id":32680}],"rows":[{"name":"Player"}]}
+        with self.assertRaises(ValueError):
+            module.verified_payload("ranking",payload,self.now)
+        self.assertTrue(module.verified_payload("ranking",{**payload,"calendarAvailable":True},self.now)["calendarAvailable"])
+
     def test_one_broken_dataset_does_not_stop_other_tasks(self):
         collector=module.Collector({"broken":(60,Mock(side_effect=TimeoutError)),"ticker":(60,lambda:[("ticker",self.good)])},persist=Mock(),now=lambda:self.now)
         status=collector.cycle()
