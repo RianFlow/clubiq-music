@@ -10,6 +10,7 @@ import requests
 
 from darts_feed import _public_get
 from darts_resilience import load_snapshot, save_snapshot, last_known
+from darts_collector import collected_snapshot
 from darts_tournament import _load, _detail
 
 API = "https://backend4.3k-darts.com/2k-backend4/api/v1/frontend/event"
@@ -92,7 +93,10 @@ def _discover(previous):
 
 def get_trainings(force=False):
     global _catalog, _catalog_attempt
-    previous = _catalog or load_snapshot("training-catalog") or SEED
+    collected = collected_snapshot("training-catalog", 360)
+    if collected and not force:
+        return {**collected, **select_training(collected["events"])}
+    previous = collected or _catalog or load_snapshot("training-catalog") or SEED
     # Newly confirmed links must also reach visitors with an older saved catalog.
     events = list({e["id"]: e for e in [*SEED["events"], *previous["events"]]}.values())
     previous = {**previous, "events": events, **select_training(events)}
@@ -118,6 +122,9 @@ def get_training(event_id=None):
     if not isinstance(event_id, int) or isinstance(event_id, bool) or not 0 < event_id <= 10000000:
         raise ValueError("Ungültiges Training")
     key = f"training:{event_id}"
+    collected = collected_snapshot(key, 360)
+    if collected:
+        return collected
     cached = _event_cache.get(event_id)
     previous = cached[1] if cached and cached[1] else load_snapshot(key)
     now = time.monotonic()

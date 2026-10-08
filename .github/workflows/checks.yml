@@ -65,6 +65,9 @@ jobs:
         run: |
           cp .env.example .env
           docker compose config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.darts-collector.yml --profile darts-collector config --quiet
+      - name: Darts-Proxy ohne Registrierung bauen
+        run: docker build -f Dockerfile.darts-egress -t clubiq-darts-egress:check .
       - name: Web-Image bauen
         run: docker compose build web
       - name: Sicherheits- und UI-Verträge prüfen
@@ -77,3 +80,5 @@ jobs:
           docker compose run --rm --no-deps -e ARCHIVE_TEST_POSTGRES=1 web python -m unittest discover -s tests -p test_library_postgres.py
       - name: Dauerhaften Darts-Datenstand mit PostgreSQL prüfen
         run: docker compose run --rm --no-deps -e DARTS_TEST_POSTGRES=1 web python -m unittest discover -s tests -p test_darts_snapshots_postgres.py
+      - name: Automatischen Darts-Datenhelfer mit PostgreSQL prüfen
+        run: docker compose run --rm --no-deps -e DARTS_COLLECTOR_TEST_POSTGRES=1 web python -m unittest discover -s tests -p test_darts_collector_postgres.py

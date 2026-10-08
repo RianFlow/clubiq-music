@@ -1,0 +1,21 @@
+FROM python:3.12-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258
+
+# The two public Linux amd64 release assets are verified against fixed SHA-256s.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
+    && curl -fLsS --retry 2 https://github.com/ViRb3/wgcf/releases/download/v2.3.0/wgcf_2.3.0_linux_amd64 -o /usr/local/bin/wgcf \
+    && echo '01614e38c0eb5f3405232e71cfaf02d64d4809e4988ad8f5a8071af16d193405  /usr/local/bin/wgcf' | sha256sum -c - \
+    && curl -fLsS --retry 2 https://github.com/windtf/wireproxy/releases/download/v1.1.3/wireproxy_linux_amd64.tar.gz -o /tmp/wireproxy.tar.gz \
+    && echo 'e88c1d090740373fc606c1bafd81d9a5eadc642cce5667616e20e9d7a444f51c  /tmp/wireproxy.tar.gz' | sha256sum -c - \
+    && tar -xzf /tmp/wireproxy.tar.gz -C /usr/local/bin wireproxy \
+    && chmod 755 /usr/local/bin/wgcf /usr/local/bin/wireproxy \
+    && /usr/local/bin/wireproxy --version && /usr/local/bin/wgcf --help >/dev/null \
+    && rm -rf /var/lib/apt/lists/* /tmp/wireproxy.tar.gz \
+    && useradd --system --uid 10002 --no-create-home egress \
+    && mkdir -p /state /opt/darts-egress && chown egress:egress /state
+
+COPY scripts/darts-egress-start.py scripts/darts-egress-health.py /opt/darts-egress/
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 HOME=/state
+USER 10002:10002
+WORKDIR /state
+HEALTHCHECK --interval=30s --timeout=5s --start-period=150s --retries=3 CMD ["python", "/opt/darts-egress/darts-egress-health.py", "--cached"]
+ENTRYPOINT ["python", "/opt/darts-egress/darts-egress-start.py"]

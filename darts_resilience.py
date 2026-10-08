@@ -4,12 +4,14 @@ from __future__ import annotations
 from threading import Lock
 from time import monotonic
 from urllib.parse import urlsplit
+import os
 
 import psycopg
 from psycopg.types.json import Jsonb
 import requests
 
 from db_config import connection_kwargs
+from darts_transport import scoped_get
 
 
 class SourceCoolingDown(requests.RequestException):
@@ -52,7 +54,9 @@ source_recovery = PublicSourceRecovery()
 
 class PublicSession(requests.Session):
     def get(self, url, **kwargs):
-        return source_recovery.get(super().get, url, **kwargs)
+        def request(address, **options):
+            return scoped_get(super(PublicSession, self).get, address, **options)
+        return source_recovery.get(request, url, **kwargs)
 
 
 def snapshot_connection():
@@ -61,6 +65,8 @@ def snapshot_connection():
 
 def save_snapshot(key: str, payload: dict) -> None:
     # Callers pass only their public normalized DTO, never raw registration data.
+    if os.getenv("DARTS_SNAPSHOT_WRITES_DISABLED") == "1":
+        return
     if not payload.get("updatedAt") or payload.get("stale") or payload.get("degraded"):
         return
     try:

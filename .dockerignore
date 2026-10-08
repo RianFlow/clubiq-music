@@ -18,3 +18,6 @@ outputs
 secrets
 *-firebase-adminsdk-*.json
 docker-compose.override.yml
+wgcf-account.toml
+wgcf-profile.conf
+wireproxy.conf

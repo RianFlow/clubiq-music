@@ -6,10 +6,13 @@ from threading import Lock
 from urllib.parse import urlencode
 
 import re
+import time
 
 import requests
 
 from darts_resilience import PublicSession, source_recovery, save_snapshot, load_snapshot, last_known
+from darts_collector import collected_snapshot
+from darts_transport import scoped_get
 
 
 FRONTEND_API = "https://backend-ddv.3k-darts.com/2k-backend-ddv/api/v1/frontend"
@@ -24,7 +27,9 @@ TEAM_NUMBER_CODES = {"1": "A", "2": "B", "3": "C", "4": "D"}
 SPECIAL_EVENT_TERMS = ("pokal", "cup", "freundschaft", "sonder")
 CACHE_SECONDS = 45
 SEASON_CACHE_SECONDS = 600
+SPECIAL_EVENTS_CACHE_SECONDS = 300
 PLAYER_STATS_CACHE_SECONDS = 3600
+PLAYER_MATCH_STATS_CACHE_SECONDS = 900
 _cache: dict | None = None
 _cache_time = 0.0
 _lock = Lock()
@@ -38,7 +43,7 @@ _player_stats_cache: tuple[float, dict] | None = None
 _player_stats_retry_at = 0.0
 _player_stats_load_lock = Lock()
 _venue_cache: dict[int, tuple[float, dict]] = {}
-_player_match_stats_cache: dict[tuple[int, int], tuple[list[dict], list[dict]]] = {}
+_player_match_stats_cache: dict[tuple[int, int], tuple[float, tuple[list[dict], list[dict]]]] = {}
 
 
 class DartsFeedUnavailable(RuntimeError):
@@ -596,6 +601,8 @@ def _load(now: datetime) -> dict:
                     })
                     items[item["id"]] = item
     special = _get_special_events(now)
+    if special.get("available") is not True or special.get("stale") or special.get("degraded"):
+        raise DartsFeedUnavailable("3K-Sonderbegegnungen konnten gerade nicht vollständig geladen werden.")
     for item in special.get("matches") or []:
         items[item["id"]] = item
     values = list(items.values())
@@ -604,12 +611,16 @@ def _load(now: datetime) -> dict:
     finals = sorted((item for item in values if item["kind"] == "final"), key=lambda item: item["updatedAt"] or "", reverse=True)
     pending = [item for item in values if item["kind"] == "pending"]
     ordered = live + upcoming + pending + finals
-    return {"available": True, "stale": False, "updatedAt": now.isoformat(), "items": ordered[:12]}
+    return {"available": True, "stale": False, "specialEventsAvailable": True,
+            "updatedAt": now.isoformat(), "items": ordered[:12]}
 
 
 def get_darts_feed(now: datetime | None = None) -> dict:
     global _cache, _cache_time
     now = now or datetime.now(timezone.utc)
+    collected = collected_snapshot("ticker", 360, now)
+    if collected:
+        return collected
     timestamp = now.timestamp()
     with _feed_load_lock:
         with _lock:
@@ -638,6 +649,9 @@ def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now:
         raise ValueError("Unbekannte Liga.")
     requested_round_id = round_id
     now = now or datetime.now(timezone.utc)
+    collected = collected_snapshot(f"center:{league_key}:latest", 360, now)
+    if collected and (round_id is None or collected.get("selectedRound", {}).get("id") == round_id):
+        return collected
     session = PublicSession()
     session.headers.update({
         "User-Agent": "Mozilla/5.0",
@@ -742,7 +756,7 @@ def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now:
 
 def _public_get(url: str):
     response = source_recovery.get(
-        requests.get, url,
+        lambda address, **options: scoped_get(requests.get, address, **options), url,
         headers={
             "User-Agent": "Mozilla/5.0",
             "Accept": "application/json, text/plain, */*",
@@ -781,6 +795,7 @@ def _load_special_events(now: datetime) -> dict:
     ]
     matches: list[dict] = []
     public_events: list[dict] = []
+    failed_events: list[int] = []
     for summary in candidates:
         event_id = int(summary.get("id") or 0)
         if not event_id:
@@ -820,10 +835,13 @@ def _load_special_events(now: datetime) -> dict:
                 matches.extend(event_matches)
         except (requests.RequestException, ValueError, KeyError, TypeError):
             # One malformed public competition must not hide the remaining schedule.
+            # Retain the partial content, but never describe it as a complete source.
+            failed_events.append(event_id)
             continue
     matches.sort(key=lambda item: (item.get("plannedAt") or item.get("updatedAt") or "", item["id"]))
     return {
-        "available": True,
+        "available": not failed_events,
+        "degraded": bool(failed_events),
         "updatedAt": now.isoformat(),
         "events": public_events,
         "matches": matches,
@@ -834,7 +852,7 @@ def _get_special_events(now: datetime) -> dict:
     global _special_cache
     with _lock:
         cached = _special_cache
-        if cached and now.timestamp() - cached[0] < SEASON_CACHE_SECONDS:
+        if cached and now.timestamp() - cached[0] < SPECIAL_EVENTS_CACHE_SECONDS:
             return cached[1]
     try:
         result = _load_special_events(now)
@@ -1125,6 +1143,9 @@ def _load_season(now: datetime) -> dict:
 def get_darts_season(now: datetime | None = None) -> dict:
     global _season_cache
     now = now or datetime.now(timezone.utc)
+    collected = collected_snapshot("season", 360, now)
+    if collected:
+        return collected
     with _lock:
         cached = _season_cache
         if cached:
@@ -1230,23 +1251,27 @@ def _player_names(value: str) -> list[str]:
     return [part.strip() for part in str(value or "").split(" & ") if part.strip()]
 
 
-def _load_player_match_stats(event_id: int, match_id: int) -> tuple[list[dict], list[dict]]:
+def _load_player_match_stats(event_id: int, match_id: int) -> tuple[list[dict], list[dict] | None]:
     key = (event_id, match_id)
     with _lock:
         cached = _player_match_stats_cache.get(key)
-    if cached:
-        return cached
+    if cached and 0 <= time.monotonic() - cached[0] < PLAYER_MATCH_STATS_CACHE_SECONDS:
+        return cached[1]
     report = _public_get(f"{API}/{event_id}/match/{match_id}/report")
     if not isinstance(report, list) or not report:
         raise ValueError("Ungültiger 3K-Spielbericht")
     try:
         performances = _public_get(f"{API}/{event_id}/performance/match/{match_id}?matchReport=1")
     except (requests.RequestException, ValueError, KeyError, TypeError):
-        performances = []
+        performances = None
     if not isinstance(performances, list):
-        performances = []
-    with _lock:
-        _player_match_stats_cache[key] = (report, performances)
+        performances = None
+    # An unavailable performance source is unknown, rather than a confirmed empty
+    # result. Retry it on the next collection; successful final reports also expire
+    # so later corrections in 3K reach the site without restarting the worker.
+    if performances is not None:
+        with _lock:
+            _player_match_stats_cache[key] = (time.monotonic(), (report, performances))
     return report, performances
 
 
@@ -1340,7 +1365,7 @@ def _load_player_stats(now: datetime) -> dict:
         for match in season.get("matches") or []
         if match.get("kind") == "final" and match.get("eventId") and match.get("id")
     }
-    loaded: list[tuple[list[dict], list[dict]]] = []
+    loaded: list[tuple[list[dict], list[dict] | None]] = []
     with ThreadPoolExecutor(max_workers=4) as executor:
         jobs = [executor.submit(_load_player_match_stats, event_id, match_id) for event_id, match_id in finished]
         for job in as_completed(jobs):
@@ -1379,7 +1404,7 @@ def _load_player_stats(now: datetime) -> dict:
                         player["_darts"] += darts
                         player["_score"] += score
 
-        for performance in performances:
+        for performance in performances or []:
             team_name = str((performance.get("team") or {}).get("name") or "")
             if not _barver_code_from_name(team_name):
                 continue
@@ -1425,19 +1450,36 @@ def _load_player_stats(now: datetime) -> dict:
              if player["gamesPlayed"] > 0 or player.get("statsSource") == "3k"}
     if not loaded and not official_leagues:
         raise DartsFeedUnavailable("Keine bestätigten 3K-Spielerstatistiken verfügbar.")
-    degraded = len(official_leagues) < len(LEAGUES) and (len(loaded) < len(finished) or not loaded)
+    performances_scanned = sum(performances is not None for _, performances in loaded)
+    details_complete = len(loaded) == len(finished) and performances_scanned == len(finished)
+    season_fresh = not season.get("stale") and not season.get("degraded") and season.get("available") is not False
+    degraded = not season_fresh or not details_complete or (len(official_leagues) < len(LEAGUES) and not loaded)
     for player in stats.values():
+        if not details_complete:
+            # A partial count cannot safely replace a previously confirmed total.
+            player["highFinishes"] = None
+            player["playerNumber"] = ""
         player["statsUpdatedAt"] = now.isoformat()
         player["statsStale"] = degraded
     return {
         "available": True, "statsSchema": 1, "stale": degraded, "degraded": degraded, "updatedAt": now.isoformat(),
         "matchesScanned": len(loaded), "officialLeagues": official_leagues, "players": stats,
+        "statsCoverage": {
+            "observedAt": now.isoformat(), "seasonUpdatedAt": season.get("updatedAt"),
+            "seasonFresh": season_fresh, "expectedMatches": len(finished),
+            "reportsLoaded": len(loaded), "performancesLoaded": performances_scanned,
+            "expectedLeagues": [league["key"] for league in LEAGUES],
+            "officialLeaguesLoaded": official_leagues,
+        },
     }
 
 
 def get_darts_player_stats(now: datetime | None = None) -> dict:
     global _player_stats_cache, _player_stats_retry_at
     now = now or datetime.now(timezone.utc)
+    collected = collected_snapshot("player-stats", 960, now)
+    if collected:
+        return collected
     with _lock:
         cached = _player_stats_cache
         if cached and cached[1].get("statsSchema") == 1 and now.timestamp() - cached[0] < PLAYER_STATS_CACHE_SECONDS:
