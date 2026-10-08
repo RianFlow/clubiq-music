@@ -88,6 +88,8 @@ def verified_payload(key, payload, now):
         raise ValueError("Empty training catalog")
     if key == "ranking" and (not payload.get("events") or not payload.get("rows")):
         raise ValueError("Incomplete ranking")
+    if key == "ranking" and payload.get("calendarAvailable") is not True:
+        raise ValueError("Ranking calendar unavailable")
     if key.startswith("training:") and payload.get("event", {}).get("id") != int(key.split(":")[1]):
         raise ValueError("Wrong training")
     if key.startswith("training:") and int(key.split(":")[1]) > 10000000:
@@ -227,7 +229,7 @@ def tasks():
         "center-kk11":(300,lambda:[("center:kk11:latest",feed.get_darts_center("kk11"))]),
         "ticker":(300,lambda:[("ticker",feed._load(datetime.now(timezone.utc)))]),
         "player-stats":(900,player_stats),
-        "ranking":(600,lambda:[("ranking",ranking._sanitize(ranking._public_get(f"{ranking.API}/ranking?mandantKey=1931&tournamentSeriesId=1282&withEventDetails=1"),datetime.now(timezone.utc)))]),
+        "ranking":(600,lambda:[("ranking",ranking._load(datetime.now(timezone.utc)))]),
         "training-catalog":(300,lambda:[("training-catalog",training.get_trainings(force=True))]),
         "training":(300,event),
     }
