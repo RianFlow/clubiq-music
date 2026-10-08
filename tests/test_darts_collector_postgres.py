@@ -29,8 +29,8 @@ class CollectorPostgresTests(unittest.TestCase):
                 def connect():
                     return psycopg.connect(**connection_kwargs(),options=f"-c search_path={name}")
                 now=datetime.now(timezone.utc)
-                original={"updatedAt":(now-timedelta(minutes=1)).isoformat(),"items":[{"id":10}]}
-                latest={"updatedAt":now.isoformat(),"items":[{"id":20}]}
+                original={"updatedAt":(now-timedelta(minutes=1)).isoformat(),"items":[{"id":10}],"specialEventsAvailable":True}
+                latest={"updatedAt":now.isoformat(),"items":[{"id":20}],"specialEventsAvailable":True}
                 with patch.object(collector,"snapshot_connection",side_effect=connect), \
                      patch.object(resilience,"snapshot_connection",side_effect=connect), \
                      patch.dict(os.environ,{"DARTS_COLLECTOR_READ_ENABLED":"1","DARTS_SNAPSHOT_WRITES_DISABLED":"0"}), \
