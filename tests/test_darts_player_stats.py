@@ -79,6 +79,65 @@ class DartsPlayerStatsTests(unittest.TestCase):
                 darts_feed._load_player_match_stats(1445, 99)
         self.assertNotIn((1445, 99), darts_feed._player_match_stats_cache)
 
+    def test_failed_performance_source_is_unknown_and_retried_without_restart(self):
+        report = [{"statusCd": "FINISH"}]
+        performances = [{"performanceTypeCd": "HF", "value": 121}]
+        with patch.object(darts_feed, "_public_get", side_effect=[report, requests.ConnectionError(), report, performances]) as fetch:
+            first = darts_feed._load_player_match_stats(1445, 99)
+            self.assertEqual(first, (report, None))
+            self.assertNotIn((1445, 99), darts_feed._player_match_stats_cache)
+            self.assertEqual(darts_feed._load_player_match_stats(1445, 99), (report, performances))
+        self.assertEqual(fetch.call_count, 4)
+
+    def test_successful_final_details_expire_and_include_later_corrections(self):
+        report = [{"statusCd": "FINISH"}]
+        corrected = [{"performanceTypeCd": "HF", "value": 121}]
+        with patch.object(darts_feed.time, "monotonic", side_effect=[0, 899, 900, 901]), \
+             patch.object(darts_feed, "_public_get", side_effect=[report, [], report, corrected]) as fetch:
+            self.assertEqual(darts_feed._load_player_match_stats(1445, 99), (report, []))
+            self.assertEqual(darts_feed._load_player_match_stats(1445, 99), (report, []))
+            self.assertEqual(fetch.call_count, 2)
+            self.assertEqual(darts_feed._load_player_match_stats(1445, 99), (report, corrected))
+        self.assertEqual(fetch.call_count, 4)
+
+    def test_missing_performances_are_partial_even_when_both_official_leagues_load(self):
+        now = datetime(2026, 10, 8, tzinfo=timezone.utc)
+        season = {"updatedAt": now.isoformat(), "teams": [{"code": "A", "roster": [{"id": 1, "name": "Spieler"}]}],
+                  "matches": [{"id": 10, "eventId": 1445, "kind": "final"}]}
+        report = [{"statusCd": "FINISH", "legsHome": 3, "legsAway": 1,
+                   "participantHome": {"displayName": "Spieler"}, "participantGuest": {"displayName": "Gegner"}}]
+        official = {("A", "spieler"): {"average": 65.9, "gamesPlayed": 1, "gamesWon": 1, "statsSource": "3k"}}
+        with patch.object(darts_feed, "get_darts_season", return_value=season), \
+             patch.object(darts_feed, "_load_player_match_stats", return_value=(report, None)), \
+             patch.object(darts_feed, "_official_league_player_stats", return_value=(official, ["kl04", "kk11"])):
+            result = darts_feed._load_player_stats(now)
+        self.assertTrue(result["degraded"])
+        self.assertTrue(result["players"]["1"]["statsStale"])
+        self.assertEqual(result["players"]["1"]["average"], 65.9)
+        self.assertIsNone(result["players"]["1"]["highFinishes"])
+        self.assertEqual(result["statsCoverage"]["expectedMatches"], 1)
+        self.assertEqual(result["statsCoverage"]["reportsLoaded"], 1)
+        self.assertEqual(result["statsCoverage"]["performancesLoaded"], 0)
+        self.assertEqual(result["statsCoverage"]["officialLeaguesLoaded"], ["kl04", "kk11"])
+
+    def test_missing_report_preserves_previous_player_values_with_both_leagues_reachable(self):
+        now = datetime(2026, 10, 8, tzinfo=timezone.utc)
+        season = {"updatedAt": now.isoformat(), "teams": [{"code": "A", "roster": [{"id": 1, "name": "Spieler"}]}],
+                  "matches": [{"id": 10, "eventId": 1445, "kind": "final"}]}
+        official = {("A", "spieler"): {"average": 66.1, "gamesPlayed": 1, "gamesWon": 1, "statsSource": "3k"}}
+        saved = {"statsSchema": 1, "updatedAt": "2026-10-07T12:00:00+00:00", "players": {
+            "1": {"average": 65.9, "highFinishes": 3, "playerNumber": "WTDU"}}}
+        with patch.object(darts_feed, "get_darts_season", return_value=season), \
+             patch.object(darts_feed, "_load_player_match_stats", side_effect=requests.ConnectionError()), \
+             patch.object(darts_feed, "_official_league_player_stats", return_value=(official, ["kl04", "kk11"])), \
+             patch.object(darts_feed, "load_snapshot", return_value=saved), \
+             patch.object(darts_feed, "save_snapshot") as save:
+            result = darts_feed.get_darts_player_stats(now)
+        self.assertTrue(result["stale"])
+        self.assertEqual(result["updatedAt"], saved["updatedAt"])
+        self.assertEqual(result["players"], saved["players"])
+        save.assert_not_called()
+
     def test_rolls_up_public_report_and_performances_by_roster_name(self):
         season = {
             "teams": [{"code": "A", "roster": [{"id": 89027, "name": "Jannik Kläning"}]}],

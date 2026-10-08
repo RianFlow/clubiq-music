@@ -72,6 +72,55 @@ class RecoveryTests(unittest.TestCase):
         self.assertFalse(result["stale"])
         save.assert_called_once_with("ticker", fresh)
 
+    def test_missing_special_source_preserves_last_confirmed_ticker(self):
+        response = Mock()
+        response.json.return_value = {"rounds": []}
+        session = Mock()
+        session.get.return_value = response
+        for special in ({"available": False, "matches": []},
+                        {"available": True, "stale": True, "matches": []}):
+            with patch.object(feed, "PublicSession", return_value=session), \
+                 patch.object(feed, "_get_special_events", return_value=special), \
+                 patch.object(feed, "load_snapshot", return_value=self.good), \
+                 patch.object(feed, "save_snapshot") as save:
+                result = feed.get_darts_feed(self.now + timedelta(hours=2))
+            self.assertTrue(result["stale"])
+            self.assertEqual(result["updatedAt"], self.good["updatedAt"])
+            self.assertEqual(result["items"], self.good["items"])
+            save.assert_not_called()
+
+    def test_confirmed_empty_special_source_allows_fresh_ticker(self):
+        response = Mock()
+        response.json.return_value = {"rounds": []}
+        session = Mock()
+        session.get.return_value = response
+        with patch.object(feed, "PublicSession", return_value=session), \
+             patch.object(feed, "_get_special_events", return_value={"available": True, "events": [], "matches": []}), \
+             patch.object(feed, "save_snapshot") as save:
+            result = feed.get_darts_feed(self.now)
+        self.assertFalse(result["stale"])
+        self.assertTrue(result["specialEventsAvailable"])
+        self.assertEqual(result["items"], [])
+        save.assert_called_once_with("ticker", result)
+
+    def test_one_failed_special_competition_is_not_a_complete_source(self):
+        anchor = {"event": {"saison": {"id": 1}, "mandantKey": 1}}
+        candidates = {"content": [{"id": 1472, "name": "Pokal"}]}
+        with patch.object(feed, "_public_get", side_effect=[anchor, candidates, requests.ConnectionError()]):
+            result = feed._load_special_events(self.now)
+        self.assertFalse(result["available"])
+        self.assertTrue(result["degraded"])
+
+    def test_special_source_refreshes_after_five_minutes(self):
+        old = {"available": True, "updatedAt": self.now.isoformat(), "events": [], "matches": []}
+        fresh = {**old, "updatedAt": (self.now+timedelta(minutes=5)).isoformat()}
+        with patch.object(feed, "_special_cache", (self.now.timestamp(), old)), \
+             patch.object(feed, "_load_special_events", return_value=fresh) as refresh:
+            self.assertEqual(feed._get_special_events(self.now+timedelta(seconds=299)), old)
+            refresh.assert_not_called()
+            self.assertEqual(feed._get_special_events(self.now+timedelta(minutes=5)), fresh)
+        refresh.assert_called_once_with(self.now+timedelta(minutes=5))
+
     def test_total_season_outage_does_not_claim_empty_fresh_data(self):
         with patch.object(feed, "_load_league_season", side_effect=requests.Timeout):
             with self.assertRaises(feed.DartsFeedUnavailable):

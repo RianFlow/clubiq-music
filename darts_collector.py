@@ -46,6 +46,8 @@ def verified_payload(key, payload, now):
         raise ValueError("Incomplete source data")
     if key == "ticker" and not isinstance(payload.get("items"), list):
         raise ValueError("Invalid ticker")
+    if key == "ticker" and payload.get("specialEventsAvailable") is not True:
+        raise ValueError("Incomplete ticker sources")
     age = (now-stamp(payload.get("updatedAt"))).total_seconds()
     if not -30 <= age <= 180:
         raise ValueError("Cached answer is not a new source observation")
@@ -69,6 +71,19 @@ def verified_payload(key, payload, now):
         raise ValueError("Incomplete player statistics")
     if key == "player-stats" and any(player.get("statsStale") for player in payload["players"].values()):
         raise ValueError("Stale player statistics")
+    if key == "player-stats":
+        coverage = payload.get("statsCoverage") or {}
+        expected = coverage.get("expectedMatches")
+        if (coverage.get("seasonFresh") is not True or not isinstance(expected, int)
+            or isinstance(expected, bool) or expected < 0
+            or coverage.get("reportsLoaded") != expected or coverage.get("performancesLoaded") != expected
+            or payload.get("matchesScanned") != expected
+            or set(coverage.get("expectedLeagues") or []) != {"kl04", "kk11"}
+            or set(coverage.get("officialLeaguesLoaded") or []) != {"kl04", "kk11"}
+            or set(payload.get("officialLeagues") or []) != {"kl04", "kk11"}
+            or stamp(coverage.get("observedAt")) != stamp(payload["updatedAt"])
+            or not -30 <= (now-stamp(coverage.get("seasonUpdatedAt"))).total_seconds() <= 180):
+            raise ValueError("Incomplete player source coverage")
     if key == "training-catalog" and not payload.get("events"):
         raise ValueError("Empty training catalog")
     if key == "ranking" and (not payload.get("events") or not payload.get("rows")):
@@ -175,10 +190,27 @@ def tasks():
 
     def season():
         result = feed._load_season(datetime.now(timezone.utc))
-        if not result.get("degraded"):
-            with feed._lock:
-                feed._season_cache = (datetime.now(timezone.utc).timestamp(),result)
+        verified_payload("season", result, datetime.now(timezone.utc))
+        with feed._lock:
+            feed._season_cache = (datetime.now(timezone.utc).timestamp(),result)
         return [("season",result)]
+
+    def player_stats():
+        now = datetime.now(timezone.utc)
+        # A stale or partial fixture list must never produce apparently complete
+        # statistics merely because the omitted match reports were never requested.
+        current_season = feed.get_darts_season(now)
+        if (now-stamp(current_season.get("updatedAt"))).total_seconds() > 180:
+            # Task completion times can shift the independent schedules. Refresh
+            # the fixture list here rather than waiting for another season cycle.
+            current_season = feed._load_season(now)
+            now = datetime.now(timezone.utc)
+            verified_payload("season", current_season, now)
+            with feed._lock:
+                feed._season_cache = (now.timestamp(), current_season)
+        else:
+            verified_payload("season", current_season, now)
+        return [("player-stats", feed._load_player_stats(datetime.now(timezone.utc)))]
 
     def event():
         catalog = training.get_trainings()
@@ -194,7 +226,7 @@ def tasks():
         "center-kl04":(300,lambda:[("center:kl04:latest",feed.get_darts_center("kl04"))]),
         "center-kk11":(300,lambda:[("center:kk11:latest",feed.get_darts_center("kk11"))]),
         "ticker":(300,lambda:[("ticker",feed._load(datetime.now(timezone.utc)))]),
-        "player-stats":(900,lambda:[("player-stats",feed._load_player_stats(datetime.now(timezone.utc)))]),
+        "player-stats":(900,player_stats),
         "ranking":(600,lambda:[("ranking",ranking._sanitize(ranking._public_get(f"{ranking.API}/ranking?mandantKey=1931&tournamentSeriesId=1282&withEventDetails=1"),datetime.now(timezone.utc)))]),
         "training-catalog":(300,lambda:[("training-catalog",training.get_trainings(force=True))]),
         "training":(300,event),

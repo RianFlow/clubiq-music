@@ -1077,17 +1077,19 @@ function initDarts() {
     const serverFallback=activeServerGroups.length>0&&(!serverLiveConnected||!upstreamLiveConnected);
     const serverUpdates=activeServerGroups.map(group=>Date.parse(group.lastSuccess||group.lastUpdate||'')).filter(Number.isFinite);
     const serverLiveStale=tickerData.source!=='browser-3k'&&serverUpdates.length>0&&Date.now()-Math.max(...serverUpdates)>180000;
-    const stale=tickerData.stale||!Number.isFinite(age)||age>180000||detailsStale||serverLiveStale;
+    const freshnessLimit=tickerData.sourceConnection==='collector'?((tickerData.items||[]).some(m=>m.kind==='live')?120000:360000):180000;
+    const stale=tickerData.stale||!Number.isFinite(age)||age>freshnessLimit||detailsStale||serverLiveStale;
     const status=q('#liveDataStatus'); status.dataset.state=stale?'warn':reconnecting?'wait':'ok';
     if (demoLive) status.textContent='Demo-Live aktiv';
     else if (!Number.isFinite(age)) status.textContent='Verbindung wird aufgebaut';
-    else if (tickerData.stale||age>180000) status.textContent=`Letzter Stand: ${Math.max(1,Math.floor(age/60000))} Min. alt · erneuter Abruf automatisch`;
+    else if (tickerData.stale||age>freshnessLimit) status.textContent=`Letzter Stand: ${Math.max(1,Math.floor(age/60000))} Min. alt · erneuter Abruf automatisch`;
     else if (directDetailsFailed) status.textContent='Live-Punkte nicht erreichbar · Spielstand aktuell';
     else if (detailsStale||serverLiveStale) status.textContent='Live-Punkte veraltet · erneuter Abruf automatisch';
     else if (tickerData.source==='browser-3k') status.textContent='Alternative 3K-Verbindung aktiv';
     else if (serverFallback) status.textContent='Live-Fallback aktiv · letzter Stand sichtbar';
     else if (activeServerGroups.length) status.textContent='Live-Verbindung aktiv';
     else if (reconnecting) status.textContent='Verbindung wird erneuert · letzter Stand sichtbar';
+    else if (tickerData.sourceConnection==='collector') status.textContent='Automatisch aktualisiert';
     else status.textContent='3K-Daten aktuell';
     status.title=tickerData.updatedAt?`Letzter Datenabruf: ${new Date(tickerData.updatedAt).toLocaleString('de-DE')}${tickerData.source==='browser-3k'?' · Liga-Ergebnisse direkt von 3K. Saison und Einzelpartien haben einen eigenen Datenstand.':''}`:'Noch kein Datenabruf erfolgreich';
   }

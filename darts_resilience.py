@@ -11,6 +11,7 @@ from psycopg.types.json import Jsonb
 import requests
 
 from db_config import connection_kwargs
+from darts_transport import scoped_get
 
 
 class SourceCoolingDown(requests.RequestException):
@@ -53,7 +54,9 @@ source_recovery = PublicSourceRecovery()
 
 class PublicSession(requests.Session):
     def get(self, url, **kwargs):
-        return source_recovery.get(super().get, url, **kwargs)
+        def request(address, **options):
+            return scoped_get(super(PublicSession, self).get, address, **options)
+        return source_recovery.get(request, url, **kwargs)
 
 
 def snapshot_connection():

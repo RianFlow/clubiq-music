@@ -10,11 +10,14 @@ import threading
 import time
 from datetime import datetime, timezone
 import requests
+from darts_transport import scoped_get, websocket_options
 
 try:
     import websocket
 except ImportError:  # Tests and development still have the REST fallback.
     websocket = None
+
+_WEBSOCKET_ERROR = getattr(websocket, "WebSocketException", RuntimeError)
 
 
 LIVE_API = "https://live.3k-darts.com/dartsscorer-liveticker/api/v1"
@@ -471,7 +474,7 @@ class _GroupConnector:
         self._stop.set()
 
     def _rest_sync(self) -> bool:
-        response = requests.get(
+        response = scoped_get(requests.get,
             f"{LIVE_API}/match/{self.database}/0/{self.group_key}",
             headers={"User-Agent": USER_AGENT, "Accept": "application/json"}, timeout=(3, 10),
         )
@@ -503,7 +506,8 @@ class _GroupConnector:
     def _connect_and_listen(self) -> None:
         if websocket is None:
             raise RuntimeError("WebSocket-Modul fehlt; REST-Fallback aktiv.")
-        ws = websocket.create_connection(self._sockjs_url(), timeout=10, header=[f"User-Agent: {USER_AGENT}"])
+        url = self._sockjs_url()
+        ws = websocket.create_connection(url, timeout=10, header=[f"User-Agent: {USER_AGENT}"], **websocket_options(url))
         try:
             ws.settimeout(2)
             opened = ws.recv()
@@ -562,7 +566,7 @@ class _GroupConnector:
                     if self.hub.group_finished(self.group_key):
                         self._rest_sync()
                         break
-                except (requests.RequestException, ValueError, RuntimeError, OSError) as exc:
+                except (requests.RequestException, ValueError, RuntimeError, OSError, _WEBSOCKET_ERROR) as exc:
                     self.hub.set_connection(self.group_key, False, type(exc).__name__)
                     if self._stop.wait(REST_FALLBACK_SECONDS if websocket is None else RECONNECT_SECONDS):
                         break

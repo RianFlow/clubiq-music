@@ -8,6 +8,7 @@ import time
 
 import requests
 from darts_live import normalize_rest
+from darts_transport import scoped_get
 
 BASE = "https://backend4.3k-darts.com/2k-backend4/api/v1/frontend/event/22536"
 SOURCE = "https://portal.3k-darts.com/frontend/events/5/event/22536/participants"
@@ -20,7 +21,7 @@ _attempt = 0.0
 
 
 def _get(url):
-    response = requests.get(url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://portal.3k-darts.com/", "Origin": "https://portal.3k-darts.com", "Accept": "application/json"}, timeout=(3, 8), allow_redirects=False)
+    response = scoped_get(requests.get, url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://portal.3k-darts.com/", "Origin": "https://portal.3k-darts.com", "Accept": "application/json"}, timeout=(3, 8), allow_redirects=False)
     if 300 <= response.status_code < 400:
         raise ValueError("Unexpected source redirect")
     response.raise_for_status()

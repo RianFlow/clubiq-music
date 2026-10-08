@@ -15,7 +15,7 @@ class CollectorTests(unittest.TestCase):
     def setUp(self):
         self.now = datetime(2026,10,8,18,tzinfo=timezone.utc)
         self.clock = 0
-        self.good = {"updatedAt":self.now.isoformat(),"stale":False,"items":[{"id":1}]}
+        self.good = {"updatedAt":self.now.isoformat(),"stale":False,"specialEventsAvailable":True,"items":[{"id":1}]}
 
     def collector(self, loader, writer=None):
         return module.Collector({"ticker":(60,loader)},persist=writer or Mock(),clock=lambda:self.clock,now=lambda:self.now)
@@ -207,11 +207,71 @@ class CollectorTests(unittest.TestCase):
 
     def test_unavailable_and_nested_partial_data_are_rejected(self):
         cases=[("ticker",{**self.good,"available":False}),
+               ("ticker",{**self.good,"specialEventsAvailable":False}),
                ("player-stats",{**self.good,"statsSchema":1,"players":{"42":{"statsStale":True}}}),
                ("training:32751",{**self.good,"event":{"id":32751},"performancesUnavailable":True})]
         for key,payload in cases:
             with self.assertRaises(ValueError):
                 module.verified_payload(key,payload,self.now)
+
+    def test_player_stats_require_complete_report_performance_and_league_coverage(self):
+        coverage = {"observedAt": self.now.isoformat(), "seasonUpdatedAt": self.now.isoformat(),
+                    "seasonFresh": True, "expectedMatches": 2, "reportsLoaded": 2, "performancesLoaded": 2,
+                    "expectedLeagues": ["kl04", "kk11"], "officialLeaguesLoaded": ["kl04", "kk11"]}
+        good = {**self.good, "statsSchema": 1, "players": {"42": {"statsStale": False}},
+                "matchesScanned": 2, "officialLeagues": ["kl04", "kk11"], "statsCoverage": coverage}
+        self.assertEqual(module.verified_payload("player-stats", good, self.now)["statsCoverage"], coverage)
+        cases = [{**good, "statsCoverage": {**coverage, **partial}} for partial in (
+            {"reportsLoaded": 1}, {"performancesLoaded": 1}, {"seasonFresh": False},
+            {"officialLeaguesLoaded": ["kl04"]}, {"expectedMatches": True},
+            {"observedAt": (self.now-timedelta(seconds=1)).isoformat()},
+            {"seasonUpdatedAt": (self.now-timedelta(minutes=10)).isoformat()})]
+        cases.append({**good, "statsCoverage": None})
+        writer = Mock()
+        for payload in cases:
+            collector = module.Collector({"player-stats": (900, lambda: [("player-stats", payload)])},
+                                         persist=writer, now=lambda: self.now)
+            self.assertFalse(collector.cycle()["allSourcesFresh"])
+        writer.assert_not_called()
+
+    def test_stats_task_rejects_stale_season_before_aggregating(self):
+        with patch.object(feed, "get_darts_season", return_value={"stale": True}), \
+             patch.object(feed, "_load_player_stats") as load:
+            _, loader = module.tasks()["player-stats"]
+            with self.assertRaises(ValueError):
+                loader()
+        load.assert_not_called()
+
+    def test_stats_task_refreshes_aged_season_when_schedules_drift(self):
+        old = {"updatedAt": (self.now-timedelta(minutes=4)).isoformat()}
+        fresh = {"updatedAt": self.now.isoformat()}
+        with patch.object(module, "datetime", wraps=datetime) as clock, \
+             patch.object(module, "verified_payload", return_value=fresh) as verify, \
+             patch.object(feed, "get_darts_season", return_value=old), \
+             patch.object(feed, "_load_season", return_value=fresh) as refresh, \
+             patch.object(feed, "_load_player_stats", return_value={}) as load, \
+             patch.object(feed, "_season_cache", None):
+            clock.now.return_value = self.now
+            _, loader = module.tasks()["player-stats"]
+            self.assertEqual(loader(), [("player-stats", {})])
+            self.assertEqual(feed._season_cache, (self.now.timestamp(), fresh))
+        refresh.assert_called_once_with(self.now)
+        verify.assert_called_once_with("season", fresh, self.now)
+        load.assert_called_once_with(self.now)
+
+    def test_stats_task_never_seeds_a_partial_season_refresh(self):
+        old = {"updatedAt": (self.now-timedelta(minutes=4)).isoformat()}
+        with patch.object(module, "datetime", wraps=datetime) as clock, \
+             patch.object(feed, "get_darts_season", return_value=old), \
+             patch.object(feed, "_load_season", return_value={"stale": True}), \
+             patch.object(feed, "_load_player_stats") as load, \
+             patch.object(feed, "_season_cache", None):
+            clock.now.return_value = self.now
+            _, loader = module.tasks()["player-stats"]
+            with self.assertRaises(ValueError):
+                loader()
+            self.assertIsNone(feed._season_cache)
+        load.assert_not_called()
 
 
 module_collector=module.Collector

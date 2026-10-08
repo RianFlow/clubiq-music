@@ -8,7 +8,7 @@ RUN apt-get update \
 COPY requirements.darts-collector.txt .
 RUN --mount=type=cache,id=clubiq-pip-cache,target=/root/.cache/pip \
     pip install --retries 12 --timeout 120 --prefer-binary -r requirements.darts-collector.txt
-COPY darts_collector.py darts_feed.py darts_training.py darts_tournament.py darts_live.py darts_ranking.py darts_resilience.py db_config.py ./
+COPY darts_collector.py darts_feed.py darts_training.py darts_tournament.py darts_live.py darts_ranking.py darts_resilience.py darts_transport.py db_config.py ./
 COPY static/darts-trainings.json static/darts-trainings.json
 RUN useradd --system --uid 10001 --home /app clubiq \
     && mkdir /state && chown clubiq:clubiq /state
