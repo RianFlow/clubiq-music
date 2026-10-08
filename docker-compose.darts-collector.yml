@@ -14,6 +14,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD fehlt}
       DARTS_COLLECTOR_READ_ENABLED: "0"
       DARTS_SNAPSHOT_WRITES_DISABLED: "1"
+      HTTPS_PROXY: ${DARTS_COLLECTOR_HTTPS_PROXY:-}
     volumes:
       - darts_collector_state:/state
     tmpfs:

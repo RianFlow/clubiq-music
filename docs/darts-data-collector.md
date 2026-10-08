@@ -42,6 +42,16 @@ python darts_collector.py --once --dry-run --only center-kl04 --status-file /tmp
 
 `--dry-run` schreibt keine Datenbankdaten. Ohne `--once` läuft der Zeitplan dauerhaft. Ein einmaliger Lauf beendet sich mit Code 0 bei vollständig bestätigten Daten und Code 2 bei fehlenden oder unvollständigen Quelldaten.
 
+### Optionaler anderer Serverausgang
+
+Der Helfer kann seine HTTPS-Abrufe über einen festen Proxy ausführen. Dafür wird auf dem Server `DARTS_COLLECTOR_HTTPS_PROXY` in der nicht versionierten Umgebung hinterlegt. Die zusätzliche Compose-Datei reicht diesen Wert ausschließlich an den Helfer weiter; die Website und die Datenbankverbindung erhalten ihn nicht. Ohne diesen Wert bleiben direkte Abrufe eingestellt. Es wurde noch kein Proxy bereitgestellt oder aktiviert.
+
+Der Proxy benötigt eine echte erreichbare Ausgangsadresse und muss die HTTPS-Verbindung zur Originalquelle unterstützen. Die normale Prüfung des 3K-Zertifikats bleibt aktiv. Ein Proxy darf nicht mit einer frei erfundenen Absender-IP verwechselt werden: Die Antworten müssen den tatsächlichen Verbindungspartner erreichen. Vor einer Umschaltung ist derselbe vollständige serverseitige Prüflauf erforderlich. Proxy-Zugangsdaten gehören ausschließlich in die geschützte Serverumgebung und dürfen nicht in Git oder Diagnoseausgaben erscheinen.
+
+Ein solcher Ausgang benötigt keinen Vereins-PC. Ob er die aktuelle Störung behebt, hängt von ihrer noch ungeklärten Ursache ab; eine bestätigte Sperre der Vereinsserver-IP liegt bislang nicht vor.
+
+Technische Grundlage: [Requests: Proxy-Unterstützung](https://requests.readthedocs.io/en/latest/user/advanced/#proxies).
+
 ## Prüfstand vom 8. Oktober 2026
 
 Der Helfer wurde als eigenes Image auf dem vorhandenen Server gebaut. Container-Konfiguration, Speicherung in einer getrennten Wegwerfdatenbank, Schutz vor älteren Antworten und das nicht privilegierte Status-Volume wurden erfolgreich geprüft. Die Live-Website wurde dabei nicht neu gebaut oder veröffentlicht.
