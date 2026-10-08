@@ -68,6 +68,10 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.darts-collector.yml --profile darts-collector config --quiet
       - name: Darts-Proxy ohne Registrierung bauen
         run: docker build -f Dockerfile.darts-egress -t clubiq-darts-egress:check .
+      - name: Datenhelfer mit allen Quelldateien bauen
+        run: |
+          docker build -f Dockerfile.darts-collector -t clubiq-darts-collector:check .
+          docker run --rm --entrypoint python clubiq-darts-collector:check -c "import darts_collector, darts_ranking, darts_training"
       - name: Web-Image bauen
         run: docker compose build web
       - name: Sicherheits- und UI-Verträge prüfen
