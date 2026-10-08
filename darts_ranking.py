@@ -5,6 +5,7 @@ from threading import Lock
 
 import requests
 from darts_feed import DartsFeedUnavailable, _public_get
+from darts_collector import collected_snapshot
 
 API = "https://backend4.3k-darts.com/2k-backend4/api/v1/frontend"
 SOURCE = "https://portal.3k-darts.com/frontend/events/5/ranking/1931/series/1282/list"
@@ -48,6 +49,9 @@ def _sanitize(payload, now):
 def get_darts_ranking(now=None):
     global _cache
     now = now or datetime.now(timezone.utc)
+    collected = collected_snapshot("ranking", 660, now)
+    if collected:
+        return collected
     with _lock:
         if _cache and now.timestamp() - _cache[0] < 600:
             return _cache[1]

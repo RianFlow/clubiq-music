@@ -10,6 +10,7 @@ import re
 import requests
 
 from darts_resilience import PublicSession, source_recovery, save_snapshot, load_snapshot, last_known
+from darts_collector import collected_snapshot
 
 
 FRONTEND_API = "https://backend-ddv.3k-darts.com/2k-backend-ddv/api/v1/frontend"
@@ -610,6 +611,9 @@ def _load(now: datetime) -> dict:
 def get_darts_feed(now: datetime | None = None) -> dict:
     global _cache, _cache_time
     now = now or datetime.now(timezone.utc)
+    collected = collected_snapshot("ticker", 360, now)
+    if collected:
+        return collected
     timestamp = now.timestamp()
     with _feed_load_lock:
         with _lock:
@@ -638,6 +642,9 @@ def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now:
         raise ValueError("Unbekannte Liga.")
     requested_round_id = round_id
     now = now or datetime.now(timezone.utc)
+    collected = collected_snapshot(f"center:{league_key}:latest", 360, now)
+    if collected and (round_id is None or collected.get("selectedRound", {}).get("id") == round_id):
+        return collected
     session = PublicSession()
     session.headers.update({
         "User-Agent": "Mozilla/5.0",
@@ -1125,6 +1132,9 @@ def _load_season(now: datetime) -> dict:
 def get_darts_season(now: datetime | None = None) -> dict:
     global _season_cache
     now = now or datetime.now(timezone.utc)
+    collected = collected_snapshot("season", 360, now)
+    if collected:
+        return collected
     with _lock:
         cached = _season_cache
         if cached:
@@ -1438,6 +1448,9 @@ def _load_player_stats(now: datetime) -> dict:
 def get_darts_player_stats(now: datetime | None = None) -> dict:
     global _player_stats_cache, _player_stats_retry_at
     now = now or datetime.now(timezone.utc)
+    collected = collected_snapshot("player-stats", 960, now)
+    if collected:
+        return collected
     with _lock:
         cached = _player_stats_cache
         if cached and cached[1].get("statsSchema") == 1 and now.timestamp() - cached[0] < PLAYER_STATS_CACHE_SECONDS:

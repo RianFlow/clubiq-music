@@ -4,6 +4,7 @@ from __future__ import annotations
 from threading import Lock
 from time import monotonic
 from urllib.parse import urlsplit
+import os
 
 import psycopg
 from psycopg.types.json import Jsonb
@@ -61,6 +62,8 @@ def snapshot_connection():
 
 def save_snapshot(key: str, payload: dict) -> None:
     # Callers pass only their public normalized DTO, never raw registration data.
+    if os.getenv("DARTS_SNAPSHOT_WRITES_DISABLED") == "1":
+        return
     if not payload.get("updatedAt") or payload.get("stale") or payload.get("degraded"):
         return
     try:
