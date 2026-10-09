@@ -37,10 +37,12 @@ test('missing photos, ambiguous initials, opponents and losses do not show an in
   assert.equal(broadcast.winnerPortraits(win).length,1);
 });
 
-test('authenticity rejects opponent legs, unverified short legs, and opponent scores', () => {
+test('authenticity accepts verified losses but rejects unverified events and unrelated teams', () => {
   assert.equal(broadcast.authentic({ ...base, type: 'leg', gameId: 2, legCount: 1, winnerSide: 'home', barverSide: 'away' }), false);
   assert.equal(broadcast.authentic({ ...base, type: 'leg', gameId: 2, legCount: 1, winnerSide: 'away', barverSide: 'away' }), true);
-  assert.equal(broadcast.authentic({ ...base, type: 'game', gameId: 2, barverWon: false }), false);
+  assert.equal(broadcast.authentic({ ...base, type: 'game', gameId: 2, barverWon: false }), true);
+  assert.equal(broadcast.authentic({ ...base, type: 'leg', gameId: 2, legCount: 1, winnerSide: 'home', barverSide: 'away', barverWon: false }), true);
+  assert.equal(broadcast.graphic({ ...base, type: 'game', gameId: 2, barverWon: false }).label, 'PARTIE VERLOREN');
   assert.equal(broadcast.authentic({ ...base, type: 'short_leg', gameId: 2, legCount: 1, darts: 15 }), false);
   assert.equal(broadcast.authentic({ ...base, type: 'short_leg', gameId: 2, legCount: 1, darts: 15, barverWon: true }), true);
   assert.equal(broadcast.authentic({ ...base, team: 'Gastverein', type: '180', value: 180, count: 1 }), false);

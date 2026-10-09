@@ -13,7 +13,7 @@ import requests
 from darts_resilience import PublicSession, source_recovery, save_snapshot, load_snapshot, last_known
 from darts_collector import collected_snapshot
 from darts_transport import scoped_get
-from darts_live import darts_live_hub, _watch_live_candidate, _average_text
+from darts_live import darts_live_hub, _watch_live_candidate, _average_text, _player, source_timestamp
 
 
 FRONTEND_API = "https://backend-ddv.3k-darts.com/2k-backend-ddv/api/v1/frontend"
@@ -243,35 +243,24 @@ def _public_live_games(payload) -> list[dict]:
         return []
     games = []
     for raw in raw_games:
-        if not isinstance(raw, dict) or not (raw.get("statusActive") is True or raw.get("status") == 1):
+        if not isinstance(raw, dict) or not (raw.get("statusActive") is True or raw.get("status") == 1) or raw.get("statusFinished") is True:
             continue
         players = raw.get("matchPlayers") or []
         if not isinstance(players, list) or len(players) < 2:
             continue
         players = [item for item in players if isinstance(item, dict)]
-        home_players, away_players = players[::2], players[1::2]
-        if not home_players or not away_players:
+        if len(players) < 2:
             continue
-
-        def side(items: list[dict]) -> dict:
-            names = [str(item.get("playerName") or "").strip() for item in items]
-            names = [name for name in names if name]
-            player = items[0]
-            legs = player.get("legs")
-            return {
-                "name": " & ".join(names)[:160] or "Noch offen",
-                "remaining": _remaining_points(player.get("points")),
-                "legs": legs if isinstance(legs, int) and not isinstance(legs, bool) and 0 <= legs <= 25 else None,
-            }
-
+        def side(items):
+            player = _player(items)
+            return {key: player[key] for key in ("name", "legs", "darts", "totalDarts", "totalScore", "lastScore", "average", "count180", "highFinish")} | {"remaining": player["points"]}
         current_index = raw.get("currentplayerIndex")
         games.append({
-            "id": int(raw.get("id") or 0),
-            "matchKey": str(raw.get("matchKey") or "")[:60],
-            "home": side(home_players),
-            "away": side(away_players),
+            "id": int(raw.get("id") or 0), "matchKey": str(raw.get("matchKey") or "")[:60],
+            "board": str(raw.get("board") or "")[:20], "mode": str(raw.get("mode") or "")[:80],
+            "home": side(players[::2]), "away": side(players[1::2]),
             "currentSide": "home" if isinstance(current_index, int) and current_index % 2 == 0 else "away" if isinstance(current_index, int) else None,
-            "lastUpdated": raw.get("lastUpdate"),
+            "lastUpdated": source_timestamp(raw.get("lastUpdate")),
         })
     return games
 
@@ -295,6 +284,7 @@ def _live_game_events(payload, match: dict, team_name: str = "") -> list[dict]:
             "awayLegs": away_legs,
             "homeRemaining": home["remaining"],
             "awayRemaining": away["remaining"],
+            "home": home, "away": away, "board": game["board"], "mode": game["mode"],
             "currentSide": game["currentSide"],
             "updatedAt": game["lastUpdated"],
         })

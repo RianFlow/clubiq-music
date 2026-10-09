@@ -707,8 +707,8 @@ function initDarts() {
       return Number.isFinite(updatedMs) && now-updatedMs<=LIVE_FINISH_GRACE_MS;
     }).map(match=>({
       id:match.id, matchKey:match.matchKey, board:match.board, mode:match.mode,
-      home:{name:match.home?.name || 'Heim',remaining:match.home?.points,legs:match.home?.legs,average:match.home?.average,lastScore:match.home?.lastScore,highFinish:match.home?.highFinish,count180:match.home?.count180},
-      away:{name:match.guest?.name || 'Gast',remaining:match.guest?.points,legs:match.guest?.legs,average:match.guest?.average,lastScore:match.guest?.lastScore,highFinish:match.guest?.highFinish,count180:match.guest?.count180},
+      home:{...match.home,name:match.home?.name || 'Heim',remaining:match.home?.points},
+      away:{...match.guest,name:match.guest?.name || 'Gast',remaining:match.guest?.points},
       currentSide:match.currentPlayerIndex===0?'home':match.currentPlayerIndex===1?'away':null,
       lastUpdated:match.lastUpdate, active:match.active, finished:match.finished,
     }));
@@ -720,7 +720,31 @@ function initDarts() {
       text:`${game.home.name} ${Number.isInteger(game.home.legs)?game.home.legs:'–'}:${Number.isInteger(game.away.legs)?game.away.legs:'–'} ${game.away.name}`,
       homeName:game.home.name,awayName:game.away.name,homeLegs:game.home.legs,awayLegs:game.away.legs,
       homeRemaining:game.home.remaining,awayRemaining:game.away.remaining,currentSide:game.currentSide,board:game.board,
+      home:game.home,away:game.away,
     }))};
+  }
+  function livePlayerFacts(player={}) {
+    const facts=document.createElement('div');facts.className='live-player-facts';
+    facts.setAttribute('role','group');facts.setAttribute('aria-label',`Wurfwerte ${player.name||'Spieler'}`);
+    const metrics=document.createElement('dl');metrics.className='live-player-metrics';
+    for(const [label,value] of [
+      ['AVG',Number.isFinite(player.average)?player.average.toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1}):'–'],
+      ['Darts im Leg',Number.isInteger(player.darts)?String(player.darts):'–'],
+      ['Letzter Wurf',Number.isInteger(player.lastScore)?String(player.lastScore):'–'],
+    ]) {
+      const metric=document.createElement('div'),term=document.createElement('dt'),number=document.createElement('dd');
+      term.textContent=label;number.textContent=value;metric.append(term,number);metrics.append(metric);
+    }
+    facts.append(metrics);
+    const totals=[];
+    if(Number.isInteger(player.totalScore))totals.push(`${player.totalScore.toLocaleString('de-DE')} Punkte`);
+    if(Number.isInteger(player.totalDarts))totals.push(`${player.totalDarts.toLocaleString('de-DE')} Darts`);
+    if(totals.length){const total=document.createElement('small');total.className='live-player-totals';total.textContent=`Partie gesamt: ${totals.join(' · ')}`;facts.append(total);}
+    const highlights=[];
+    if(Number.isInteger(player.count180)&&player.count180>0)highlights.push(`${player.count180} × 180`);
+    if(Number.isInteger(player.highFinish)&&player.highFinish>0)highlights.push(`Höchstes Finish: ${player.highFinish}`);
+    if(highlights.length){const line=document.createElement('small');line.className='live-player-totals';line.textContent=highlights.join(' · ');facts.append(line);}
+    return facts;
   }
   function upsertServerLiveTickerItem(group) {
     if (!group?.groupKey) return null;
@@ -899,7 +923,8 @@ function initDarts() {
             homeSide.append(homeName,homePoints); middle.append(legs,colon); awaySide.append(awayName,awayPoints); scoreline.append(homeSide,middle,awaySide);
             scoreline.setAttribute('aria-label',`${game.homeName} ${homePoints.textContent} zu ${awayPoints.textContent} ${game.awayName}. ${legs.textContent}.`);
             const fingerprint=JSON.stringify([game.homeRemaining,game.awayRemaining,game.homeLegs,game.awayLegs,game.currentSide]);const key=`${item.id}:${game.liveGameId}`;const previous=liveSnapshots.get(key);const changed=previous&&previous.fingerprint!==fingerprint;const changedAt=changed?Date.now():previous?.changedAt||0;liveSnapshots.set(key,{fingerprint,changedAt});if(liveSnapshots.size>256)liveSnapshots.delete(liveSnapshots.keys().next().value);if(changedAt&&Date.now()-changedAt<4000)liveGame.classList.add('score-updated');
-            liveGame.append(scoreline);const updated=document.createElement('small');updated.className='live-game-updated';const observed=Date.parse(game.updatedAt||item.updatedAt||data.updatedAt||'');updated.textContent=Number.isFinite(observed)?`Stand: ${new Date(observed).toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'})} Uhr`:'Aktualisierung wird geprüft';liveGame.append(updated);
+            const facts=document.createElement('div');facts.className='today-live-facts';facts.append(livePlayerFacts(game.home),livePlayerFacts(game.away));
+            liveGame.append(scoreline,facts);const updated=document.createElement('small');updated.className='live-game-updated';const observed=Date.parse(game.updatedAt||item.updatedAt||data.updatedAt||'');updated.textContent=Number.isFinite(observed)?`Stand: ${new Date(observed).toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'})} Uhr`:'Aktualisierung wird geprüft';liveGame.append(updated);
             if (!Number.isInteger(game.homeRemaining) || !Number.isInteger(game.awayRemaining)) {
               const wait=document.createElement('small'); wait.className='today-live-wait'; wait.textContent='Punktestand wird noch geladen'; liveGame.append(wait);
             }
@@ -1698,17 +1723,7 @@ function initDarts() {
         const divider=document.createElement('em'); divider.textContent=':';
         homeLive.append(homePoints,homeName); awayLive.append(awayPoints,awayName); scoreline.append(homeLive,divider,awayLive);
         const facts=document.createElement('div'); facts.className='native-live-facts';
-        const factLine=side=>{
-          const player=live[side] || {}, line=document.createElement('small');
-          const values=[];
-          if (Number.isInteger(player.lastScore)) values.push(`Letzte Aufnahme ${player.lastScore}`);
-          if (Number.isFinite(player.average)) values.push(`Ø ${player.average.toFixed(1)}`);
-          if (Number.isInteger(player.count180)&&player.count180>0) values.push(`${player.count180}× 180`);
-          if (Number.isInteger(player.highFinish)&&player.highFinish>0) values.push(`HF ${player.highFinish}`);
-          line.textContent=`${player.name || (side==='home'?'Heim':'Gast')}: ${values.join(' · ') || 'Werte werden geladen'}`;
-          return line;
-        };
-        facts.append(factLine('home'),factLine('away'));
+        facts.append(livePlayerFacts(live.home),livePlayerFacts(live.away));
         panel.append(label,leg,scoreline,facts); liveScores.append(panel);
       }
       if (!liveScores.childNodes.length) { const empty=document.createElement('p'); empty.className='match-detail-empty'; empty.textContent=match.kind==='live'?'3K Darts liefert noch keine Live-Spielstände.':'Diese Begegnung ist derzeit nicht live.'; liveScores.append(empty); }

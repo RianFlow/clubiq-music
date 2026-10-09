@@ -82,8 +82,30 @@ class DartsLiveTests(unittest.TestCase):
         mapped = normalize_match(raw_match())
         self.assertEqual((mapped["groupKey"], mapped["board"], mapped["guest"]["points"]), ("1657285", "2", 116))
         self.assertEqual(mapped["guest"]["average"], 67.5)
+        self.assertEqual(mapped["guest"]["darts"], 12)
+        self.assertEqual(mapped["guest"]["lastScore"], 140)
+        self.assertEqual(mapped["guest"]["totalDarts"], 104)
+        self.assertEqual(mapped["guest"]["totalScore"], 2340)
         self.assertNotIn("allInOneMatchdata", str(mapped))
         self.assertNotIn("hidden@example.test", str(mapped))
+
+    def test_unknown_live_totals_are_not_invented_as_zero(self):
+        players = [{"id": 1, "index": 0, "playerName": "Heim"}, {"id": 2, "index": 1, "playerName": "Gast"}]
+        mapped = normalize_match(raw_match(matchPlayers=players))
+        for key in ("darts", "lastScore", "totalDarts", "totalScore", "average"):
+            self.assertIsNone(mapped["guest"][key])
+
+    def test_team_subscribers_receive_opponent_leg_and_game_wins(self):
+        from darts_push import barver_push_event, subscription_matches
+        players = [dict(player, legs=2 if index == 0 else 1) for index, player in enumerate(raw_match()["matchPlayers"])]
+        before = normalize_match(raw_match(matchPlayers=players))
+        players[0]["legs"] = 3
+        after = normalize_match(raw_match(matchPlayers=players))
+        for raw in detect_events(before, after, META):
+            event = barver_push_event("live", raw)
+            self.assertFalse(raw["barverWon"])
+            self.assertTrue(subscription_matches(event, ["B"], [], ["leg", "game"]))
+            self.assertFalse(subscription_matches(event, ["A"], [], ["leg", "game"]))
 
     def test_rest_keeps_all_parallel_boards(self):
         matches = normalize_rest({"data": [raw_match("board-1", "1"), raw_match("board-2", "2")]})

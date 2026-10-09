@@ -207,6 +207,14 @@ h1 { font:500 clamp(1.7rem,3vw,2.7rem)/1.15 Georgia,serif; margin:0; }
 .today-live-score .throwing strong { color:#b63528; }
 .today-live-score .throwing small::before { content:'● '; color:#d43c30; }
 .today-live-wait { color:#6d7d78; font-size:.68rem; }
+.today-live-facts { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; padding-top:8px; border-top:1px solid #809b9133; }
+.live-player-facts { display:grid; gap:5px; min-width:0; }
+.live-player-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin:0; }
+.live-player-metrics dt { font-size:.68rem; line-height:1.25; min-height:2.5em; opacity:.85; }
+.live-player-metrics dd { margin:2px 0 0; font-size:1rem; font-weight:850; font-variant-numeric:tabular-nums; }
+.live-player-totals { font-size:.68rem; line-height:1.4; opacity:.85; overflow-wrap:anywhere; }
+body.tv-live .live-player-metrics dt { font-size:clamp(.7rem,1vw,.95rem); }
+body.tv-live .live-player-metrics dd { font-size:clamp(1.1rem,1.8vw,1.7rem); }
 .today-highlights { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:5px; }
 .today-highlights span { padding:4px 7px; color:#513d08; background:#f4e5a9; border-radius:999px; font-size:.7rem; font-weight:750; }
 .panel-loading { margin:0; padding:18px; color:#60706b; }
