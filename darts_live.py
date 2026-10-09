@@ -99,6 +99,7 @@ def _player(items: list[dict]) -> dict:
     names = [name for name in names if name]
     total_score = sum(_integer(item.get("scoreTotal"), 0, 100_000) or 0 for item in items)
     total_darts = sum(_integer(item.get("dartsTotal"), 0, 10_000) or 0 for item in items)
+    leg_darts = [_integer(item.get("darts"), 0, 1000) for item in items]
 
     def total(field: str, maximum: int = 10_000) -> int:
         return sum(_integer(item.get(field), 0, maximum) or 0 for item in items)
@@ -108,7 +109,9 @@ def _player(items: list[dict]) -> dict:
         "name": " & ".join(names)[:160] or "Noch offen",
         "points": _integer(first.get("points"), 0, 501),
         "lastScore": _integer(first.get("lastScore"), 0, 180),
-        "darts": _integer(first.get("darts"), 0, 100),
+        "darts": sum(value for value in leg_darts if value is not None) if any(value is not None for value in leg_darts) else None,
+        "totalDarts": total_darts if any(_integer(item.get("dartsTotal"), 0, 10_000) is not None for item in items) else None,
+        "totalScore": total_score if any(_integer(item.get("scoreTotal"), 0, 100_000) is not None for item in items) else None,
         "legs": _integer(first.get("legs"), 0, 25),
         "average": round(total_score / total_darts * 3, 1) if total_darts else None,
         "count60": total("count60"),

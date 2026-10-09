@@ -51,8 +51,8 @@
     if (!event || !BARVER_TEAM.test(text(event.team)) || !eventKey(event)) return false;
     if (event.type === '180') return Number(event.value) === 180 && !!text(event.player);
     if (event.type === 'high_finish') return Number.isInteger(Number(event.value)) && Number(event.value) >= 100 && Number(event.value) <= 170 && !!text(event.player);
-    if (event.type === 'leg') return event.barverWon === true || (['home', 'away', 'guest'].includes(event.winnerSide) && event.winnerSide === event.barverSide);
-    if (event.type === 'game') return event.barverWon === true;
+    if (event.type === 'leg') return typeof event.barverWon === 'boolean' || (['home', 'away', 'guest'].includes(event.winnerSide) && event.winnerSide === event.barverSide);
+    if (event.type === 'game') return typeof event.barverWon === 'boolean';
     if (event.type === 'short_leg') return event.barverWon === true && Number.isInteger(Number(event.darts)) && Number(event.darts) >= 1 && Number(event.darts) <= 18;
     return event.type === 'match';
   }
@@ -84,7 +84,7 @@
       .toLocaleLowerCase('de-DE').replace(/\s+/g, ' ');
   }
   function winnerPortraits(event, profiles = state.profiles) {
-    if (!['leg', 'game'].includes(event?.type) || !authentic(event)) return [];
+    if (!['leg', 'game'].includes(event?.type) || event.barverWon === false || !authentic(event)) return [];
     const code = teamCode(event.team);
     const candidates = (Array.isArray(profiles) ? profiles : []).filter(profile => profile
       && (text(profile.team).toUpperCase() === code || teamCode(profile.team) === code) && text(profile.name));
@@ -119,6 +119,10 @@
     const player = text(event.player, 100);
     const team = text(event.team, 80);
     const score = text(event.score, 20);
+    if (event.barverWon === false && ['leg','game'].includes(event.type)) return {
+      label: event.type === 'leg' ? 'LEG VERLOREN' : 'PARTIE VERLOREN',
+      headline: player || 'BARVER', detail: text(event.text, 240), foot: team,
+    };
     switch (event.type) {
       case '180': return { label: '180 GEWORFEN', headline: '180', detail: player, foot: team };
       case 'high_finish': return { label: 'HIGH FINISH', headline: String(event.value), detail: player, foot: team };
@@ -150,13 +154,17 @@
     if (state.highlightTimer) root.clearTimeout(state.highlightTimer);
     state.highlightTimer = null;
     state.active = null;
+    state.node?.classList.remove('is-loss');
     if (state.node && !state.roster) state.node.replaceChildren();
   }
   function nextHighlight() {
     if (state.roster || state.active || !state.enabled || !state.queue.length) return;
     const event = state.queue.shift(), view = graphic(event), host = mount();
     if (!host) return;
+    const compact = event.barverWon === false && ['leg', 'game'].includes(event.type);
+    host.classList.toggle('is-loss', compact);
     const card = element('section', `darts-broadcast-card type-${event.type.replace('_', '-')}`);
+    if (compact) card.classList.add('is-loss');
     card.append(element('span', 'darts-broadcast-kicker', view.label));
     const portraits = winnerPortraits(event);
     if (portraits.length) {
@@ -178,7 +186,7 @@
     if (view.foot) card.append(element('span', 'darts-broadcast-foot', view.foot));
     host.replaceChildren(card);
     state.active = event;
-    state.highlightTimer = root.setTimeout(() => { clearHighlight(); nextHighlight(); }, HIGHLIGHT_MS);
+    state.highlightTimer = root.setTimeout(() => { clearHighlight(); nextHighlight(); }, compact ? 2000 : HIGHLIGHT_MS);
   }
   function ingest(events, options = {}) {
     loadSeen();

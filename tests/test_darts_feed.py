@@ -124,7 +124,7 @@ class DartsFeedTests(unittest.TestCase):
             "id": 777, "matchKey": "game-10", "status": 1, "statusActive": True,
             "currentplayerIndex": 0, "lastUpdate": "2026-09-26T12:00:00",
             "matchPlayers": [
-                {"playerName": "Jannik", "points": 320, "legs": 2, "scoreTotal": 181, "email": "hidden@example.test"},
+                {"playerName": "Jannik", "points": 320, "legs": 2, "scoreTotal": 181, "dartsTotal": 9, "darts": 9, "lastScore": 60, "email": "hidden@example.test"},
                 {"playerName": "Gegner 1", "points": 410, "legs": 1, "scoreTotal": 91},
             ],
         }]}
@@ -132,8 +132,13 @@ class DartsFeedTests(unittest.TestCase):
         self.assertEqual((live[0]["home"]["remaining"], live[0]["away"]["remaining"]), (320, 410))
         self.assertNotIn("scoreTotal", str(live))
         self.assertNotIn("email", str(live))
+        self.assertEqual(live[0]["home"]["totalScore"], 181)
+        self.assertEqual(live[0]["home"]["totalDarts"], 9)
+        self.assertEqual(live[0]["home"]["darts"], 9)
+        self.assertEqual(live[0]["home"]["average"], 60.3)
         event = _live_game_events(payload, {"id": 99}, "SV Barver Darts A")[0]
         self.assertEqual((event["homeName"], event["awayName"], event["homeRemaining"], event["awayRemaining"]), ("Jannik", "Gegner 1", 320, 410))
+        self.assertEqual(event["home"]["lastScore"], 60)
 
     def test_report_score_is_never_misread_as_remaining_points(self):
         game = {

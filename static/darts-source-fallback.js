@@ -42,10 +42,13 @@
       const players=game.matchPlayers.filter(p=>p&&typeof p==='object');
       const side=parity=>{
         const members=players.filter((_,i)=>i%2===parity),p=members[0]||{};
-        return {name:members.map(p=>String(p.playerName||'').trim()).filter(Boolean).join(' & ').slice(0,160)||'Noch offen',remaining:Number.isInteger(p.points)&&p.points>=0&&p.points<=501?p.points:null,legs:Number.isInteger(p.legs)&&p.legs>=0&&p.legs<=25?p.legs:null};
+        const count=(value,max)=>Number.isInteger(value)&&value>=0&&value<=max?value:null;
+        const sum=(key,max)=>{const values=members.map(p=>count(p[key],max)).filter(value=>value!==null);return values.length?values.reduce((a,b)=>a+b,0):null;};
+        const totalDarts=sum('dartsTotal',10000),totalScore=sum('scoreTotal',100000);
+        return {name:members.map(p=>String(p.playerName||'').trim()).filter(Boolean).join(' & ').slice(0,160)||'Noch offen',remaining:count(p.points,501),legs:count(p.legs,25),darts:sum('darts',1000),lastScore:count(p.lastScore,180),totalDarts,totalScore,average:totalDarts>0&&totalScore!==null?Math.round(totalScore*30/totalDarts)/10:null};
       };
       const home=side(0),away=side(1),score=home.legs!==null&&away.legs!==null?`${home.legs}:${away.legs}`:'–';
-      return {type:'live_game',title:'Aktuelle Partie',text:`${home.name} ${score} ${away.name}`,matchId:match.id,liveGameId:Number.isSafeInteger(game.id)?game.id:0,homeName:home.name,awayName:away.name,homeLegs:home.legs,awayLegs:away.legs,homeRemaining:home.remaining,awayRemaining:away.remaining,currentSide:Number.isInteger(game.currentplayerIndex)?game.currentplayerIndex%2===0?'home':'away':null,updatedAt:iso(game.lastUpdate)};
+      return {type:'live_game',title:'Aktuelle Partie',text:`${home.name} ${score} ${away.name}`,matchId:match.id,liveGameId:Number.isSafeInteger(game.id)?game.id:0,homeName:home.name,awayName:away.name,homeLegs:home.legs,awayLegs:away.legs,homeRemaining:home.remaining,awayRemaining:away.remaining,home,away,board:String(game.board||'').slice(0,20),currentSide:Number.isInteger(game.currentplayerIndex)?game.currentplayerIndex%2===0?'home':'away':null,updatedAt:iso(game.lastUpdate)};
     });
   }
   function publicGame(raw) {

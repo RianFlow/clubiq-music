@@ -3,8 +3,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 const {chromium}=require('playwright');
 const root=path.resolve(__dirname,'..'),streams=new Set();
 const fixture={id:1280527,home:'DC Brenndorf E',away:'SV Barver Darts B',barverTeam:'B',barverTeams:['B'],kind:'upcoming',score:null,eventId:1445,league:'kl04',plannedAt:new Date(Date.now()+300000).toISOString(),url:'https://portal.3k-darts.com/'};
-let remaining=416,paused=false,moments=[];
-function group(){return {groupKey:String(fixture.id),meta:fixture,events:moments,connected:true,stale:false,finished:false,matches:[{id:99,matchKey:'1280782',board:'2',active:!paused,finished:paused,teamScoreHome:0,teamScoreGuest:1,currentPlayerIndex:1,lastUpdate:new Date().toISOString(),lastUpdateNs:Date.now()*1e6,home:{name:'Marvin Schwenker',points:501,legs:1},guest:{name:'Max Lowak',points:remaining,legs:2}}]};}
+let remaining=416,paused=false,moments=[],darts=12,lastScore=85;
+function group(){return {groupKey:String(fixture.id),meta:fixture,events:moments,connected:true,stale:false,finished:false,matches:[{id:99,matchKey:'1280782',board:'2',active:!paused,finished:paused,teamScoreHome:0,teamScoreGuest:1,currentPlayerIndex:1,lastUpdate:new Date().toISOString(),lastUpdateNs:Date.now()*1e6,home:{name:'Marvin Schwenker',points:501,legs:1,darts:9,totalDarts:54,totalScore:1050,average:58.3,lastScore:45},guest:{name:'Max Lowak',points:remaining,legs:2,darts,totalDarts:66,totalScore:1300,average:59.1,lastScore}}]};}
 function publish(){for(const res of streams)res.write(`event: update\ndata: ${JSON.stringify({group:group()})}\n\n`);}
 const server=http.createServer((req,res)=>{
   const p=new URL(req.url,'http://localhost').pathname;
@@ -46,14 +46,18 @@ const server=http.createServer((req,res)=>{
     try{await page.locator('#todayGrid .today-live-game').waitFor({timeout:10000});}catch(e){console.error('Live state:',await page.locator('#todayPanel').innerText(),'streams',streams.size);throw e;}
     assert.match(await page.locator('#todayGrid').innerText(),/Max Lowak/);
     assert.match(await page.locator('#todayGrid').innerText(),/416/);
+    const ownFacts=page.locator('#todayGrid .today-live-facts').getByRole('group',{name:'Wurfwerte Max Lowak'});
+    assert.match(await ownFacts.innerText(),/59,1/);assert.match(await ownFacts.innerText(),/Darts im Leg\s+12/);assert.match(await ownFacts.innerText(),/Letzter Wurf\s+85/);assert.match(await ownFacts.innerText(),/1\.300 Punkte.*66 Darts/);
     await page.locator('#todayGrid').getByRole('button',{name:'Spielbericht öffnen'}).click();
     await page.getByRole('tab',{name:'Live',exact:true}).click();
     assert.match(await page.locator('#matchHeading').innerText(),/0:1/);
     await page.locator('#match-panel-live').getByText('416',{exact:true}).waitFor();
-    remaining=180;publish();
+    assert.match(await page.locator('#match-panel-live .native-live-facts').innerText(),/Darts im Leg/);
+    remaining=180;darts=15;lastScore=54;publish();
     await page.locator('#todayGrid').getByText('180',{exact:true}).waitFor();
     assert.equal(await page.getByRole('tab',{name:'Live',exact:true}).getAttribute('aria-selected'),'true');
     await page.locator('#match-panel-live').getByText('180',{exact:true}).waitFor();
+    assert.match(await ownFacts.innerText(),/Darts im Leg\s+15/);assert.match(await ownFacts.innerText(),/Letzter Wurf\s+54/);
     moments=[{type:'game',matchId:fixture.id,gameId:88,team:'SV Barver Darts B',player:'Max Lowak',barverWon:false,homeLegs:3,awayLegs:1,text:'Max Lowak verliert 1:3 gegen Marvin Schwenker · AVG 55,6 / 60,2',occurred_at:new Date().toISOString()}];publish();
     await page.locator('#tickerTrack .ticker-group').first().getByText(/Partie verloren.*AVG 55,6/).waitFor();
     publish();
@@ -83,11 +87,20 @@ const server=http.createServer((req,res)=>{
     const bounds=await page.locator('.darts-broadcast-card').boundingBox();
     assert.ok(bounds.x>=0&&bounds.x+bounds.width<=390&&bounds.y>=0&&bounds.y+bounds.height<=844,'double victory fits the mobile TV screen');
     if(process.env.DARTS_SCREENSHOT)await page.screenshot({path:process.env.DARTS_SCREENSHOT});
+    await page.locator('.darts-broadcast-card.type-game').waitFor({state:'detached'});
+    moments=[{...moments[0],gameId:91,barverWon:false,homeLegs:3,awayLegs:1,text:'M. Lowak & R. Lange verliert 1:3 gegen die Gäste · AVG 55,6 / 60,2'}];publish();
+    const loss=page.locator('.darts-broadcast.is-tv.is-loss');await loss.waitFor();
+    await page.locator('.darts-broadcast-card.is-loss').evaluate(card=>Promise.all(card.getAnimations().map(animation=>animation.finished)));
+    const compactBounds=await loss.boundingBox();
+    assert.ok(compactBounds.width<=360&&compactBounds.height<250&&compactBounds.y>400,'opponent result stays a small corner notice in TV mode');
+    assert.equal(await loss.locator('img').count(),0,'losses do not show winner portraits');
+    assert.match(await loss.innerText(),/PARTIE VERLOREN/);
+    if(process.env.DARTS_LOSS_SCREENSHOT)await page.screenshot({path:process.env.DARTS_LOSS_SCREENSHOT});
     moments=[];
     paused=true;publish();
     await page.locator('#todayGrid .today-game.live').waitFor();
     assert.equal(await page.locator('#todayGrid').isVisible(),true,'keep the team match visible between board blocks');
     assert.deepEqual(errors,[]);
-    console.log('Live report, throw updates, result ticker with AVG, duplicate protection, single/double portraits, mobile TV and board pauses passed');
+    console.log('Live report, darts/AVG/throw updates, result ticker, win portraits, compact opponent animation, mobile TV and board pauses passed');
   }finally{await browser.close();for(const res of streams)res.end();await new Promise(resolve=>server.close(resolve));}
 })().catch(e=>{console.error(e);process.exitCode=1;server.close();});
