@@ -27,6 +27,20 @@ import json
 
 
 class CompactWebAppTests(unittest.TestCase):
+    def test_live_view_stays_in_app_scope_without_arbitrary_files(self):
+        app = FastAPI()
+        app.include_router(darts_web_app.router)
+        with tempfile.TemporaryDirectory() as directory:
+            page = Path(directory, 'darts.html')
+            page.write_text('<html>Live</html>', encoding='utf8')
+            with patch.object(darts_web_app, 'LIVE_DOCUMENT', page):
+                client = TestClient(app)
+                response = client.get('/app/live')
+                self.assertEqual(response.status_code, 200)
+                self.assertIn('no-store', response.headers['cache-control'])
+                self.assertEqual(client.get('/app/live/main.py').status_code, 404)
+                self.assertEqual(client.post('/app/live').status_code, 405)
+
     def test_scoped_files_manifest_headers_and_missing_build(self):
         app = FastAPI()
         app.include_router(darts_web_app.router)

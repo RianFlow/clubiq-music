@@ -11,13 +11,13 @@
   "description": "Spiele, Live-Stände, Teams und Tabellen des SV Barver Darts.",
   "icons": [
     {
-      "src": "icon-192.png?v=40d479d865b1bd61",
+      "src": "icon-192.png?v=0b99cd1823349498",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icon-512.png?v=40d479d865b1bd61",
+      "src": "icon-512.png?v=0b99cd1823349498",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"

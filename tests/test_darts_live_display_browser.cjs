@@ -31,7 +31,7 @@ const server=http.createServer((req,res)=>{
     if(p.endsWith('/highlights'))data={items:[]};
     res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(data));return;
   }
-  const file=path.resolve(root,`.${p==='/'||p==='/darts'?'/darts.html':p}`);
+  const file=p==='/app/'?path.resolve(root,'mobile/web-dist/index.html'):p.startsWith('/app/')&&p!=='/app/live'?path.resolve(root,'mobile/web-dist',p.slice(5)):path.resolve(root,`.${p==='/'||p==='/darts'||p==='/app/live'?'/darts.html':p}`);
   if(!file.startsWith(root+path.sep)){res.writeHead(403);res.end();return;}
   fs.readFile(file,(err,body)=>{res.writeHead(err?404:200,{'Content-Type':({'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json','.svg':'image/svg+xml','.webp':'image/webp'})[path.extname(file)]||'application/octet-stream'});res.end(err?'Not found':body);});
 });
@@ -47,7 +47,7 @@ const server=http.createServer((req,res)=>{
     assert.match(await page.locator('#todayGrid').innerText(),/Max Lowak/);
     assert.match(await page.locator('#todayGrid').innerText(),/416/);
     const ownFacts=page.locator('#todayGrid .today-live-facts').getByRole('group',{name:'Wurfwerte Max Lowak'});
-    assert.match(await ownFacts.innerText(),/59,1/);assert.match(await ownFacts.innerText(),/Darts im Leg\s+12/);assert.match(await ownFacts.innerText(),/Letzter Wurf\s+85/);assert.match(await ownFacts.innerText(),/1\.300 Punkte.*66 Darts/);
+    assert.match(await ownFacts.innerText(),/59,1/);assert.match(await ownFacts.innerText(),/Darts im Leg\s+12/);assert.match(await ownFacts.innerText(),/Letzter Wurf\s+85/);assert.match(await ownFacts.innerText(),/Geworfen im Leg: 85 Punkte/);assert.doesNotMatch(await ownFacts.innerText(),/1\.300|66 Darts|Partie gesamt/);
     await page.locator('#todayGrid').getByRole('button',{name:'Spielbericht öffnen'}).click();
     await page.getByRole('tab',{name:'Live',exact:true}).click();
     assert.match(await page.locator('#matchHeading').innerText(),/0:1/);
@@ -58,6 +58,11 @@ const server=http.createServer((req,res)=>{
     assert.equal(await page.getByRole('tab',{name:'Live',exact:true}).getAttribute('aria-selected'),'true');
     await page.locator('#match-panel-live').getByText('180',{exact:true}).waitFor();
     assert.match(await ownFacts.innerText(),/Darts im Leg\s+15/);assert.match(await ownFacts.innerText(),/Letzter Wurf\s+54/);
+    assert.match(await ownFacts.innerText(),/Geworfen im Leg: 321 Punkte/);
+    remaining=501;darts=0;lastScore=0;publish();
+    await page.waitForFunction(()=>document.querySelector('#todayGrid .today-live-facts')?.textContent.includes('Geworfen im Leg: 0 Punkte'));
+    assert.match(await ownFacts.innerText(),/Darts im Leg\s+0/);
+    assert.doesNotMatch(await ownFacts.innerText(),/1\.300|66 Darts|Partie gesamt/,'next leg never reuses match totals');
     moments=[{type:'game',matchId:fixture.id,gameId:88,team:'SV Barver Darts B',player:'Max Lowak',barverWon:false,homeLegs:3,awayLegs:1,text:'Max Lowak verliert 1:3 gegen Marvin Schwenker · AVG 55,6 / 60,2',occurred_at:new Date().toISOString()}];publish();
     await page.locator('#tickerTrack .ticker-group').first().getByText(/Partie verloren.*AVG 55,6/).waitFor();
     publish();
@@ -100,6 +105,34 @@ const server=http.createServer((req,res)=>{
     paused=true;publish();
     await page.locator('#todayGrid .today-game.live').waitFor();
     assert.equal(await page.locator('#todayGrid').isVisible(),true,'keep the team match visible between board blocks');
+    await page.evaluate(()=>document.exitFullscreen());
+    paused=false;moments=[];remaining=180;darts=15;
+    await page.goto(`http://127.0.0.1:${server.address().port}/app/`);
+    await page.getByRole('button',{name:'Barver B',exact:true}).click();
+    await page.locator('#appLiveStrip .live-chip').waitFor();
+    assert.match(await page.locator('#appLiveStrip').innerText(),/501 : 180/);
+    assert.doesNotMatch(await page.locator('#appLiveStrip').innerText(),/1300/);
+    await page.getByRole('button',{name:'TV-Modus öffnen',exact:true}).first().click();
+    await page.waitForURL('**/app/live?**');
+    assert.equal(new URL(page.url()).searchParams.get('teams'),'B');
+    await page.waitForFunction(()=>document.body.classList.contains('app-tv'));
+    await page.locator('#todayGrid .today-live-game').waitFor();
+    assert.equal(await page.evaluate(()=>document.fullscreenElement),null,'installed app TV mode also works without Fullscreen API');
+    for(const theme of ['light','dark']){await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Web-App TV fits the phone in '+theme);}
+    moments=[{type:'leg',matchId:fixture.id,gameId:100,team:'SV Barver Darts B',player:'M. Lowak & R. Lange',barverWon:true,winnerSide:'guest',legCount:4,text:'M. Lowak & R. Lange gewinnt das Leg',occurred_at:new Date().toISOString()}];publish();
+    await page.locator('.darts-broadcast.is-tv .darts-broadcast-card.type-leg img').nth(1).waitFor();
+    assert.deepEqual(await page.locator('.darts-broadcast-card img').evaluateAll(images=>images.map(img=>img.alt)),['Porträt von Max Lowak','Porträt von René Lange']);
+    await page.waitForFunction(()=>[...document.querySelectorAll('.darts-broadcast-card img')].every(img=>img.naturalWidth>0));
+    await page.locator('.darts-broadcast-card.type-leg').evaluate(card=>Promise.all(card.getAnimations().map(animation=>animation.finished)));
+    if(process.env.DARTS_APP_TV_SCREENSHOT)await page.screenshot({path:process.env.DARTS_APP_TV_SCREENSHOT});
+    await page.locator('.darts-broadcast-card.type-leg').waitFor({state:'detached'});
+    await page.getByRole('button',{name:'Alle',exact:true}).click();
+    await page.locator('#tvTeamControls [data-tv-team="B"]').click();
+    await page.locator('#todayGrid .app-tv-empty').waitFor();
+    assert.match(await page.locator('#todayGrid').innerText(),/erscheint sie hier automatisch/);
+    await page.getByRole('button',{name:'Zurück zur App',exact:true}).click();
+    await page.waitForURL('**/app/');
+    await page.getByRole('heading',{name:'Barver B',exact:true}).waitFor();
     assert.deepEqual(errors,[]);
     console.log('Live report, darts/AVG/throw updates, result ticker, win portraits, compact opponent animation, mobile TV and board pauses passed');
   }finally{await browser.close();for(const res of streams)res.end();await new Promise(resolve=>server.close(resolve));}

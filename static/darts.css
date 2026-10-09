@@ -496,8 +496,8 @@ body.tv-live .live-player-metrics dd { font-size:clamp(1.1rem,1.8vw,1.7rem); }
 .training-form { padding:0 16px 16px; display:grid; gap:12px; }
 .training-form button { justify-self:start; }
 .training-form p { margin:0; line-height:1.5; }
-body:fullscreen #trainingPanel,body:fullscreen #activityPanel { height:100%; overflow:auto; }
-body:fullscreen #trainingFrame,body:fullscreen #activityFrame { flex:1 0 360px; }
+body:is(:fullscreen,.app-tv) #trainingPanel,body:is(:fullscreen,.app-tv) #activityPanel { height:100%; overflow:auto; }
+body:is(:fullscreen,.app-tv) #trainingFrame,body:is(:fullscreen,.app-tv) #activityFrame { flex:1 0 360px; }
 .focused .frame-wrap { height:calc(100dvh - 260px); min-height:440px; }
 .message { padding:12px; border:1px solid #c7d9d0; border-radius:10px; background:#e6eee8; }
 footer { display:flex; flex-wrap:wrap; justify-content:space-between; gap:10px 20px; margin:20px 0; }
@@ -514,52 +514,52 @@ input { width:100%; min-height:48px; padding:12px; border:1px solid #a8bab2; bor
 .subtle { color:#52635e; font-size:.88rem; }
 .error { color:#982e24; background:#ffebe6; padding:10px; border-radius:8px; }
 .dialog-actions { display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-top:20px; }
-body:fullscreen { overflow:auto; background:#f4f4ef; display:flex; flex-direction:column; height:100dvh; }
-body:fullscreen .darts-header { flex-shrink:0; }
-body:fullscreen .intro,body:fullscreen .source-note,body:fullscreen footer { display:none; }
-body:fullscreen main { padding:12px; flex:1; min-height:0; width:100%; }
-body:fullscreen main { display:flex; flex-direction:column; }
-body:fullscreen .layout-controls { margin:0 0 10px; padding:8px; flex-shrink:0; }
-body:fullscreen .layout-controls p,body:fullscreen .auto-load { display:none; }
-body:fullscreen .team-grid { flex:1; min-height:0; grid-template-rows:repeat(2,minmax(0,1fr)); }
-body:fullscreen .team-grid[data-count="2"] { grid-template-rows:minmax(0,1fr); }
-@media(min-width:1500px) { body:fullscreen .team-grid[data-count="3"] { grid-template-rows:minmax(0,1fr); } }
-body:fullscreen .team-grid.focused { grid-template-rows:minmax(0,1fr); }
-body:fullscreen .team-card { display:flex; flex-direction:column; min-height:0; }
-body:fullscreen .frame-wrap { height:auto; min-height:0; flex:1; }
-body:fullscreen .team-head,body:fullscreen .team-tools,body:fullscreen .frame-note { flex-shrink:0; }
-body:fullscreen .placeholder { min-height:0; overflow:auto; }
-body:fullscreen .match-center,body:fullscreen .source-note,body:fullscreen #layoutControls { display:none !important; }
-body:fullscreen #todayPanel { display:flex !important; flex:1; min-height:0; margin:0; flex-direction:column; }
-body:fullscreen #todayPanel .sports-panel-head { flex:0 0 auto; }
-body:fullscreen .today-grid { flex:1; min-height:0; grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-rows:minmax(0,1fr); }
-body:fullscreen .today-game { min-height:0; align-content:center; }
-body:fullscreen .darts-header { min-height:58px; padding:7px 18px; }
-body:fullscreen .darts-header nav > :not(#fullscreen) { display:none; }
-body:fullscreen .darts-header nav { margin-left:auto; }
-body:fullscreen .brand img { width:40px; height:40px; }
-body:fullscreen .header-club-logo { width:92px; height:48px; margin-left:14px; margin-right:auto; }
-body:fullscreen .score-ticker { min-height:58px; }
-body:fullscreen .ticker-item,body:fullscreen .ticker-loading { min-height:58px; font-size:1rem; }
-body:fullscreen .sponsor-slot:not(.sponsor-slot-tv),body:fullscreen #pageStatus { display:none !important; }
-body:fullscreen main { padding:10px 18px 14px; }
-body:fullscreen #todayPanel .sports-panel-head { min-height:86px; padding:12px 20px; }
-body:fullscreen #todayPanel .sports-panel-head h2 { font-size:clamp(1.8rem,3vw,2.7rem); }
-body:fullscreen .today-grid { gap:14px; padding:14px; }
-body:fullscreen .today-game { padding:clamp(16px,2vw,28px); border-left-width:9px; }
-body:fullscreen .today-matchup strong { font-size:clamp(1.15rem,2vw,1.8rem); }
-body:fullscreen .today-matchup b { min-width:84px; padding:10px 14px; font-size:1.5rem; }
-body:fullscreen .today-detail { align-items:start; padding:12px 14px; font-size:1rem; }
-body:fullscreen .today-live-games { gap:12px; }
-body:fullscreen .today-live-game { padding-bottom:12px; }
-body:fullscreen .today-live-score { gap:18px; }
-body:fullscreen .today-live-score small { font-size:clamp(.84rem,1.25vw,1.1rem); }
-body:fullscreen .today-live-score strong { font-size:clamp(2.2rem,4.8vw,4.6rem); }
-body:fullscreen .today-live-middle b { font-size:clamp(1.6rem,3vw,2.8rem); }
-body:fullscreen .today-highlights span { padding:7px 10px; font-size:.86rem; }
-body:fullscreen .today-time { font-size:.9rem; }
+body:is(:fullscreen,.app-tv) { overflow:auto; background:#f4f4ef; display:flex; flex-direction:column; height:100dvh; }
+body:is(:fullscreen,.app-tv) .darts-header { flex-shrink:0; }
+body:is(:fullscreen,.app-tv) .intro,body:is(:fullscreen,.app-tv) .source-note,body:is(:fullscreen,.app-tv) footer { display:none; }
+body:is(:fullscreen,.app-tv) main { padding:12px; flex:1; min-height:0; width:100%; }
+body:is(:fullscreen,.app-tv) main { display:flex; flex-direction:column; }
+body:is(:fullscreen,.app-tv) .layout-controls { margin:0 0 10px; padding:8px; flex-shrink:0; }
+body:is(:fullscreen,.app-tv) .layout-controls p,body:is(:fullscreen,.app-tv) .auto-load { display:none; }
+body:is(:fullscreen,.app-tv) .team-grid { flex:1; min-height:0; grid-template-rows:repeat(2,minmax(0,1fr)); }
+body:is(:fullscreen,.app-tv) .team-grid[data-count="2"] { grid-template-rows:minmax(0,1fr); }
+@media(min-width:1500px) { body:is(:fullscreen,.app-tv) .team-grid[data-count="3"] { grid-template-rows:minmax(0,1fr); } }
+body:is(:fullscreen,.app-tv) .team-grid.focused { grid-template-rows:minmax(0,1fr); }
+body:is(:fullscreen,.app-tv) .team-card { display:flex; flex-direction:column; min-height:0; }
+body:is(:fullscreen,.app-tv) .frame-wrap { height:auto; min-height:0; flex:1; }
+body:is(:fullscreen,.app-tv) .team-head,body:is(:fullscreen,.app-tv) .team-tools,body:is(:fullscreen,.app-tv) .frame-note { flex-shrink:0; }
+body:is(:fullscreen,.app-tv) .placeholder { min-height:0; overflow:auto; }
+body:is(:fullscreen,.app-tv) .match-center,body:is(:fullscreen,.app-tv) .source-note,body:is(:fullscreen,.app-tv) #layoutControls { display:none !important; }
+body:is(:fullscreen,.app-tv) #todayPanel { display:flex !important; flex:1; min-height:0; margin:0; flex-direction:column; }
+body:is(:fullscreen,.app-tv) #todayPanel .sports-panel-head { flex:0 0 auto; }
+body:is(:fullscreen,.app-tv) .today-grid { flex:1; min-height:0; grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-rows:minmax(0,1fr); }
+body:is(:fullscreen,.app-tv) .today-game { min-height:0; align-content:center; }
+body:is(:fullscreen,.app-tv) .darts-header { min-height:58px; padding:7px 18px; }
+body:is(:fullscreen,.app-tv) .darts-header nav > :not(#fullscreen) { display:none; }
+body:is(:fullscreen,.app-tv) .darts-header nav { margin-left:auto; }
+body:is(:fullscreen,.app-tv) .brand img { width:40px; height:40px; }
+body:is(:fullscreen,.app-tv) .header-club-logo { width:92px; height:48px; margin-left:14px; margin-right:auto; }
+body:is(:fullscreen,.app-tv) .score-ticker { min-height:58px; }
+body:is(:fullscreen,.app-tv) .ticker-item,body:is(:fullscreen,.app-tv) .ticker-loading { min-height:58px; font-size:1rem; }
+body:is(:fullscreen,.app-tv) .sponsor-slot:not(.sponsor-slot-tv),body:is(:fullscreen,.app-tv) #pageStatus { display:none !important; }
+body:is(:fullscreen,.app-tv) main { padding:10px 18px 14px; }
+body:is(:fullscreen,.app-tv) #todayPanel .sports-panel-head { min-height:86px; padding:12px 20px; }
+body:is(:fullscreen,.app-tv) #todayPanel .sports-panel-head h2 { font-size:clamp(1.8rem,3vw,2.7rem); }
+body:is(:fullscreen,.app-tv) .today-grid { gap:14px; padding:14px; }
+body:is(:fullscreen,.app-tv) .today-game { padding:clamp(16px,2vw,28px); border-left-width:9px; }
+body:is(:fullscreen,.app-tv) .today-matchup strong { font-size:clamp(1.15rem,2vw,1.8rem); }
+body:is(:fullscreen,.app-tv) .today-matchup b { min-width:84px; padding:10px 14px; font-size:1.5rem; }
+body:is(:fullscreen,.app-tv) .today-detail { align-items:start; padding:12px 14px; font-size:1rem; }
+body:is(:fullscreen,.app-tv) .today-live-games { gap:12px; }
+body:is(:fullscreen,.app-tv) .today-live-game { padding-bottom:12px; }
+body:is(:fullscreen,.app-tv) .today-live-score { gap:18px; }
+body:is(:fullscreen,.app-tv) .today-live-score small { font-size:clamp(.84rem,1.25vw,1.1rem); }
+body:is(:fullscreen,.app-tv) .today-live-score strong { font-size:clamp(2.2rem,4.8vw,4.6rem); }
+body:is(:fullscreen,.app-tv) .today-live-middle b { font-size:clamp(1.6rem,3vw,2.8rem); }
+body:is(:fullscreen,.app-tv) .today-highlights span { padding:7px 10px; font-size:.86rem; }
+body:is(:fullscreen,.app-tv) .today-time { font-size:.9rem; }
 [data-theme="dark"] { color-scheme:dark; color:#e8f0ec; background:#0b1412; --green:#82cbb8; --line:#30443e; }
-[data-theme="dark"] body,[data-theme="dark"] body:fullscreen { color:#e8f0ec; background:#0b1412; }
+[data-theme="dark"] body,[data-theme="dark"] body:is(:fullscreen,.app-tv) { color:#e8f0ec; background:#0b1412; }
 [data-theme="dark"] button,[data-theme="dark"] .darts-header a:not(.brand),[data-theme="dark"] .external { color:#dff3ed; background:#15231f; border-color:#3a514a; }
 [data-theme="dark"] button:hover,[data-theme="dark"] a.external:hover { background:#20342e; }
 [data-theme="dark"] button.primary { color:#fff; background:#236456; border-color:#377e6e; }
@@ -819,17 +819,17 @@ body:fullscreen .today-time { font-size:.9rem; }
   .team-tools { padding:0 12px 12px; }
   .team-tools .external { margin-left:0; }
   .frame-wrap { height:65dvh; min-height:380px; }
-  body:fullscreen .frame-wrap { height:65dvh; }
-  body:fullscreen .team-grid,body:fullscreen .team-grid[data-count="2"],body:fullscreen .team-grid.focused { height:auto; flex:none; grid-template-rows:none; }
-  body:fullscreen .frame-wrap { flex:auto; }
+  body:is(:fullscreen,.app-tv) .frame-wrap { height:65dvh; }
+  body:is(:fullscreen,.app-tv) .team-grid,body:is(:fullscreen,.app-tv) .team-grid[data-count="2"],body:is(:fullscreen,.app-tv) .team-grid.focused { height:auto; flex:none; grid-template-rows:none; }
+  body:is(:fullscreen,.app-tv) .frame-wrap { flex:auto; }
   .team-tools select { flex:1 1 140px; font-size:16px; }
   .dialog-actions button { width:100%; }
-  body:fullscreen .today-grid { grid-template-columns:1fr; overflow:auto; grid-auto-rows:auto; }
+  body:is(:fullscreen,.app-tv) .today-grid { grid-template-columns:1fr; overflow:auto; grid-auto-rows:auto; }
   body.tv-live .today-grid.featured-live,body.tv-live .today-grid.featured-live[data-live-count="1"] { grid-template-columns:1fr; }
   body.tv-live .today-grid.featured-live[data-live-count="1"] .today-live-games { grid-template-columns:1fr; }
-  body:fullscreen .today-game { min-height:150px; }
-  body:fullscreen .darts-header .header-club-logo { display:none; }
-  body:fullscreen .today-live-score strong { font-size:clamp(2rem,10vw,3.5rem); }
+  body:is(:fullscreen,.app-tv) .today-game { min-height:150px; }
+  body:is(:fullscreen,.app-tv) .darts-header .header-club-logo { display:none; }
+  body:is(:fullscreen,.app-tv) .today-live-score strong { font-size:clamp(2rem,10vw,3.5rem); }
 }
 @media (prefers-reduced-motion:reduce) { .match-highlight-track { animation:none; padding:8px 12px; white-space:normal; flex-wrap:wrap; } }
 .ticker-item.highlight::before { content:'HIGHLIGHT'; background:#e7cc75; }
@@ -1391,3 +1391,31 @@ body.tv-live .club-training { display:none; }
 .player-data-status small { color:inherit; opacity:.85; }
 .player-data-status button { flex-shrink:0; }
 @media (max-width:600px) { .player-data-status { align-items:flex-start; flex-direction:column; } }
+
+/* The installed Web-App uses the same TV layout without the Fullscreen API. */
+body.app-tv{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+body.app-tv .darts-header{position:sticky;top:0;z-index:8;background:var(--ui-bg,#fffef9)}
+body.app-tv .header-club-logo,body.app-tv .brand small,body.app-tv .mobile-section-nav,body.app-tv .mobile-menu-button,body.app-tv #homeTeamPanel,body.app-tv #tvScheduleTeaser,body.app-tv #joinTeaser,body.app-tv #todayPanel>.sports-panel-head,body.app-tv #pageStatus{display:none!important}
+body.app-tv .darts-header .header-tools{display:flex;margin-left:auto}
+body.app-tv #fullscreen{display:block!important;font-size:.8rem;white-space:nowrap;min-height:44px}
+body.app-tv .tv-team-controls{position:sticky;top:58px;z-index:7;background:var(--ui-bg,#fffef9)}
+body.app-tv #todayGrid{margin-bottom:80px}
+body.app-tv .tv-roster-choice,body.app-tv #presentTvRoster{display:none}
+body.app-tv #liveDataStatus{font-size:.72rem;max-width:100%;white-space:normal}
+@media(max-width:650px){
+ body.app-tv main{padding:8px}
+ body.app-tv .today-grid{padding:0;gap:12px}
+ body.app-tv .today-game{padding:12px;border-left-width:4px}
+ body.app-tv .today-matchup{padding:10px;gap:8px}
+ body.app-tv .today-matchup strong{font-size:.85rem}
+ body.app-tv .today-matchup b{min-width:58px;padding:8px;font-size:1.3rem}
+ body.app-tv .today-live-games{grid-template-columns:1fr!important}
+ body.app-tv .today-live-middle{min-width:64px}
+ body.app-tv .today-live-score{gap:8px;min-height:95px}
+ body.app-tv .today-live-score small{font-size:.75rem;overflow-wrap:anywhere}
+ body.app-tv .today-live-score strong{font-size:clamp(2.2rem,10vw,3.5rem)}
+ body.app-tv .today-live-legs{font-size:.8rem!important;padding:6px}
+ body.app-tv .today-detail{padding:8px 0}
+ body.app-tv .today-live-game{padding:10px}
+ body.app-tv .tv-team-controls>span,body.app-tv #tvTeamCount{display:none}
+}

@@ -100,12 +100,34 @@ function list(parent,title,matches,limit=6){parent.append(node('h2',title));cons
 function filter(parent){const wrap=node('label',undefined,'filter');wrap.append(node('span','Mannschaft'));const select=node('select');select.dataset.focus='team-filter';for(const code of ['','A','B','C','D']){const option=node('option',code?'Barver '+code:'Alle Teams');option.value=code;select.append(option);}select.value=team;select.addEventListener('change',()=>{team=select.value;render();});wrap.append(select);parent.append(wrap);}
 function teamButtons(parent){const grid=node('div',undefined,'grid');for(const code of ['A','B','C','D'])grid.append(button('Barver '+code,()=>openTeam(code)));parent.append(grid);}
 function navigate(next){if(webApp&&next!=='training'){const url=new URL(location.href);url.searchParams.delete('training');history.replaceState(null,'',url);}scrollPositions[view]=window.scrollY;view=next;settingsPage='';render();window.scrollTo(0,scrollPositions[next]||0);if(next==='training')training.refresh();}
+function openTv(code=preferences.favorite){
+  const url=new URL('/app/live',location.origin);
+  if(['A','B','C','D'].includes(code))url.searchParams.set('teams',code);else url.searchParams.set('teams','A,B,C,D');
+  url.searchParams.set('appTheme',document.documentElement.dataset.theme==='dark'?'dark':'light');
+  location.assign(url.href);
+}
+function liveStrip(){
+  const strip=q('#appLiveStrip');
+  if(!webApp||view==='training'){strip.hidden=true;return;}
+  const matches=matchesFor(state.season,state.live,preferences.favorite);
+  const fragment=document.createDocumentFragment();
+  for(const match of matches)for(const raw of match.boards||[]){
+    const board=liveBoardView(raw,Date.now(),!!failures.live||Date.now()-(cacheTimes.live||0)>45000||!!match.liveStale);
+    const chip=button('',()=>openMatch(match.id),'live-chip');
+    const names=board.players.map(p=>p.name).join(' / ');
+    chip.append(node('small',`${board.stale?'Letzter Stand':'Live'} · Barver ${match.barverTeam||''} · Board ${board.board}`),node('span',names,'live-chip-names'),node('strong',board.players.map(p=>p.points??'–').join(' : ')));
+    chip.setAttribute('aria-label',`Board ${board.board}: ${names}. Restpunkte im aktuellen Leg: ${board.players.map(p=>p.points??'unbekannt').join(' zu ')}${board.stale?'. Letzter bekannter Stand':''}. Spiel öffnen.`);
+    fragment.append(chip);
+  }
+  strip.replaceChildren(fragment);strip.hidden=!strip.childElementCount;
+}
 function home(parent){
   const hero=node('section',undefined,'hero');hero.append(node('small','DEIN VEREIN AUF EINEN BLICK'),node('h1',preferences.favorite?'Barver '+preferences.favorite:'Barver Darts'),node('p',preferences.favorite?'Deine Termine, Ergebnisse und Mannschaft.':'Alle Mannschaften im Blick.','muted'));parent.append(hero);
   if(!preferences.favorite&&!onboardingDone){hero.classList.add('welcome');hero.append(node('p','Wähle deine Mannschaft für deinen persönlichen Spieltag.','welcome-note'));favoriteChoices(hero);hero.append(button('Später auswählen',async()=>{onboardingDone=true;await store('onboarding-done',true);render();},'menu-back'));}
   else{const favorite=node('label',undefined,'filter hero-choice'),select=node('select');favorite.append(node('span','Meine Mannschaft'));select.dataset.focus='home-favorite';select.setAttribute('aria-label','Meine Mannschaft');for(const code of ['','A','B','C','D']){const option=node('option',code?'Barver '+code:'Alle Mannschaften');option.value=code;select.append(option);}select.value=preferences.favorite;select.addEventListener('change',()=>chooseFavorite(select.value));favorite.append(select);hero.append(favorite);}
   const grouped=sections(matchesFor(state.season,state.live,preferences.favorite));
   if(grouped.live.length)list(parent,'Jetzt live',grouped.live,Infinity);
+  if(webApp)parent.append(button('TV-Modus öffnen',()=>openTv(),'card more-matches'));
   if(grouped.today.length)list(parent,'Heute',grouped.today,Infinity);
   if(!grouped.live.length&&!grouped.today.length){
     const next=grouped.next[0];if(next){parent.append(node('h2','Nächster Spieltag'),matchCard(next));}
@@ -145,6 +167,7 @@ function settings(parent){
     parent.append(node('p','Spielplan, Teams, Tabellen und deine Auswahl bleiben in dieser Oberfläche. Ohne Verbindung siehst du den zuletzt geladenen Stand. Live-Daten brauchen Internet.','muted'));
   }
   if(settingsPage==='general'){
+  if(webApp){const label=node('label',undefined,'training-push-option'),input=node('input');input.type='checkbox';try{input.checked=localStorage.getItem('clubiq_darts_broadcast_enabled')!=='false';}catch(_){input.checked=true;}input.addEventListener('change',()=>{try{localStorage.setItem('clubiq_darts_broadcast_enabled',String(input.checked));}catch(_){toast('Die Animationseinstellung konnte nicht gespeichert werden.');}});label.append(input,node('span','Sieganimationen im TV-Modus'));parent.append(label);}
   const look=node('label',undefined,'filter');look.append(node('span','Darstellung'));const themeSelect=node('select');themeSelect.dataset.focus='appearance';themeSelect.setAttribute('aria-label','Darstellung');
   for(const [value,label] of [['system','Wie mein Handy'],['light','Hell'],['dark','Dunkel']]){const option=node('option',label);option.value=value;themeSelect.append(option);}
   themeSelect.value=appearance;themeSelect.addEventListener('change',async()=>{appearance=themeSelect.value;applyAppearance();await store('appearance',appearance);});look.append(themeSelect);parent.append(look);
@@ -181,6 +204,7 @@ function settings(parent){
   if(settingsPage==='about')parent.append(button('Impressum',()=>external('/impressum')),button('Datenschutz',()=>external('/datenschutz')));
 }
 function render(){
+  liveStrip();
   const root=q('#content'),scroll=window.scrollY,focus=document.activeElement?.dataset?.focus;root.replaceChildren();q('#pageTitle').textContent={home:'Dein Spieltag',training:'Unser Training',matches:'Alle Spiele',teams:'Unsere Teams',settings:'Mein Darts'}[view];
   if(applyWebUpdate)root.append(button('Update verfügbar · jetzt neu laden',()=>applyWebUpdate(),'update-action'));
   for(const b of document.querySelectorAll('nav button'))b.setAttribute('aria-current',b.dataset.view===view?'page':'false');
@@ -206,14 +230,14 @@ function updateMatchLive(){
     const card=node('article',undefined,'live-board'),head=node('div',undefined,'board-heading');
     head.append(node('strong','Board '+board.board),node('span',board.stale?'LETZTER STAND':'LIVE','badge '+(board.stale?'':'live')));card.append(head);
     if(board.mode)card.append(node('small',board.mode));
-    card.append(node('small','Punkte im aktuellen Leg','points-label'));
+    card.append(node('small','Restpunkte im aktuellen Leg','points-label'));
     for(const player of board.players){
       const row=node('div',undefined,'live-player'+(player.throwing?' throwing':'')),copy=node('div');
       copy.append(node('strong',player.name));if(player.throwing)copy.append(node('small','● Am Wurf'));
 
       row.append(copy,node('strong',player.points===0?'CHECK':player.points??'–','live-points'));card.append(row);
     }
-    card.append(node('div',`Legs ${board.players[0].legs??'–'} : ${board.players[1].legs??'–'}`,'live-legs'));collapsible(card,'Weitere Statistiken','board-'+detail.id+'-'+board.board,body=>{for(const player of board.players)body.append(node('p',`${player.name}: Average ${player.average??'–'} · Letzter Wurf ${player.lastScore??'–'}`,'muted'));});fragment.append(card);
+    card.append(node('div',`Legs ${board.players[0].legs??'–'} : ${board.players[1].legs??'–'}`,'live-legs'));collapsible(card,'Weitere Statistiken','board-'+detail.id+'-'+board.board,body=>{for(const player of board.players)body.append(node('p',`${player.name}: AVG (Partie) ${player.average??'–'} · Darts im Leg ${player.darts??'–'} · Letzter Wurf ${player.lastScore??'–'}`,'muted'));});fragment.append(card);
   }
   if(!boards.length)fragment.append(node('p',match?.kind==='final'?'Diese Begegnung ist beendet.':match?.kind==='pending'?'Keine aktuellen Live-Daten. Die offizielle Bestätigung steht noch aus.':'Noch keine laufende Partie von 3K gemeldet.','empty'));
   detail.live.replaceChildren(fragment);
@@ -235,6 +259,7 @@ function openMatch(id){
   const live=node('section',undefined,'match-live'),report=node('section',undefined,'match-report');live.setAttribute('aria-label','Live-Spielstand');
   report.append(node('p','Spielbericht und Statistiken werden geladen; das kann einige Sekunden dauern.','muted'));root.append(summary);if(m){root.append(node('small',date(m.plannedAt)+' · '+matchSide(m,preferences.favorite)));appointmentActions(root,m);}q('#detail').scrollTop=0;root.append(button('Spielstand aktualisieren',()=>refresh(),'detail-refresh'),live);collapsible(root,'Spielbericht & Statistiken','report-'+id,body=>body.append(report));
   selectedMatch={id,ticket,live,report,label,score,loading:false,loaded:false};updateMatchLive();loadMatchReport(selectedMatch);refresh(true);
+  if(webApp)root.append(button('Im TV-Modus verfolgen',()=>openTv(m?.barverTeam),'card more-matches'));
 }
 function openTeam(code,restore=false){
   detailTeam=code;
@@ -268,7 +293,7 @@ for(const b of document.querySelectorAll('nav button'))b.addEventListener('click
 q('#themeToggle').addEventListener('click',async()=>{appearance=document.documentElement.dataset.theme==='dark'?'light':'dark';applyAppearance();await store('appearance',appearance);});
 q('#refresh').addEventListener('click',()=>{refresh();training.refresh();});q('#closeDetail').addEventListener('click',()=>{detailSequence++;selectedMatch=null;detailTeam='';q('#detail').close();});q('#detail').addEventListener('close',()=>{detailSequence++;selectedMatch=null;detailBack=null;detailTeam='';if(webApp){const url=new URL(location.href);url.searchParams.delete('match');history.replaceState(null,'',url);}});
 window.addEventListener('online',()=>refresh());document.addEventListener('visibilitychange',()=>{foreground=!document.hidden;if(foreground){refresh();if(view==='training')training.refresh();}});
-if(webApp){document.documentElement.dataset.runtime='web';q('#preview').textContent='BARVER DARTS · WEB-APP';window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installPrompt=event;if(view==='settings')render();});window.addEventListener('appinstalled',()=>{installPrompt=null;if(view==='settings')render();});}
+if(webApp){document.documentElement.dataset.runtime='web';q('#webTv').hidden=false;q('#webTv').addEventListener('click',()=>openTv());q('#preview').textContent='BARVER DARTS · WEB-APP';window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installPrompt=event;if(view==='settings')render();});window.addEventListener('appinstalled',()=>{installPrompt=null;if(view==='settings')render();});}
 if(native){q('#preview').textContent='ANDROID-TESTVERSION';App.addListener('appStateChange',({isActive})=>{foreground=isActive;if(isActive){refresh();checkPush();}});App.addListener('backButton',()=>{if(q('#detail').open){if(detailBack){detailBack();}else{detailSequence++;q('#detail').close();}}else if(view==='settings'&&settingsPage){settingsPage='';render();}else if(view!=='home'){navigate('home');}else App.minimizeApp();});}
 async function start(){const savedAppearance=await read('appearance','system');appearance=['system','light','dark'].includes(savedAppearance)?savedAppearance:'system';applyAppearance();preferences=cleanPreferences(await read('preferences',{}));onboardingDone=await read('onboarding-done',false);team=preferences.favorite;for(const key of Object.keys(state)){const cached=await read('snapshot-'+key,null);if(cached?.payload&&typeof cached.payload==='object'){state[key]=cached.payload;cacheTimes[key]=Number(cached.savedAt)||0;}}await training.init();render();training.refresh();const initialRefresh=refresh();initPush().catch(()=>toast('Push-Einstellungen konnten nicht geladen werden.'));if(webApp){const query=new URL(location.href).searchParams,trainingId=trainingNotificationTarget({scope:'training',trainingId:query.get('training')});if(trainingId){view='training';training.select(trainingId);}const id=notificationTarget({matchId:query.get('match')});if(id){await initialRefresh;openMatch(id);}}setInterval(()=>refresh(true),15000);setInterval(()=>{if(foreground&&view==='training')training.refresh(true);},10000);setInterval(()=>{refresh();if(foreground){checkPush();if(view==='training')training.refresh();}},60000);}
 start();

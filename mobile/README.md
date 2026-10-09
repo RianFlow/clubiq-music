@@ -106,6 +106,27 @@ Offizielle Grundlagen:
 - https://developer.apple.com/app-store/review/guidelines/#minimum-functionality
 
 
+## TV-Modus in der Web-App
+
+In der Web-App öffnet **TV** oben im Kopfbereich oder **TV-Modus öffnen** auf der
+Startseite die Live-Ansicht der Website. Sie bleibt unter `/app/live` innerhalb
+der installierten Web-App. **Zurück zur App** führt zur kompakten Übersicht zurück.
+Die Lieblingsmannschaft ist vorausgewählt; A–D und Alle ändern die Auswahl.
+Eine laufende Partie erscheint automatisch. Der Modus benötigt eine Verbindung,
+funktioniert aber auch ohne Unterstützung der browserseitigen Vollbildfunktion.
+
+Bei einem gewonnenen Leg oder einer gewonnenen Partie erscheint die Sieganimation
+mit dem vorhandenen Spielerbild, im Doppel mit beiden vorhandenen Bildern.
+Fehlende oder nicht eindeutig zuordenbare Fotos werden weggelassen. Unter
+**Mein Darts → Darstellung & Lieblingsteam → Sieganimationen im TV-Modus** lässt
+sich die Anzeige ein- und ausschalten. Die normale Web-App-Übersicht enthält
+eine kleine, beim Scrollen sichtbare Live-Leiste mit den Restpunkten der Legs.
+Sie ist innerhalb der Web-App sichtbar, nicht in der Handy-Systemstatusleiste.
+
+Restpunkte, geworfene Punkte und Darts beziehen sich in der Liga-Liveansicht auf
+das aktuelle 501-Leg. Der separat beschriftete **AVG (Partie)** bleibt der Average
+der gesamten Partie. Die Anzeige von Punkten und Darts früherer Legs entfällt.
+
 ## Vereinstraining
 
 Die App zeigt unter Training alle laufenden Boards mit Restpunkten, Legs und Average. Gruppen, Ergebnisse, Teilnehmer und Bestleistungen bleiben in derselben Oberfläche. Die öffentliche 3K-Verbindung dient als Ausweichweg; gespeicherte Daten werden bei einer Unterbrechung als letzter Stand angezeigt.

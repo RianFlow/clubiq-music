@@ -42,6 +42,10 @@ test('live detail shows players, points, legs and current thrower, including zer
   assert.equal(liveBoardView({...board,home:{points:0,legs:0}},now).players[0].points,0);
   for(const b of [{...board,stale:true},{...board,lastUpdateNs:(now-61000)*1e6}]){assert.equal(liveBoardView(b,now).stale,true);assert.equal(liveBoardView(b,now).players[0].throwing,false);}
   assert.equal(liveBoardView(board,now,true).players[0].throwing,false);
+  assert.equal(view.players[0].darts,null,'unknown leg darts stay unknown');
+  const nextLeg=liveBoardView({...board,home:{name:'Jannik',points:501,legs:3,darts:0,totalDarts:120,totalScore:2000}},now);
+  assert.equal(nextLeg.players[0].points,501);
+  assert.equal(nextLeg.players[0].darts,0,'a new leg does not show total darts from previous legs');
 });
 test('latest parallel board gives team score, never override an official final',()=>{
   const now=Date.now(),boards=[{active:true,lastUpdateNs:(now-1000)*1e6,teamScoreHome:3,teamScoreGuest:2},{active:true,lastUpdateNs:now*1e6,teamScoreHome:4,teamScoreGuest:2}];
