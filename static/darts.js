@@ -550,6 +550,7 @@ function initDarts() {
   function applyPlayerData(state) {
     playerProfileBase=state.profiles.players;playerStatCache=state.stats.players;
     syncProfileRosters();mergePlayerProfiles();
+    renderToday(tickerData);
     if(activePlayerProfile&&q('#playerDialog').open)renderPlayerProfile(activePlayerProfile.member,activePlayerProfile.team);
     if(activeTeamProfile&&q('#teamDialog').open)renderTeamProfile(activeTeamProfile);
   }
@@ -1029,8 +1030,12 @@ function initDarts() {
     const source=activeMatchDetailData?.match?.id===matchId?activeMatchDetailData.match:(tickerData.items||[]).find(m=>m.id===matchId)||(seasonData?.matches||[]).find(m=>m.id===matchId);
     const code=dartsTeamCode(source?.[side]||'');
     const matches=[];for(const team of seasonData?.teams||[])for(const member of dartsTeamRoster(team))if(team.code===code&&memberNameKey(member.name)===memberNameKey(name))matches.push({member,team});
-    if(matches.length!==1){const span=document.createElement('span');span.textContent=name;return span;}
-    const button=document.createElement('button');button.type='button';button.className='linked-player-name';button.textContent=name;button.setAttribute('aria-label',`Spielerprofil von ${name} öffnen`);button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();q('#matchDialog').close();profileReturnMatch=matchId;openPlayerProfile(matches[0].member,matches[0].team);});return button;
+    const result=document.createElement(matches.length===1?'button':'span');result.textContent=name;
+    if(matches.length===1){result.type='button';result.className='linked-player-name';result.setAttribute('aria-label',`Spielerprofil von ${name} öffnen`);result.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();q('#matchDialog').close();profileReturnMatch=matchId;openPlayerProfile(matches[0].member,matches[0].team);});}
+    const profiles=new Map(Object.entries(playerProfiles));for(const team of seasonData?.teams||[])for(const member of dartsTeamRoster(team))profiles.set(String(member.id),{...member,...playerProfiles[String(member.id)],name:member.name,team:team.code});
+    const portraits=window.DartsBroadcast?.playerPortraits(name,code,[...profiles.values()])||[];
+    if(portraits.length){const icons=document.createElement('span');icons.className='game-player-icons';icons.setAttribute('aria-hidden','true');for(const player of portraits){const image=document.createElement('img');image.src=player.image;image.alt='';image.classList.toggle('is-logo',player.fallback);image.decoding='async';image.addEventListener('error',()=>{image.src='/pics/sv-barver-darts-tight-512.webp';image.classList.add('is-logo');},{once:true});icons.append(image);}result.prepend(icons);}
+    return result;
   }
   const liveSnapshots=new Map();
   function renderHomeSchedule() {
@@ -1360,11 +1365,9 @@ function initDarts() {
   function playerAvatar(member, large=false) {
     const avatar=document.createElement('span'); avatar.className=`player-avatar${large?' large':''}`;
     const photo=member?.id ? playerProfiles[String(member.id)]?.image : '';
-    if (photo) {
-      const image=document.createElement('img'); image.src=photo; image.alt=`Porträt von ${member.name}`; image.loading=large?'eager':'lazy'; image.fetchPriority=large?'high':'low'; image.decoding='async';
-      image.addEventListener('error',()=>{ avatar.replaceChildren(document.createTextNode(playerInitials(member.name))); avatar.classList.add('avatar-fallback'); },{once:true});
-      avatar.append(image);
-    } else { avatar.textContent=playerInitials(member?.name); avatar.classList.add('avatar-fallback'); }
+    const image=document.createElement('img');image.src=photo||'/pics/sv-barver-darts-tight-512.webp';image.alt=photo?`Porträt von ${member.name}`:`Vereinslogo für ${member?.name||'Barver'}`;image.loading=large?'eager':'lazy';image.fetchPriority=large?'high':'low';image.decoding='async';
+    avatar.classList.toggle('avatar-fallback',!photo);avatar.classList.toggle('avatar-logo',!photo);
+    image.addEventListener('error',()=>{image.src='/pics/sv-barver-darts-tight-512.webp';image.alt=`Vereinslogo für ${member?.name||'Barver'}`;avatar.classList.add('avatar-fallback','avatar-logo');},{once:true});avatar.append(image);
     return avatar;
   }
   function openPlayerProfile(member, team) {

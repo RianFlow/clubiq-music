@@ -1,6 +1,14 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {apiUrl,publicLink,cleanPreferences,activeBoards,matchesFor,sections,roleRank,notificationTarget,liveBoardView,matchLocation,matchSide,routeUrl,calendarEvent,calendarFile} from '../src/model.js';
+import {apiUrl,publicLink,cleanPreferences,activeBoards,matchesFor,sections,roleRank,notificationTarget,liveBoardView,playerPortraits,matchLocation,matchSide,routeUrl,calendarEvent,calendarFile} from '../src/model.js';
+test('Barver game portraits retain real photos and use the crest for missing, unsafe or ambiguous images',()=>{
+  const profiles=[{name:'Max Lowak',team:'B',image:'/pics/players/max-lowak-cutout.webp'}];
+  const pair=playerPortraits('M. Lowak & René Lange','SV Barver Darts B',profiles);
+  assert.equal(pair[0].image,profiles[0].image);assert.equal(pair[1].image,'/pics/sv-barver-darts-tight-512.webp');assert.equal(pair[1].fallback,true);
+  assert.deepEqual(playerPortraits('Max Lowak','Gastverein',profiles),[]);
+  assert.equal(playerPortraits('Max Lowak','SV Barver Darts B',[{...profiles[0],image:'https://example.org/portrait.png'}])[0].fallback,true);
+  assert.equal(playerPortraits('M. Lowak','SV Barver Darts B',[...profiles,{name:'Mark Lowak',team:'B',image:'/pics/players/mark.webp'}])[0].fallback,true);
+});
 test('only public read endpoints and public links',()=>{
   assert.match(apiUrl('/api/v1/darts/matches/1280528'),/^https:\/\/barverdarts/);
   for(const path of ['/api/v1/darts/admin/players','/api/v1/darts/push/subscribe','https://evil.test','/api/v1/darts/season?admin=1'])assert.throws(()=>apiUrl(path));

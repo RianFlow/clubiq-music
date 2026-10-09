@@ -8,6 +8,7 @@
   const HIGHLIGHT_MS = 3000;
   const ROSTER_MS = 4000;
   const BARVER_TEAM = /^SV\s+Barver\s+Darts\s+[A-D]$/i;
+  const CLUB_CREST = '/pics/sv-barver-darts-tight-512.webp';
   const TYPES = new Set(['180', 'high_finish', 'short_leg', 'leg', 'game', 'match']);
   const state = { enabled: true, tv: false, seen: new Map(), initialized: false, queue: [], active: null,
     highlightTimer: null, rosterTimer: null, roster: null, node: null, previousFocus: null, profiles: [] };
@@ -85,11 +86,15 @@
   }
   function winnerPortraits(event, profiles = state.profiles) {
     if (!['leg', 'game'].includes(event?.type) || event.barverWon === false || !authentic(event)) return [];
-    const code = teamCode(event.team);
+    return playerPortraits(event.player, event.team, profiles);
+  }
+  function playerPortraits(playerName, team, profiles = state.profiles) {
+    const code = teamCode(team) || (/^[A-D]$/i.test(text(team)) ? text(team).toUpperCase() : '');
+    if (!code) return [];
     const candidates = (Array.isArray(profiles) ? profiles : []).filter(profile => profile
       && (text(profile.team).toUpperCase() === code || teamCode(profile.team) === code) && text(profile.name));
     const result = [];
-    for (const name of text(event.player, 220).split(/\s*&\s*/).slice(0, 2)) {
+    for (const name of text(playerName, 220).split(/\s*&\s*/).filter(Boolean).slice(0, 2)) {
       const normalized = normalizedName(name);
       let matches = candidates.filter(profile => normalizedName(profile.name) === normalized);
       if (!matches.length) {
@@ -99,10 +104,12 @@
           return parts[0][0] === abbreviated[1] && parts.slice(1).join(' ') === abbreviated[2];
         });
       }
-      // An ambiguous initial or an absent photo must never show another player.
-      if (matches.length !== 1) continue;
-      const profile = matches[0], image = safeImage(profile.image);
-      if (image && !result.some(item => item.name === profile.name)) result.push({ name: text(profile.name, 100), image });
+      // Missing or ambiguous profiles use the club crest, never somebody else's photo.
+      const profile = matches.length === 1 ? matches[0] : null;
+      const image = safeImage(profile?.image), displayName = text(profile?.name || name, 100);
+      if (!result.some(item => normalizedName(item.name) === normalizedName(displayName))) {
+        result.push({ name: displayName, image: image || CLUB_CREST, fallback: !image });
+      }
     }
     return result;
   }
@@ -172,10 +179,15 @@
       const strip = element('div', 'darts-broadcast-portraits');
       for (const player of portraits) {
         const portrait = element('img');
-        portrait.src = player.image; portrait.alt = `Porträt von ${player.name}`;
+        portrait.src = player.image; portrait.alt = player.fallback ? `Vereinslogo für ${player.name}` : `Porträt von ${player.name}`;
+        portrait.classList.toggle('is-logo', player.fallback);
         portrait.addEventListener('error', () => {
-          portrait.remove();
-          if (!strip.children.length) { strip.remove(); card.classList.remove('has-portraits'); }
+          if (!player.fallback) {
+            portrait.src = CLUB_CREST; portrait.alt = `Vereinslogo für ${player.name}`; portrait.classList.add('is-logo');
+          } else {
+            portrait.remove();
+            if (!strip.children.length) { strip.remove(); card.classList.remove('has-portraits'); }
+          }
         }, { once: true });
         strip.append(portrait);
       }
@@ -330,7 +342,7 @@
     return true;
   }
 
-  const api = { configure, ingest, presentRoster, closeRoster };
+  const api = { configure, ingest, presentRoster, closeRoster, playerPortraits };
   root.DartsBroadcast = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = { ...api, eventKey, authentic, orderedPlayers, graphic, winnerPortraits };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -29,6 +29,7 @@ dialog{width:min(94vw,700px);max-height:85vh;border:1px solid var(--line);border
 
 .table-live-team{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:4px 0;border:0;background:transparent;color:inherit;box-shadow:none;text-align:left;font:inherit;min-height:44px}
 .board-expand,.board-brief{display:none}
+.game-player-icons{display:inline-flex;vertical-align:middle;gap:3px;margin-right:5px}.game-player-icons img{width:26px;height:26px;object-fit:cover;object-position:center top;border-radius:4px}.game-player-icons img.is-logo{object-fit:contain}
 @media(max-width:650px){
  .compact-board{padding:10px;margin:8px 0}
  .compact-board .board-heading{gap:6px;flex-wrap:wrap;font-size:.8rem}

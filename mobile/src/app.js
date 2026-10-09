@@ -3,7 +3,7 @@ import {App} from '@capacitor/app';
 import {Browser} from '@capacitor/browser';
 import {Preferences} from '@capacitor/preferences';
 import {PushNotifications} from '@capacitor/push-notifications';
-import {API_ORIGIN,TYPES,apiUrl,publicLink,cleanPreferences,matchesFor,sections,roleRank,notificationTarget,trainingNotificationTarget,liveBoardView,matchLocation,matchSide,routeUrl,calendarEvent,calendarFile} from './model.js';
+import {API_ORIGIN,TYPES,apiUrl,publicLink,cleanPreferences,matchesFor,sections,roleRank,notificationTarget,trainingNotificationTarget,liveBoardView,playerPortraits,matchLocation,matchSide,routeUrl,calendarEvent,calendarFile} from './model.js';
 import {createTraining} from './training.js';
 import {createNativePush} from './native-push.js';
 import {createPushTransport,deviceSecret} from './push-transport.js';
@@ -236,9 +236,11 @@ function updateMatchLive(){
     if(webApp){const toggle=button(expanded?'Verkleinern':'Vergrößern',()=>{detail.expandedBoardKey=expanded?null:board.key;updateMatchLive();[...detail.live.querySelectorAll('[data-board-toggle]')].find(node=>node.dataset.boardToggle===board.key)?.focus({preventScroll:true});},'board-expand');toggle.dataset.boardToggle=board.key;toggle.setAttribute('aria-expanded',String(expanded));toggle.setAttribute('aria-label',`${toggle.textContent}: ${board.players.map(player=>player.name).join(' gegen ')}`);head.append(toggle);card.addEventListener('click',event=>{if(window.matchMedia('(max-width:650px)').matches&&!event.target.closest('button,a,summary'))toggle.click();});}card.append(head);
     if(board.mode)card.append(node('small',board.mode,'board-mode'));
     card.append(node('small','Restpunkte im aktuellen Leg','points-label'));
-    for(const player of board.players){
+    for(const [index,player] of board.players.entries()){
       const row=node('div',undefined,'live-player'+(player.throwing?' throwing':'')),copy=node('div');
-      copy.append(node('strong',player.name));if(player.throwing)copy.append(node('small','● Am Wurf'));
+      const name=node('strong',player.name);
+      if(webApp){const portraits=playerPortraits(player.name,match?.[index===0?'home':'away'],Object.values(state.profiles.players||{}));if(portraits.length){const icons=node('span',undefined,'game-player-icons');icons.setAttribute('aria-hidden','true');for(const player of portraits){const image=node('img');image.src=player.fallback?'crest.webp':API_ORIGIN+player.image;image.alt='';image.classList.toggle('is-logo',player.fallback);image.addEventListener('error',()=>{image.src='crest.webp';image.classList.add('is-logo');},{once:true});icons.append(image);}name.prepend(icons);}}
+      copy.append(name);if(player.throwing)copy.append(node('small','● Am Wurf'));
       if(webApp)copy.append(node('small',`AVG ${player.average??'–'} · ${player.darts??'–'} Darts`,'board-brief'));
 
       row.append(copy,node('strong',player.points===0?'CHECK':player.points??'–','live-points'));card.append(row);

@@ -49,6 +49,12 @@ const server=http.createServer((req,res)=>{
     try{await page.locator('#todayGrid .today-live-game').waitFor({timeout:10000});}catch(e){console.error('Live state:',await page.locator('#todayPanel').innerText(),'streams',streams.size);throw e;}
     assert.match(await page.locator('#todayGrid').innerText(),/Max Lowak/);
     assert.match(await page.locator('#todayGrid').innerText(),/416/);
+    const ownAvatar=page.locator('#todayGrid .today-live-score .game-player-icons img');
+    await page.waitForFunction(()=>document.querySelector('#todayGrid .game-player-icons img')?.getAttribute('src')?.includes('max-lowak-cutout'));
+    assert.match(await ownAvatar.getAttribute('src'),/max-lowak-cutout/);
+    assert.equal(await page.locator('#todayGrid .today-live-score>span').first().locator('img').count(),0,'opponents never receive the Barver crest');
+    await ownAvatar.evaluate(img=>img.dispatchEvent(new Event('error')));
+    assert.equal(await ownAvatar.getAttribute('src'),'/pics/sv-barver-darts-tight-512.webp','a failed live portrait switches to the crest');
     assert.doesNotMatch(await page.locator('#todayGrid').innerText(),/Robin Tiedemann|Jannik Drieling/,'completed game with missing finished flag never lingers');
     assert.equal(await page.locator('#todayGrid .today-live-game').count(),1);
     await page.click('#leagueView');
@@ -135,6 +141,9 @@ const server=http.createServer((req,res)=>{
     assert.doesNotMatch(await page.locator('#appLiveStrip').innerText(),/1300/);
     await page.locator('#appLiveStrip .live-chip').click();
     await page.getByRole('button',{name:/Verkleinern: Marvin Schwenker gegen Max Lowak/}).waitFor();
+    const appAvatar=page.locator('.compact-board .game-player-icons img');await appAvatar.waitFor();
+    await appAvatar.evaluate(img=>img.dispatchEvent(new Event('error')));
+    assert.equal(await appAvatar.getAttribute('src'),'crest.webp','the Web-App uses its cached crest when a portrait fails');
     assert.equal(await page.locator('.compact-board .fold p').first().isVisible(),true,'expanded app board shows the additional live values');
     await page.getByRole('button',{name:/Verkleinern: Marvin Schwenker gegen Max Lowak/}).click();
     assert.equal(await page.locator('.compact-board .board-expand').getAttribute('aria-expanded'),'false');
@@ -180,6 +189,14 @@ const server=http.createServer((req,res)=>{
     await page.locator('.darts-broadcast-card.type-leg').evaluate(card=>Promise.all(card.getAnimations().map(animation=>animation.finished)));
     if(process.env.DARTS_APP_TV_SCREENSHOT)await page.screenshot({path:process.env.DARTS_APP_TV_SCREENSHOT});
     await page.locator('.darts-broadcast-card.type-leg').waitFor({state:'detached'});
+    moments=[{type:'game',matchId:fixture.id,gameId:101,team:'SV Barver Darts B',player:'M. Lowak & Spieler ohne Foto',barverWon:true,homeLegs:1,awayLegs:3,text:'Doppel gewinnt 3:1',occurred_at:new Date().toISOString()}];publish();
+    const mixedPortraits=page.locator('.darts-broadcast-card.type-game img');await mixedPortraits.nth(1).waitFor();
+    assert.deepEqual(await mixedPortraits.evaluateAll(images=>images.map(img=>img.alt)),['Porträt von Max Lowak','Vereinslogo für Spieler ohne Foto']);
+    assert.equal(await mixedPortraits.nth(1).getAttribute('src'),'/pics/sv-barver-darts-tight-512.webp');
+    await mixedPortraits.first().evaluate(img=>img.dispatchEvent(new Event('error')));
+    assert.equal(await mixedPortraits.first().getAttribute('alt'),'Vereinslogo für Max Lowak','failed victory photos retain their slot with the crest');
+    await page.waitForFunction(()=>[...document.querySelectorAll('.darts-broadcast-card img')].every(img=>img.naturalWidth>0));
+    await page.locator('.darts-broadcast-card.type-game').waitFor({state:'detached'});
     await page.getByRole('button',{name:'Alle',exact:true}).click();
     await page.locator('#tvTeamControls [data-tv-team="B"]').click();
     await page.locator('#todayGrid .app-tv-empty').waitFor();

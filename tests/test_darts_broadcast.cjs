@@ -22,16 +22,18 @@ test('victories use existing single and double portraits, including unambiguous 
   assert.equal(broadcast.winnerPortraits({...base,type:'leg',gameId:2,legCount:1,winnerSide:'away',barverSide:'away'},profiles).length,1);
 });
 
-test('missing photos, ambiguous initials, opponents and losses do not show an incorrect portrait', () => {
+test('missing photos and ambiguous initials use the crest; opponents and losses have no winner portrait', () => {
   const win = {...base,type:'game',gameId:2,barverWon:true};
   const ambiguous = [...profiles,{name:'Ralf Tiedemann',team:'B',image:'/pics/players/ralf.webp'}];
-  assert.equal(broadcast.winnerPortraits({...win,player:'R. Tiedemann'},ambiguous).length,0);
-  assert.equal(broadcast.winnerPortraits({...win,player:'Unbekannt & Max Lowak'},profiles).map(p=>p.name).join('|'),'Max Lowak');
+  assert.equal(broadcast.winnerPortraits({...win,player:'R. Tiedemann'},ambiguous)[0].fallback,true);
+  const mixed=broadcast.winnerPortraits({...win,player:'Unbekannt & Max Lowak'},profiles);
+  assert.equal(mixed.map(p=>p.name).join('|'),'Unbekannt|Max Lowak');
+  assert.equal(mixed[0].image,'/pics/sv-barver-darts-tight-512.webp');assert.equal(mixed[1].image,profiles[2].image);
   assert.equal(broadcast.winnerPortraits({...win,barverWon:false},profiles).length,0);
   assert.equal(broadcast.winnerPortraits({...win,team:'Gäste'},profiles).length,0);
-  assert.equal(broadcast.winnerPortraits(win,[{...profiles[0],team:'A'}]).length,0);
+  assert.equal(broadcast.winnerPortraits(win,[{...profiles[0],team:'A'}])[0].fallback,true);
   for (const image of ['', 'https://example.org/portrait.png', '/pics/players/../other.png']) {
-    assert.equal(broadcast.winnerPortraits(win,[{...profiles[0],image}]).length,0);
+    assert.equal(broadcast.winnerPortraits(win,[{...profiles[0],image}])[0].image,'/pics/sv-barver-darts-tight-512.webp');
   }
   broadcast.configure({profiles});
   assert.equal(broadcast.winnerPortraits(win).length,1);

@@ -343,6 +343,12 @@ body.tv-live .live-player-metrics dd { font-size:clamp(1.1rem,1.8vw,1.7rem); }
 .player-avatar { display:grid; flex:0 0 38px; place-items:center; width:38px; min-width:38px; max-width:38px; height:38px; min-height:38px; max-height:38px; aspect-ratio:1; overflow:hidden; box-sizing:border-box; color:#173b35; background:#f0d991; border-radius:50%; font:750 .84rem Georgia,serif; }
 .player-avatar.large { flex-basis:104px; width:104px; min-width:104px; max-width:104px; height:104px; min-height:104px; max-height:104px; border:4px solid #ffffff55; font-size:1.8rem; }
 .player-avatar img { width:100%; height:100%; object-fit:cover; }
+.player-avatar.avatar-logo { background:var(--panel); }
+.player-avatar.avatar-logo img { box-sizing:border-box; padding:5px; object-fit:contain; }
+.player-profile-hero .player-avatar.avatar-logo img { object-fit:contain; object-position:center; padding:14px; }
+.game-player-icons { display:inline-flex; vertical-align:middle; gap:3px; margin-right:5px; }
+.game-player-icons img { width:26px; height:26px; object-fit:cover; object-position:center top; border-radius:4px; }
+.game-player-icons img.is-logo { object-fit:contain; }
 .player-profile-dialog { width:min(1080px,calc(100% - 24px)); }
 .player-profile-hero { position:relative; display:grid; grid-template-columns:minmax(0,1.15fr) minmax(250px,.85fr); align-items:stretch; min-height:300px; margin:14px 0 10px; overflow:hidden; color:white; background-color:#07110f; background-image:linear-gradient(125deg,rgba(15,72,59,.95),rgba(3,12,10,.98) 60%),repeating-linear-gradient(60deg,transparent 0 24px,rgba(75,177,150,.16) 25px 27px); border:1px solid #347366; border-radius:17px; }
 .player-profile-hero::after { position:absolute; inset:0; content:""; pointer-events:none; background:radial-gradient(circle at 82% 35%,rgba(45,162,130,.28),transparent 34%),linear-gradient(90deg,transparent 48%,rgba(240,217,145,.08)); }
