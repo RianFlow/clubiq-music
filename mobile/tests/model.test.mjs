@@ -95,4 +95,8 @@ test('mode and leg result remove completed boards despite missing source finish 
   assert.equal(activeBoards({matches:[{...board,guest:{legs:2,points:0}}]},now).length,1);
   assert.equal(matchesFor({matches:[{id:1,kind:'upcoming'}]},{groups:[{groupKey:'1',matches:[board]}]},'',now)[0].kind,'live','between board blocks');
   assert.equal(matchesFor({matches:[{id:1,kind:'live'}]},{groups:[{groupKey:'1',finished:true,matches:[board]}]},'',now)[0].kind,'final');
+  for(let offset=0;offset<16;offset++){
+    const instant=1791580289886+offset,group={groupKey:'1',matches:[{...board,lastUpdateNs:instant*1e6}]};
+    assert.equal(matchesFor({matches:[{id:1,kind:'upcoming'}]},{groups:[group]},'',instant)[0].kind,'live','nanosecond precision must preserve an update at the current millisecond');
+  }
 });
