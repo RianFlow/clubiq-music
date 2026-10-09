@@ -118,6 +118,8 @@ const server=http.createServer((req,res)=>{
     await page.waitForFunction(()=>document.body.classList.contains('app-tv'));
     await page.locator('#todayGrid .today-live-game').waitFor();
     assert.equal(await page.evaluate(()=>document.fullscreenElement),null,'installed app TV mode also works without Fullscreen API');
+    assert.equal(await page.locator('#liveDataStatus').isVisible(),true,'connection status stays visible on the phone');
+    assert.equal(await page.locator('.darts-header .brand').getAttribute('href'),'/app/','club logo also returns within the app scope');
     for(const theme of ['light','dark']){await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Web-App TV fits the phone in '+theme);}
     moments=[{type:'leg',matchId:fixture.id,gameId:100,team:'SV Barver Darts B',player:'M. Lowak & R. Lange',barverWon:true,winnerSide:'guest',legCount:4,text:'M. Lowak & R. Lange gewinnt das Leg',occurred_at:new Date().toISOString()}];publish();
     await page.locator('.darts-broadcast.is-tv .darts-broadcast-card.type-leg img').nth(1).waitFor();
