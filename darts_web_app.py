@@ -7,6 +7,18 @@ from fastapi.responses import FileResponse, RedirectResponse
 router = APIRouter()
 APP_FILES = {"index.html", "app.js", "app.css", "crest.webp", "sw.js", "manifest.webmanifest", "icon-192.png", "icon-512.png", "apple-touch-icon.png"}
 APP_DIRECTORY = Path(__file__).resolve().parent / "static" / "barver-app"
+LIVE_DOCUMENT = Path(__file__).resolve().parent / "darts.html"
+
+
+@router.get("/app/live", include_in_schema=False)
+def compact_app_live():
+    # Keep the website's live view inside the installed Web-App's /app/ scope.
+    return FileResponse(LIVE_DOCUMENT, headers={
+        "Cache-Control": "private, no-store, max-age=0",
+        "CDN-Cache-Control": "no-store",
+        "Cloudflare-CDN-Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+    })
 
 
 @router.get("/app", include_in_schema=False)

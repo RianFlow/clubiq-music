@@ -29,7 +29,7 @@ export function liveBoardView(board,now=Date.now(),unavailable=false){
   const value=n=>Number.isInteger(n)&&n>=0?n:null;
   return {board:board.board||'–',stale,mode:board.mode||'',players:[board.home,board.guest].map((player,index)=>({
     name:player?.name|| (index===0?'Heim':'Gast'),points:value(player?.points),legs:value(player?.legs),
-    average:Number.isFinite(player?.average)?player.average:null,lastScore:value(player?.lastScore),
+    average:Number.isFinite(player?.average)?player.average:null,lastScore:value(player?.lastScore),darts:value(player?.darts),
     throwing:!stale&&board.currentPlayerIndex===index,
   }))};
 }

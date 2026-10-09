@@ -50,7 +50,6 @@ jobs:
           node "$RUNNER_TEMP/music-browser-tests/node_modules/playwright/cli.js" install --with-deps chromium
           NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_navigation_browser.cjs
           NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_darts_home_browser.cjs
-          NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_darts_live_display_browser.cjs
           NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_darts_tournament_browser.cjs
           NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_darts_training_browser.cjs
       - name: App mit Training und Push-Auswahl prüfen
@@ -58,6 +57,7 @@ jobs:
           npm ci --prefix mobile --no-audit --no-fund
           npm test --prefix mobile
           npm run build:web --prefix mobile
+          NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_darts_live_display_browser.cjs
           NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node mobile/tests/web-browser.cjs
       - name: Player mit echtem mpv und stummer Ausgabe prüfen
         run: |
