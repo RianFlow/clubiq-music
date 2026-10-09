@@ -36,4 +36,7 @@ const liveTestNow=1760000000000;
 assert.equal(dartsLiveGroupActive({matches:[{active:true,finished:false,lastUpdateNs:(liveTestNow-1000)*1e6}]},liveTestNow),true);
 assert.equal(dartsLiveGroupActive({retired:true,matches:[{active:true,lastUpdateNs:(liveTestNow-1000)*1e6}]},liveTestNow),false);
 assert.equal(dartsLiveGroupActive({matches:[{active:true,lastUpdateNs:(liveTestNow-3600000)*1e6}]},liveTestNow),false);
+assert.equal(dartsLiveGroupActive({stale:true,matches:[{active:true,lastUpdateNs:(liveTestNow-1000)*1e6}]},liveTestNow),false);
+assert.equal(dartsLiveGroupActive({matches:[{finished:true,teamScoreHome:0,teamScoreGuest:1,lastUpdateNs:(liveTestNow-1000)*1e6}]},liveTestNow),true);
+assert.equal(dartsLiveGroupActive({matches:[{finished:true,teamScoreHome:4,teamScoreGuest:8,lastUpdateNs:(liveTestNow-1000)*1e6}]},liveTestNow),false);
 console.log('Cup elimination and empty/old live watcher safeguards OK');

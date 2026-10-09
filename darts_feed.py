@@ -13,6 +13,7 @@ import requests
 from darts_resilience import PublicSession, source_recovery, save_snapshot, load_snapshot, last_known
 from darts_collector import collected_snapshot
 from darts_transport import scoped_get
+from darts_live import darts_live_hub, _watch_live_candidate
 
 
 FRONTEND_API = "https://backend-ddv.3k-darts.com/2k-backend-ddv/api/v1/frontend"
@@ -1179,6 +1180,36 @@ def get_darts_season(now: datetime | None = None) -> dict:
             raise DartsFeedUnavailable("Der 3K-Saisonspielplan ist gerade nicht erreichbar.") from exc
 
 
+def _match_live_state(match: dict, now: datetime) -> tuple[dict, list[dict]]:
+    group = darts_live_hub.get_group(str(match["id"]))
+    if not group or group.get("stale") or group.get("retired"):
+        return match, []
+    boards = group.get("matches") or []
+    recent = [board for board in boards
+              if -5 <= now.timestamp() - (board.get("lastUpdateNs") or 0) / 1e9 < 600]
+    evidence = [board for board in recent if board.get("active") or board.get("finished")]
+    if not evidence:
+        return match, []
+    latest = max(evidence, key=lambda board: board.get("lastUpdateNs") or 0)
+    home, away = latest.get("teamScoreHome"), latest.get("teamScoreGuest")
+    if match.get("kind") == "final" and not group.get("finished"):
+        return match, []
+    match = {**match, "kind": "final" if group.get("finished") else "live"}
+    if isinstance(home, int) and isinstance(away, int):
+        match["score"] = f"{home}:{away}"
+    games = [{
+        "id": board["id"], "matchKey": board["matchKey"], "board": board.get("board"),
+        "mode": board.get("mode"), "active": board.get("active"), "finished": board.get("finished"),
+        "home": {"name": board["home"]["name"], "remaining": board["home"].get("points"),
+                 "legs": board["home"].get("legs"), "average": board["home"].get("average")},
+        "away": {"name": board["guest"]["name"], "remaining": board["guest"].get("points"),
+                 "legs": board["guest"].get("legs"), "average": board["guest"].get("average")},
+        "currentSide": "home" if board.get("currentPlayerIndex") == 0 else "away" if board.get("currentPlayerIndex") == 1 else None,
+        "lastUpdated": board.get("lastUpdate"),
+    } for board in recent if board.get("active") and not board.get("finished")]
+    return match, games
+
+
 def get_darts_match(match_id: int, now: datetime | None = None) -> dict:
     global _match_cache
     now = now or datetime.now(timezone.utc)
@@ -1186,11 +1217,18 @@ def get_darts_match(match_id: int, now: datetime | None = None) -> dict:
     match = next((item for item in season.get("matches") or [] if item.get("id") == match_id), None)
     if not match:
         raise ValueError("Diese Begegnung gehört nicht zu einem freigegebenen Barver-Spielplan.")
-    ttl = CACHE_SECONDS if match["kind"] == "live" else SEASON_CACHE_SECONDS
+    match, hub_games = _match_live_state(match, now)
+    watching = _watch_live_candidate(match, now)
+    ttl = CACHE_SECONDS if watching else SEASON_CACHE_SECONDS
     with _lock:
         cached = _match_cache.get(match_id)
         if cached and now.timestamp() - cached[0] < ttl:
-            return cached[1]
+            if watching and match["kind"] == "upcoming" and cached[1].get("match", {}).get("kind") in ("live", "final"):
+                match = {**match, **cached[1]["match"]}
+            result = {**cached[1], "match": match}
+            if hub_games:
+                result.update(liveGames=hub_games, reportAvailable=True, stale=False)
+            return result
     event_id = int(match.get("eventId") or 0)
     if not event_id:
         league = next((item for item in LEAGUES if item["key"] == match.get("league")), None)
@@ -1198,26 +1236,32 @@ def get_darts_match(match_id: int, now: datetime | None = None) -> dict:
     if not event_id:
         raise ValueError("Für diese Begegnung fehlt die 3K-Wettbewerbskennung.")
     summary = {
-        "available": True, "stale": bool(season.get("stale")),
+        "available": True, "stale": bool(season.get("stale")) and not bool(hub_games),
         "updatedAt": season.get("updatedAt"), "match": match,
-        "games": [], "liveGames": [], "performances": [],
-        "reportAvailable": False, "sourceUrl": match.get("url"),
+        "games": [], "liveGames": hub_games, "performances": [],
+        "reportAvailable": bool(hub_games), "sourceUrl": match.get("url"),
         "source": "last-known" if season.get("stale") else "3k",
     }
-    if match["kind"] == "upcoming":
+    if match["kind"] == "upcoming" and not watching:
         # A scheduled game is useful without an as-yet unpublished report.
         return summary
     try:
         report = _public_get(f"{API}/{event_id}/match/{match_id}/report")
         if not isinstance(report, list):
             report = []
+        if match["kind"] in ("upcoming", "pending") and any(
+            game.get("statusCd") in ("ACTIVE", "FINISH") for game in report
+        ):
+            finished = [game for game in report if game.get("statusCd") == "FINISH"]
+            match = {**match, "kind": "final" if len(finished) == 12 else "live"}
+            match["score"] = f"{sum((game.get('legsHome') or 0) > (game.get('legsAway') or 0) for game in finished)}:{sum((game.get('legsAway') or 0) > (game.get('legsHome') or 0) for game in finished)}"
         try:
             performance_payload = _public_get(f"{API}/{event_id}/performance/match/{match_id}?matchReport=1")
         except requests.RequestException:
             performance_payload = []
         performances = _performance_events(performance_payload, {"id": match_id}) if isinstance(performance_payload, list) else []
-        live_games = []
-        if match["kind"] == "live":
+        live_games = hub_games
+        if match["kind"] == "live" and not hub_games:
             try:
                 live_games = _public_live_games(_public_get(f"{LIVE_API}/match/10/0/{match_id}"))
             except (requests.RequestException, ValueError, KeyError, TypeError):
@@ -1243,7 +1287,10 @@ def get_darts_match(match_id: int, now: datetime | None = None) -> dict:
             cached = _match_cache.get(match_id)
         previous = cached[1] if cached else load_snapshot(f"match:{event_id}:{match_id}")
         if previous:
-            return last_known(previous)
+            result = {**last_known(previous), "match": match}
+            if hub_games:
+                result.update(liveGames=hub_games, reportAvailable=True)
+            return result
         return {**summary, "reportUnavailable": True}
 
 

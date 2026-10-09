@@ -9,6 +9,7 @@ import secrets
 import threading
 import time
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 import requests
 from darts_transport import scoped_get, websocket_options
 
@@ -29,6 +30,7 @@ LIVE_WATCH_EARLY_SECONDS = 30 * 60
 LIVE_WATCH_LATE_SECONDS = 8 * 60 * 60
 TEAM_MATCH_GAMES = 12
 _STAMP = re.compile(r"^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?(Z|[+-]\d\d:\d\d)?$")
+_SOURCE_TIMEZONE = ZoneInfo("Europe/Berlin")
 
 
 def _integer(value, minimum: int = 0, maximum: int = 10_000_000) -> int | None:
@@ -49,14 +51,27 @@ def timestamp_ns(value: str | None) -> int:
         return 0
     base, fraction, zone = match.groups()
     try:
-        parsed = datetime.fromisoformat(base + (zone or "+00:00").replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(base + (zone or "").replace("Z", "+00:00"))
         if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
+            # 3K's scorer publishes German local wall time without an offset.
+            parsed = parsed.replace(tzinfo=_SOURCE_TIMEZONE)
     except ValueError:
         return 0
     seconds = int(parsed.astimezone(timezone.utc).timestamp())
     nanos = int(((fraction or "") + "000000000")[:9])
     return seconds * 1_000_000_000 + nanos
+
+
+def source_timestamp(value: str | None) -> str | None:
+    """Keep nanoseconds but attach the source offset for every public consumer."""
+    match = _STAMP.fullmatch(str(value or ""))
+    if not match or not timestamp_ns(value):
+        return None
+    base, fraction, zone = match.groups()
+    if zone:
+        return str(value)
+    offset = datetime.fromisoformat(base).replace(tzinfo=_SOURCE_TIMEZONE).strftime("%z")
+    return base + ("." + fraction if fraction else "") + offset[:3] + ":" + offset[3:]
 
 
 def _watch_live_candidate(item: dict, now: datetime | None = None) -> bool:
@@ -121,7 +136,7 @@ def normalize_match(raw: dict) -> dict | None:
     if not home_items or not guest_items:
         home_items, guest_items = indexed[::2], indexed[1::2]
     current = _integer(raw.get("currentplayerIndex"), 0, 99)
-    last_update = _text(raw.get("lastUpdate"), 40)
+    last_update = source_timestamp(_text(raw.get("lastUpdate"), 40))
     return {
         "id": match_id,
         "matchKey": match_key,
