@@ -15,20 +15,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: Öffentliche Containerimages über den Cache laden
         run: |
-          # Google caches public Docker Hub images; uncached images keep the
-          # regular Docker Hub fallback. Configure only this disposable runner.
-          sudo python3 - <<'PY'
-          import json
-          from pathlib import Path
-          path = Path('/etc/docker/daemon.json')
-          settings = json.loads(path.read_text()) if path.exists() else {}
-          mirrors = settings.setdefault('registry-mirrors', [])
-          assert isinstance(mirrors, list)
-          if 'https://mirror.gcr.io' not in mirrors:
-              mirrors.insert(0, 'https://mirror.gcr.io')
-          path.write_text(json.dumps(settings) + '\n')
-          PY
-          sudo systemctl restart docker
+          # Pull the public cache explicitly, then preserve the references used
+          # by the production Dockerfiles and Compose configuration.
+          for image in library/debian:trixie-slim library/python:3.11-slim library/postgres:15-alpine docker/dockerfile:1; do
+            docker pull "mirror.gcr.io/$image"
+            docker tag "mirror.gcr.io/$image" "${image#library/}"
+          done
+          proxy_base='python:3.12-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258'
+          docker pull "mirror.gcr.io/library/$proxy_base"
+          docker tag "mirror.gcr.io/library/$proxy_base" python:3.12-slim-bookworm
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
