@@ -217,7 +217,7 @@ assert.match(script,/Einzelpartien/);
 assert.match(script,/Gemeldete Spielerinnen und Spieler/);
 assert.match(script,/LAUFENDE BOARDS/);
 assert.match(script,/Punktestand wird noch geladen/);
-assert.doesNotMatch(script,/Restpunkte/);
+assert.match(script,/Restpunkte/);
 assert.match(fs.readFileSync('static/darts.css','utf8'),/body:is\(:fullscreen,\.app-tv\) \.today-live-score strong/);
 assert.match(script,/https:\/\/portal\.3k-darts\.com\/frontend\/events\/5\/mandant\/1931/);
 assert.match(fs.readFileSync('sw.js','utf8'),/"\/darts"/);

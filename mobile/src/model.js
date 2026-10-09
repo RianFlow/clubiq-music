@@ -10,17 +10,26 @@ export function publicLink(path){
 export function cleanPreferences(value={}){
   return {training:value.training===true,favorite:['A','B','C','D'].includes(value.favorite)?value.favorite:'',teams:[...new Set((Array.isArray(value.teams)?value.teams:['A','B','C','D']).filter(x=>['A','B','C','D'].includes(x)))],players:[...new Set((Array.isArray(value.players)?value.players:[]).filter(x=>typeof x==='string'&&x.trim()&&x.length<=100).map(x=>x.trim()))].slice(0,50),eventTypes:[...new Set((Array.isArray(value.eventTypes)?value.eventTypes:Object.keys(TYPES).filter(type=>type!=='player_start')).filter(x=>Object.hasOwn(TYPES,x)))]};
 }
+export function boardFinished(board){
+  if(board?.finished)return true;
+  const mode=String(board?.mode||'').trim(),best=/^best\s*of\s*(\d+)\s*legs?$/i.exec(mode),first=/^first\s*to\s*(\d+)\s*legs?$/i.exec(mode);
+  const count=Number(best?.[1]||first?.[1]),target=best&&count>=1&&count<=99&&count%2?Math.floor(count/2)+1:first&&count>=1&&count<=50?count:null;
+  const home=board?.home?.legs,away=board?.guest?.legs;
+  return target!==null&&Number.isInteger(home)&&Number.isInteger(away)&&Math.max(home,away)===target&&Math.min(home,away)>=0&&Math.min(home,away)<target;
+}
 export function activeBoards(group,now=Date.now()){
   if(group.retired||group.finished)return [];
-  return(group.matches||[]).filter(m=>m.active&&!m.finished&&Number(m.lastUpdateNs)>0&&now-Math.floor(Number(m.lastUpdateNs)/1e6)>=0&&now-Math.floor(Number(m.lastUpdateNs)/1e6)<600000);
+  return(group.matches||[]).filter(m=>m.active&&!m.comingSoon&&!boardFinished(m)&&Number(m.lastUpdateNs)>0&&now-Math.floor(Number(m.lastUpdateNs)/1e6)>=0&&now-Math.floor(Number(m.lastUpdateNs)/1e6)<600000);
 }
 export function matchesFor(season,live,team='',now=Date.now()){
   return(season.matches||[]).filter(m=>!team||(m.barverTeams||[m.barverTeam]).includes(team)).map(m=>{
     const group=(live.groups||[]).find(g=>Number(g.groupKey)===m.id);
     const boards=group&&m.kind!=='final'?activeBoards(group,now):[];
-    const latest=[...boards].sort((a,b)=>Number(b.lastUpdateNs)-Number(a.lastUpdateNs))[0];
-    const score=Number.isInteger(latest?.teamScoreHome)&&Number.isInteger(latest?.teamScoreGuest)?`${latest.teamScoreHome}:${latest.teamScoreGuest}`:m.score;
-    return {...m,score,boards,liveStale:!!group?.stale,kind:m.kind==='final'?'final':boards.length?'live':m.kind};
+    const latest=[...(group?.retired?[]:group?.matches||[])].sort((a,b)=>Number(b.lastUpdateNs)-Number(a.lastUpdateNs))[0];
+    const score=m.kind!=='final'&&Number.isInteger(latest?.teamScoreHome)&&Number.isInteger(latest?.teamScoreGuest)?`${latest.teamScoreHome}:${latest.teamScoreGuest}`:m.score;
+    const age=now-Number(latest?.lastUpdateNs)/1e6;
+    const betweenBoards=boardFinished(latest)&&Number.isInteger(latest?.teamScoreHome)&&Number.isInteger(latest?.teamScoreGuest)&&latest.teamScoreHome+latest.teamScoreGuest>0&&latest.teamScoreHome+latest.teamScoreGuest<12&&age>=0&&age<600000;
+    return {...m,score,boards,liveStale:!!group?.stale,kind:m.kind==='final'||group?.finished?'final':boards.length||(!group?.retired&&betweenBoards)?'live':m.kind};
   }).sort((a,b)=>a.plannedAt&&b.plannedAt?String(a.plannedAt).localeCompare(String(b.plannedAt)):a.plannedAt?-1:b.plannedAt?1:0);
 }
 export function liveBoardView(board,now=Date.now(),unavailable=false){

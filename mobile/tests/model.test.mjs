@@ -88,3 +88,11 @@ test('training links remain public and training alerts never open a league match
   assert.equal(notificationTarget({scope:'training',trainingId:32751,matchId:32751}),null);
   assert.equal(trainingNotificationTarget({scope:'training',trainingId:'-1'}),null);
 });
+test('mode and leg result remove completed boards despite missing source finish flag',()=>{
+  const now=Date.now(),board={active:true,finished:false,mode:'Best of 5 Legs',home:{legs:1},guest:{legs:3,points:0},lastUpdateNs:now*1e6,teamScoreHome:2,teamScoreGuest:8};
+  assert.equal(activeBoards({matches:[board]},now).length,0);
+  for(const mode of ['Best of 7 Legs','Best of 5 Sets',''])assert.equal(activeBoards({matches:[{...board,mode}]},now).length,1,mode);
+  assert.equal(activeBoards({matches:[{...board,guest:{legs:2,points:0}}]},now).length,1);
+  assert.equal(matchesFor({matches:[{id:1,kind:'upcoming'}]},{groups:[{groupKey:'1',matches:[board]}]},'',now)[0].kind,'live','between board blocks');
+  assert.equal(matchesFor({matches:[{id:1,kind:'live'}]},{groups:[{groupKey:'1',finished:true,matches:[board]}]},'',now)[0].kind,'final');
+});

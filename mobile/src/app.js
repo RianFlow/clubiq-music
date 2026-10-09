@@ -113,7 +113,7 @@ function liveStrip(){
   const fragment=document.createDocumentFragment();
   for(const match of matches)for(const raw of match.boards||[]){
     const board=liveBoardView(raw,Date.now(),!!failures.live||Date.now()-(cacheTimes.live||0)>45000||!!match.liveStale);
-    const chip=button('',()=>openMatch(match.id),'live-chip');
+    const chip=button('',()=>{openMatch(match.id);selectedMatch.expandedBoardKey=String(raw.matchKey||raw.id);updateMatchLive();},'live-chip');
     const names=board.players.map(p=>p.name).join(' / ');
     chip.append(node('small',`${board.stale?'Letzter Stand':'Live'} · Barver ${match.barverTeam||''} · Board ${board.board}`),node('span',names,'live-chip-names'),node('strong',board.players.map(p=>p.points??'–').join(' : ')));
     chip.setAttribute('aria-label',`Board ${board.board}: ${names}. Restpunkte im aktuellen Leg: ${board.players.map(p=>p.points??'unbekannt').join(' zu ')}${board.stale?'. Letzter bekannter Stand':''}. Spiel öffnen.`);
@@ -144,7 +144,8 @@ function standings(parent,league){
   const wrap=node('div',undefined,'standings'),table=node('table'),head=node('thead'),tr=node('tr');
   table.append(node('caption','Sp. = Spiele · Pkt. = Punkte'));
   for(const title of ['Pl.','Mannschaft','Sp.','Pkt.']){const th=node('th',title);th.scope='col';tr.append(th);}head.append(tr);table.append(head);
-  const body=node('tbody');for(const row of rows){const line=node('tr');if(row.barver)line.className='barver';line.append(node('td',row.rank??'–'));const name=node('th',row.name);name.scope='row';line.append(name,node('td',row.played??'–'),node('td',row.pointsFor==null?'–':row.pointsFor+(row.pointsAgainst==null?'':':'+row.pointsAgainst)));body.append(line);}table.append(body);wrap.append(table);parent.append(wrap);
+  const liveMatches=matchesFor(state.season,state.live).filter(match=>match.kind==='live');
+  const body=node('tbody');for(const row of rows){const line=node('tr');if(row.barver)line.className='barver';line.append(node('td',row.rank??'–'));const name=node('th');name.scope='row';const live=liveMatches.find(match=>match.home===row.name||match.away===row.name);if(live){const link=button('',()=>openMatch(live.id),'table-live-team');link.append(node('span',row.name),node('span','LIVE','badge live'));link.setAttribute('aria-label',`${row.name}: laufendes Spiel öffnen`);name.append(link);}else name.textContent=row.name;line.append(name,node('td',row.played??'–'),node('td',row.pointsFor==null?'–':row.pointsFor+(row.pointsAgainst==null?'':':'+row.pointsAgainst)));body.append(line);}table.append(body);wrap.append(table);parent.append(wrap);
 }
 function teams(parent){
   parent.append(node('small','BARVER A–D','eyebrow'),node('h1','Teams & Tabellen'));const grid=node('div',undefined,'team-grid');
@@ -222,25 +223,31 @@ function updateMatchLive(){
   const unavailable=!!failures.live||Date.now()-(cacheTimes.live||0)>45000||!!match?.liveStale;
   detail.score.textContent=match?.score||'–';
   detail.label.textContent=match?.kind==='final'?'Endstand':match?.kind==='pending'?'Vorläufig beendet · Bestätigung ausstehend':'Gesamtstand';
-  const boards=(match?.boards||[]).map(board=>liveBoardView(board,Date.now(),unavailable));
+  const focusedBoard=document.activeElement?.dataset?.boardToggle;
+  const boards=(match?.boards||[]).map(board=>({...liveBoardView(board,Date.now(),unavailable),key:String(board.matchKey||board.id)}));
+  if(detail.expandedBoardKey&&!boards.some(board=>board.key===detail.expandedBoardKey))detail.expandedBoardKey=null;
   const fragment=document.createDocumentFragment();
   fragment.append(node('h3',boards.length?`${boards.length===1?'Laufende Partie':`${boards.length} laufende Partien`}`:'Live-Partien'));
   fragment.append(node('p',unavailable?'Live-Verbindung unterbrochen · letzter bekannter Stand · erneuter Versuch automatisch':'Automatische Aktualisierung alle 15 Sekunden.','muted live-note'));
   for(const board of boards){
-    const card=node('article',undefined,'live-board'),head=node('div',undefined,'board-heading');
-    head.append(node('strong','Board '+board.board),node('span',board.stale?'LETZTER STAND':'LIVE','badge '+(board.stale?'':'live')));card.append(head);
-    if(board.mode)card.append(node('small',board.mode));
+    const expanded=detail.expandedBoardKey===board.key;
+    const card=node('article',undefined,'live-board'+(webApp?' compact-board':'')+(expanded?' is-expanded':'')),head=node('div',undefined,'board-heading');
+    head.append(node('strong','Board '+board.board),node('span',board.stale?'LETZTER STAND':'LIVE','badge '+(board.stale?'':'live')));
+    if(webApp){const toggle=button(expanded?'Verkleinern':'Vergrößern',()=>{detail.expandedBoardKey=expanded?null:board.key;updateMatchLive();[...detail.live.querySelectorAll('[data-board-toggle]')].find(node=>node.dataset.boardToggle===board.key)?.focus({preventScroll:true});},'board-expand');toggle.dataset.boardToggle=board.key;toggle.setAttribute('aria-expanded',String(expanded));toggle.setAttribute('aria-label',`${toggle.textContent}: ${board.players.map(player=>player.name).join(' gegen ')}`);head.append(toggle);card.addEventListener('click',event=>{if(window.matchMedia('(max-width:650px)').matches&&!event.target.closest('button,a,summary'))toggle.click();});}card.append(head);
+    if(board.mode)card.append(node('small',board.mode,'board-mode'));
     card.append(node('small','Restpunkte im aktuellen Leg','points-label'));
     for(const player of board.players){
       const row=node('div',undefined,'live-player'+(player.throwing?' throwing':'')),copy=node('div');
       copy.append(node('strong',player.name));if(player.throwing)copy.append(node('small','● Am Wurf'));
+      if(webApp)copy.append(node('small',`AVG ${player.average??'–'} · ${player.darts??'–'} Darts`,'board-brief'));
 
       row.append(copy,node('strong',player.points===0?'CHECK':player.points??'–','live-points'));card.append(row);
     }
-    card.append(node('div',`Legs ${board.players[0].legs??'–'} : ${board.players[1].legs??'–'}`,'live-legs'));collapsible(card,'Weitere Statistiken','board-'+detail.id+'-'+board.board,body=>{for(const player of board.players)body.append(node('p',`${player.name}: AVG (Partie) ${player.average??'–'} · Darts im Leg ${player.darts??'–'} · Letzter Wurf ${player.lastScore??'–'}`,'muted'));});fragment.append(card);
+    card.append(node('div',`Legs ${board.players[0].legs??'–'} : ${board.players[1].legs??'–'}`,'live-legs'));const stats=collapsible(card,'Weitere Statistiken','board-'+detail.id+'-'+board.key,body=>{for(const player of board.players)body.append(node('p',`${player.name}: AVG (Partie) ${player.average??'–'} · Darts im Leg ${player.darts??'–'} · Letzter Wurf ${player.lastScore??'–'}${Number.isInteger(player.points)?` · Geworfen im Leg ${501-player.points} Punkte`:''}`,'muted'));});if(webApp){stats.parentElement.id=`board-stats-${detail.id}-${board.key}`;head.querySelector('.board-expand').setAttribute('aria-controls',stats.parentElement.id);if(expanded)stats.parentElement.open=true;}fragment.append(card);
   }
   if(!boards.length)fragment.append(node('p',match?.kind==='final'?'Diese Begegnung ist beendet.':match?.kind==='pending'?'Keine aktuellen Live-Daten. Die offizielle Bestätigung steht noch aus.':'Noch keine laufende Partie von 3K gemeldet.','empty'));
   detail.live.replaceChildren(fragment);
+  if(focusedBoard)[...detail.live.querySelectorAll('[data-board-toggle]')].find(node=>node.dataset.boardToggle===focusedBoard)?.focus({preventScroll:true});
 }
 async function loadMatchReport(detail){
   if(detail.loading||selectedMatch!==detail||!q('#detail').open)return;detail.loading=true;

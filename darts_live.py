@@ -140,7 +140,7 @@ def normalize_match(raw: dict) -> dict | None:
         home_items, guest_items = indexed[::2], indexed[1::2]
     current = _integer(raw.get("currentplayerIndex"), 0, 99)
     last_update = source_timestamp(_text(raw.get("lastUpdate"), 40))
-    return {
+    match = {
         "id": match_id,
         "matchKey": match_key,
         "groupKey": group_key,
@@ -161,6 +161,13 @@ def normalize_match(raw: dict) -> dict | None:
         "lastUpdate": last_update or None,
         "lastUpdateNs": timestamp_ns(last_update),
     }
+    # A scorer can clear statusActive without ever setting statusFinished.
+    # The declared game mode provides an explicit finish even in that gap.
+    if game_winner(match):
+        match["finished"] = True
+    if match["finished"]:
+        match["active"] = False
+    return match
 
 
 def normalize_rest(payload) -> list[dict]:

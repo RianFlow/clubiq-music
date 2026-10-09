@@ -115,6 +115,15 @@ Die Lieblingsmannschaft ist vorausgewählt; A–D und Alle ändern die Auswahl.
 Eine laufende Partie erscheint automatisch. Der Modus benötigt eine Verbindung,
 funktioniert aber auch ohne Unterstützung der browserseitigen Vollbildfunktion.
 
+Auf dem Handy bleiben die Boards zunächst kompakt. Antippen oder **Vergrößern**
+zeigt die großen Restpunkte und weiteren Wurfwerte; **Verkleinern** stellt die
+Übersicht wieder her. Die Auswahl bleibt während Live-Aktualisierungen erhalten.
+Eine neue Partie auf demselben Board beginnt wieder kompakt. Ein entscheidender
+Legstand beendet die Anzeige gemäß Best-of-/First-to-Modus, auch wenn 3K das
+Abschlusskennzeichen verspätet liefert. Der Mannschaftsstand bleibt zwischen
+den Partien sichtbar. In den Tabellen öffnet die Mannschaft mit **LIVE** direkt
+ihre laufende Begegnung.
+
 Bei einem gewonnenen Leg oder einer gewonnenen Partie erscheint die Sieganimation
 mit dem vorhandenen Spielerbild, im Doppel mit beiden vorhandenen Bildern.
 Fehlende oder nicht eindeutig zuordenbare Fotos werden weggelassen. Unter

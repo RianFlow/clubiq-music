@@ -24,6 +24,23 @@ META = {"id": 1657285, "home": "VFL Emslage 1", "away": "SV Barver Darts 2", "ba
 
 
 class DartsLiveTests(unittest.TestCase):
+    def test_completed_leg_score_finishes_board_without_source_flag(self):
+        before = normalize_match(raw_match())
+        players = [dict(player, legs=1 if index == 0 else 3) for index, player in enumerate(raw_match()["matchPlayers"])]
+        for active in (False, True):
+            after = normalize_match(raw_match(statusActive=active, statusFinished=False, matchPlayers=players))
+            self.assertTrue(after["finished"])
+            self.assertFalse(after["active"])
+            self.assertEqual([event["type"] for event in detect_events(before, after, META)], ["leg", "game"])
+
+    def test_display_finish_obeys_mode_and_preserves_checkout_between_legs(self):
+        players = [dict(player, legs=1 if index == 0 else 3, points=0 if index else 100) for index, player in enumerate(raw_match()["matchPlayers"])]
+        for mode, finished in (("Best of 5 Legs", True), ("First to 3 Legs", True), ("Best of 7 Legs", False), ("Best of 5 Sets", False), ("", False)):
+            board = normalize_match(raw_match(mode=mode, matchPlayers=players))
+            self.assertEqual(board["finished"], finished, mode)
+        players[1]["legs"] = 2
+        self.assertFalse(normalize_match(raw_match(matchPlayers=players))["finished"])
+
     def test_first_game_after_empty_snapshot_is_announced(self):
         hub = DartsLiveHub()
         hub._groups["1657285"] = hub._empty_group("1657285", META)

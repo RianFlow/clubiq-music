@@ -1394,11 +1394,12 @@ body.tv-live .club-training { display:none; }
 
 /* The installed Web-App uses the same TV layout without the Fullscreen API. */
 body.app-tv{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
-body.app-tv .darts-header{position:sticky;top:0;z-index:8;background:var(--ui-bg,#fffef9)}
+body.app-tv .darts-header{position:sticky;top:0;z-index:8;background:linear-gradient(100deg,#050d0c,#0e3c33);color:#fff}
 body.app-tv .header-club-logo,body.app-tv .brand small,body.app-tv .mobile-section-nav,body.app-tv .mobile-menu-button,body.app-tv #homeTeamPanel,body.app-tv #tvScheduleTeaser,body.app-tv #joinTeaser,body.app-tv #todayPanel>.sports-panel-head,body.app-tv #pageStatus{display:none!important}
 body.app-tv .darts-header .header-tools{display:flex;margin-left:auto}
 body.app-tv #fullscreen{display:block!important;font-size:.8rem;white-space:nowrap;min-height:44px}
-body.app-tv .tv-team-controls{position:sticky;top:58px;z-index:7;background:var(--ui-bg,#fffef9)}
+body.app-tv .tv-team-controls{position:sticky;top:58px;z-index:7;background:#f7f7f4}
+[data-theme="dark"] body.app-tv .tv-team-controls{background:#0b1613}
 body.app-tv #todayGrid{margin-bottom:80px}
 body.app-tv .tv-roster-choice,body.app-tv #presentTvRoster{display:none}
 body.app-tv #liveDataStatus{font-size:.72rem;max-width:100%;white-space:normal}
@@ -1418,4 +1419,41 @@ body.app-tv #liveDataStatus{font-size:.72rem;max-width:100%;white-space:normal}
  body.app-tv .today-detail{padding:8px 0}
  body.app-tv .today-live-game{padding:10px}
  body.app-tv .tv-team-controls>span:not(#liveDataStatus),body.app-tv #tvTeamCount{display:none}
+}
+
+/* Small mobile boards expand individually; the selection survives live updates. */
+.today-board-header{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+.today-board-toggle,.today-live-brief{display:none}
+.table-live-badge{display:inline-flex;align-items:center;justify-content:center;width:max-content;flex-shrink:0;padding:3px 7px;border-radius:5px;background:#b32923;color:#fff;font-size:.65rem;font-weight:800;letter-spacing:.04em;line-height:1.3}
+.table-live-team{display:inline-flex;align-items:center;flex-wrap:wrap;gap:6px;color:inherit;text-decoration:none;min-height:44px}
+.table-live-team:hover{text-decoration:underline;text-underline-offset:3px}
+.round-match.is-live{border-left:3px solid #b32923}
+.round-match .table-live-badge{justify-self:center}
+@media(max-width:650px){
+ .today-board-toggle{display:inline-flex;align-items:center;justify-content:center;min-width:88px;min-height:44px;padding:5px 9px;font-size:.72rem;flex-shrink:0}
+ body .today-live-game{padding:8px!important;border:1px solid var(--line,#cbd9d3);border-radius:10px;gap:6px;cursor:pointer}
+ body .today-live-game.is-expanded{border-color:var(--accent,#2c7768);padding:12px!important}
+ body .today-live-game:not(.is-expanded) .today-live-score{min-height:58px;gap:6px}
+ body .today-live-game:not(.is-expanded) .today-live-score strong{font-size:1.8rem;line-height:1.1}
+ body .today-live-game:not(.is-expanded) .today-live-middle{min-width:56px}
+ body .today-live-game:not(.is-expanded) .today-live-legs{font-size:.65rem!important;padding:4px;white-space:nowrap}
+ body .today-live-game:not(.is-expanded) .today-player-name{font-size:.74rem;line-height:1.25}
+ body .today-live-game:not(.is-expanded) .today-live-facts{display:none}
+ body .today-live-game:not(.is-expanded) .today-live-brief{display:grid;grid-template-columns:1fr 1fr;gap:8px;color:var(--muted,#607269);font-size:.68rem}
+ .today-live-brief>small:last-child{text-align:right}
+ body .today-live-game.is-expanded .today-live-score strong{font-size:clamp(2.5rem,12vw,3.5rem)}
+ body .today-live-game.is-expanded .today-live-score{min-height:110px}
+ body .today-live-game.is-expanded .today-live-facts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+ body:is(:fullscreen,.app-tv) .today-live-game:not(.is-expanded) .today-live-score{min-height:58px;gap:6px}
+ body:is(:fullscreen,.app-tv) .today-live-game:not(.is-expanded) .today-live-score strong{font-size:1.8rem}
+ body:is(:fullscreen,.app-tv) .today-live-game:not(.is-expanded) .today-live-middle{min-width:56px}
+ body.app-tv .today-match-label{display:none}
+ body.app-tv .today-matchup{min-height:48px;padding:6px}
+ body.app-tv .today-game{gap:6px;padding:10px}
+ body.app-tv .today-detail{gap:8px}
+ body:is(:fullscreen,.app-tv) .today-grid{flex:0 0 auto;grid-auto-rows:auto;align-content:start}
+ body.app-tv #todayGrid{margin-bottom:16px}
+ body.app-tv .today-boards-label{font-size:.68rem}
+ body.app-tv .today-time{font-size:.72rem}
+ body .today-board-wait{font-size:.8rem}
 }
