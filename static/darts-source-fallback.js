@@ -38,7 +38,7 @@
   function liveEvents(payload, match) {
     const games=Array.isArray(payload)?payload:payload?.data;
     if(!Array.isArray(games))return [];
-    return games.filter(game=>game&&(game.statusActive===true||game.status===1)&&Array.isArray(game.matchPlayers)&&game.matchPlayers.length>=2).map(game=>{
+    return games.filter(game=>game&&game.statusFinished!==true&&(game.statusActive===true||game.status===1)&&Array.isArray(game.matchPlayers)&&game.matchPlayers.length>=2).map(game=>{
       const players=game.matchPlayers.filter(p=>p&&typeof p==='object');
       const side=parity=>{
         const members=players.filter((_,i)=>i%2===parity),p=members[0]||{};
@@ -48,8 +48,11 @@
         return {name:members.map(p=>String(p.playerName||'').trim()).filter(Boolean).join(' & ').slice(0,160)||'Noch offen',remaining:count(p.points,501),legs:count(p.legs,25),darts:sum('darts',1000),lastScore:count(p.lastScore,180),totalDarts,totalScore,average:totalDarts>0&&totalScore!==null?Math.round(totalScore*30/totalDarts)/10:null};
       };
       const home=side(0),away=side(1),score=home.legs!==null&&away.legs!==null?`${home.legs}:${away.legs}`:'–';
-      return {type:'live_game',title:'Aktuelle Partie',text:`${home.name} ${score} ${away.name}`,matchId:match.id,liveGameId:Number.isSafeInteger(game.id)?game.id:0,homeName:home.name,awayName:away.name,homeLegs:home.legs,awayLegs:away.legs,homeRemaining:home.remaining,awayRemaining:away.remaining,home,away,board:String(game.board||'').slice(0,20),currentSide:Number.isInteger(game.currentplayerIndex)?game.currentplayerIndex%2===0?'home':'away':null,updatedAt:iso(game.lastUpdate)};
-    });
+      const mode=String(game.mode||'').trim(),best=/^best\s*of\s*(\d+)\s*legs?$/i.exec(mode),first=/^first\s*to\s*(\d+)\s*legs?$/i.exec(mode),count=Number(best?.[1]||first?.[1]);
+      const target=best&&count>=1&&count<=99&&count%2?Math.floor(count/2)+1:first&&count>=1&&count<=50?count:null;
+      if(target!==null&&Number.isInteger(home.legs)&&Number.isInteger(away.legs)&&Math.max(home.legs,away.legs)===target&&Math.min(home.legs,away.legs)<target)return null;
+      return {type:'live_game',title:'Aktuelle Partie',text:`${home.name} ${score} ${away.name}`,matchId:match.id,liveGameId:Number.isSafeInteger(game.id)?game.id:0,mode,homeName:home.name,awayName:away.name,homeLegs:home.legs,awayLegs:away.legs,homeRemaining:home.remaining,awayRemaining:away.remaining,home,away,board:String(game.board||'').slice(0,20),currentSide:Number.isInteger(game.currentplayerIndex)?game.currentplayerIndex%2===0?'home':'away':null,updatedAt:iso(game.lastUpdate)};
+    }).filter(Boolean);
   }
   function publicGame(raw) {
     const number=Number.isSafeInteger(raw.gameNr)?raw.gameNr:Number.isSafeInteger(raw.gameNrRound)?raw.gameNrRound:0;
@@ -98,7 +101,7 @@
           match.kind==='live'?read(`https://live.3k-darts.com/dartsscorer-liveticker/api/v1/match/10/0/${match.id}`,controller.signal):Promise.resolve(null),
         ]);
         if(extras[0].status==='fulfilled')result.performances=publicPerformances(extras[0].value,match.id);
-        if(extras[1].status==='fulfilled'&&extras[1].value)result.liveGames=liveEvents(extras[1].value,match).map(event=>({id:event.liveGameId,home:{name:event.homeName,remaining:event.homeRemaining,legs:event.homeLegs},away:{name:event.awayName,remaining:event.awayRemaining,legs:event.awayLegs},currentSide:event.currentSide,lastUpdated:event.updatedAt}));
+        if(extras[1].status==='fulfilled'&&extras[1].value)result.liveGames=liveEvents(extras[1].value,match).map(event=>({id:event.liveGameId,board:event.board,mode:event.mode,home:event.home,away:event.away,currentSide:event.currentSide,lastUpdated:event.updatedAt}));
         result.reportAvailable=result.reportAvailable||result.liveGames.length>0;
       }
       if(controller.signal.aborted)throw new Error('Match request cancelled');

@@ -13,6 +13,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Öffentliche Containerimages über den Cache laden
+        run: |
+          # Pull the public cache explicitly, then preserve the references used
+          # by the production Dockerfiles and Compose configuration.
+          for image in library/debian:trixie-slim library/python:3.11-slim library/postgres:15-alpine docker/dockerfile:1; do
+            docker pull "mirror.gcr.io/$image"
+            docker tag "mirror.gcr.io/$image" "${image#library/}"
+          done
+          proxy_base='python:3.12-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258'
+          docker pull "mirror.gcr.io/library/$proxy_base"
+          docker tag "mirror.gcr.io/library/$proxy_base" python:3.12-slim-bookworm
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -69,7 +80,19 @@ jobs:
           docker compose config --quiet
           docker compose -f docker-compose.yml -f docker-compose.darts-collector.yml --profile darts-collector config --quiet
       - name: Darts-Proxy ohne Registrierung bauen
-        run: docker build -f Dockerfile.darts-egress -t clubiq-darts-egress:check .
+        run: |
+          # Keep the production recipe and pinned digest. BuildKit must use the
+          # cache explicitly even when this base was already pulled locally.
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          source = Path('Dockerfile.darts-egress').read_text()
+          base = 'python:3.12-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258'
+          assert source.startswith('FROM ' + base + '\n')
+          target = Path(os.environ['RUNNER_TEMP']) / 'darts-egress.Dockerfile'
+          target.write_text(source.replace('FROM ' + base, 'FROM mirror.gcr.io/library/' + base, 1))
+          PY
+          docker build -f "$RUNNER_TEMP/darts-egress.Dockerfile" -t clubiq-darts-egress:check .
       - name: Datenhelfer mit allen Quelldateien bauen
         run: |
           docker build -f Dockerfile.darts-collector -t clubiq-darts-collector:check .

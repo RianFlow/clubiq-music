@@ -26,3 +26,20 @@ dialog{width:min(94vw,700px);max-height:85vh;border:1px solid var(--line);border
 .hero-choice{display:grid;gap:6px;margin:18px 0 0}.hero-choice>span{font-size:.8rem;color:var(--muted)}.hero-choice select{width:100%;color:var(--accent);font-weight:650;background:var(--card)}
 
 .training-tabs{display:flex;gap:8px;overflow-x:auto;padding:4px 1px 12px;margin-bottom:12px}.training-tab{flex-shrink:0;font-size:.8rem;min-height:44px}.training-tab[aria-pressed=true]{background:var(--accent);color:var(--card);border-color:var(--accent)}.training-choice{display:grid;gap:6px;margin:18px 0}.training-choice select{width:100%;min-width:0;font-size:.85rem}.training-push-option{display:flex;gap:12px;align-items:center;min-height:56px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}.training-push-option input{width:22px;height:22px;accent-color:var(--accent);flex-shrink:0}.training-table{border-top:1px solid var(--line);border-radius:12px}.training-table table{min-width:420px}.training-note{font-size:.8rem}.training-hero .compact-action{width:100%}
+
+.table-live-team{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:4px 0;border:0;background:transparent;color:inherit;box-shadow:none;text-align:left;font:inherit;min-height:44px}
+.board-expand,.board-brief{display:none}
+.game-player-icons{display:inline-flex;vertical-align:middle;gap:3px;margin-right:5px}.game-player-icons img{width:26px;height:26px;object-fit:cover;object-position:center top;border-radius:4px}.game-player-icons img.is-logo{object-fit:contain}
+@media(max-width:650px){
+ .compact-board{padding:10px;margin:8px 0}
+ .compact-board .board-heading{gap:6px;flex-wrap:wrap;font-size:.8rem}
+ .compact-board .board-expand{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:5px 8px;font-size:.72rem;margin-left:auto}
+ .compact-board:not(.is-expanded) .board-mode,.compact-board:not(.is-expanded) .points-label,.compact-board:not(.is-expanded) .fold{display:none}
+ .compact-board:not(.is-expanded) .live-player{margin:7px 0;gap:8px;font-size:.82rem}
+ .compact-board:not(.is-expanded) .live-points{font-size:1.6rem}
+ .compact-board:not(.is-expanded) .board-brief{display:block;font-size:.68rem;color:var(--muted)}
+ .compact-board:not(.is-expanded) .live-legs{padding-top:7px;font-size:.8rem}
+ .compact-board.is-expanded .live-points{font-size:clamp(2.6rem,12vw,3.5rem)}
+ .compact-board.is-expanded{padding:14px;border-color:var(--accent)}
+ .compact-board.is-expanded .fold{display:block}
+}

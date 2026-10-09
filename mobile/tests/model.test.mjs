@@ -1,6 +1,14 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {apiUrl,publicLink,cleanPreferences,activeBoards,matchesFor,sections,roleRank,notificationTarget,liveBoardView,matchLocation,matchSide,routeUrl,calendarEvent,calendarFile} from '../src/model.js';
+import {apiUrl,publicLink,cleanPreferences,activeBoards,matchesFor,sections,roleRank,notificationTarget,liveBoardView,playerPortraits,matchLocation,matchSide,routeUrl,calendarEvent,calendarFile} from '../src/model.js';
+test('Barver game portraits retain real photos and use the crest for missing, unsafe or ambiguous images',()=>{
+  const profiles=[{name:'Max Lowak',team:'B',image:'/pics/players/max-lowak-cutout.webp'}];
+  const pair=playerPortraits('M. Lowak & René Lange','SV Barver Darts B',profiles);
+  assert.equal(pair[0].image,profiles[0].image);assert.equal(pair[1].image,'/pics/sv-barver-darts-tight-512.webp');assert.equal(pair[1].fallback,true);
+  assert.deepEqual(playerPortraits('Max Lowak','Gastverein',profiles),[]);
+  assert.equal(playerPortraits('Max Lowak','SV Barver Darts B',[{...profiles[0],image:'https://example.org/portrait.png'}])[0].fallback,true);
+  assert.equal(playerPortraits('M. Lowak','SV Barver Darts B',[...profiles,{name:'Mark Lowak',team:'B',image:'/pics/players/mark.webp'}])[0].fallback,true);
+});
 test('only public read endpoints and public links',()=>{
   assert.match(apiUrl('/api/v1/darts/matches/1280528'),/^https:\/\/barverdarts/);
   for(const path of ['/api/v1/darts/admin/players','/api/v1/darts/push/subscribe','https://evil.test','/api/v1/darts/season?admin=1'])assert.throws(()=>apiUrl(path));
@@ -87,4 +95,16 @@ test('training links remain public and training alerts never open a league match
   assert.equal(trainingNotificationTarget({scope:'training',trainingId:'32751',matchId:32751}),32751);
   assert.equal(notificationTarget({scope:'training',trainingId:32751,matchId:32751}),null);
   assert.equal(trainingNotificationTarget({scope:'training',trainingId:'-1'}),null);
+});
+test('mode and leg result remove completed boards despite missing source finish flag',()=>{
+  const now=Date.now(),board={active:true,finished:false,mode:'Best of 5 Legs',home:{legs:1},guest:{legs:3,points:0},lastUpdateNs:now*1e6,teamScoreHome:2,teamScoreGuest:8};
+  assert.equal(activeBoards({matches:[board]},now).length,0);
+  for(const mode of ['Best of 7 Legs','Best of 5 Sets',''])assert.equal(activeBoards({matches:[{...board,mode}]},now).length,1,mode);
+  assert.equal(activeBoards({matches:[{...board,guest:{legs:2,points:0}}]},now).length,1);
+  assert.equal(matchesFor({matches:[{id:1,kind:'upcoming'}]},{groups:[{groupKey:'1',matches:[board]}]},'',now)[0].kind,'live','between board blocks');
+  assert.equal(matchesFor({matches:[{id:1,kind:'live'}]},{groups:[{groupKey:'1',finished:true,matches:[board]}]},'',now)[0].kind,'final');
+  for(let offset=0;offset<16;offset++){
+    const instant=1791580289886+offset,group={groupKey:'1',matches:[{...board,lastUpdateNs:instant*1e6}]};
+    assert.equal(matchesFor({matches:[{id:1,kind:'upcoming'}]},{groups:[group]},'',instant)[0].kind,'live','nanosecond precision must preserve an update at the current millisecond');
+  }
 });

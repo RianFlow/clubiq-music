@@ -78,3 +78,7 @@ global.fetch=async(url,options)=>{
   global.fetch=async()=>{throw new Error('offline');};await assert.rejects(source.loadPlayerStats([]),/unavailable/);
   console.log('3K fallback: public allowlist, verified player stats, real scores and bounded polling OK');
 })().catch(error=>{console.error(error);process.exitCode=1});
+const sourceEnded={id:8,statusActive:true,statusFinished:false,mode:'Best of 5 Legs',matchPlayers:[{playerName:'Jannik',points:64,legs:1},{playerName:'Robin',points:0,legs:3}]};
+assert.equal(source.liveEvents({data:[sourceEnded]},item).length,0,'fallback also drops a completed best-of-five game');
+assert.equal(source.liveEvents({data:[{...sourceEnded,mode:'Best of 7 Legs'}]},item).length,1);
+assert.equal(source.liveEvents({data:[{...sourceEnded,mode:'',statusFinished:true}]},item).length,0);

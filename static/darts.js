@@ -59,12 +59,27 @@ function dartsHomeGroups(items, filters={}, now=new Date()) {
     upcoming:matches.filter(m=>m.kind==='upcoming'&&dartsLocalDay(m.plannedAt)>today).sort(byTime),
     final:matches.filter(m=>(m.kind==='final'||m.kind==='pending')&&dartsLocalDay(m.plannedAt)!==today).sort((a,b)=>byTime(b,a))};
 }
+function dartsLiveGameFinished(match) {
+  if(match?.finished)return true;
+  const mode=String(match?.mode||'').trim(),best=/^best\s*of\s*(\d+)\s*legs?$/i.exec(mode),first=/^first\s*to\s*(\d+)\s*legs?$/i.exec(mode);
+  const count=Number(best?.[1]||first?.[1]),target=best&&count>=1&&count<=99&&count%2?Math.floor(count/2)+1:first&&count>=1&&count<=50?count:null;
+  const home=match?.home?.legs,away=(match?.guest||match?.away)?.legs;
+  return target!==null&&Number.isInteger(home)&&Number.isInteger(away)&&Math.max(home,away)===target&&Math.min(home,away)>=0&&Math.min(home,away)<target;
+}
+function dartsCurrentLiveGames(group,now=Date.now()) {
+  if(group?.retired||group?.finished)return [];
+  return (group?.matches||[]).filter(match=>{
+    const age=now-Number(match.lastUpdateNs)/1e6;
+    return match.active&&!match.comingSoon&&!dartsLiveGameFinished(match)&&Number(match.lastUpdateNs)>0&&age>=-5000&&age<600000;
+  });
+}
 function dartsLiveGroupActive(group,now=Date.now()) {
   if(group?.retired||group?.finished||group?.stale)return false;
   return (group?.matches||[]).some(m=>{
     const age=now-Number(m.lastUpdateNs)/1e6;
-    const betweenBoards=m.finished&&Number.isInteger(m.teamScoreHome)&&Number.isInteger(m.teamScoreGuest)&&m.teamScoreHome+m.teamScoreGuest>0&&m.teamScoreHome+m.teamScoreGuest<12;
-    return (m.active&&!m.finished||betweenBoards)&&Number(m.lastUpdateNs)>0&&age>=-5000&&age<600000;
+    const finished=dartsLiveGameFinished(m);
+    const betweenBoards=finished&&Number.isInteger(m.teamScoreHome)&&Number.isInteger(m.teamScoreGuest)&&m.teamScoreHome+m.teamScoreGuest>0&&m.teamScoreHome+m.teamScoreGuest<12;
+    return (m.active&&!finished||betweenBoards)&&Number(m.lastUpdateNs)>0&&age>=-5000&&age<600000;
   });
 }
 function dartsCupActive(season) {
@@ -535,6 +550,7 @@ function initDarts() {
   function applyPlayerData(state) {
     playerProfileBase=state.profiles.players;playerStatCache=state.stats.players;
     syncProfileRosters();mergePlayerProfiles();
+    renderToday(tickerData);
     if(activePlayerProfile&&q('#playerDialog').open)renderPlayerProfile(activePlayerProfile.member,activePlayerProfile.team);
     if(activeTeamProfile&&q('#teamDialog').open)renderTeamProfile(activeTeamProfile);
   }
@@ -698,17 +714,12 @@ function initDarts() {
   let tickerDelay = 30000, tickerData = {items:[]}, favorite = 'all', liveCenters = [];
   const serverLiveGroups = new Map();
   let serverLiveConnected = false, activeMatchDetailData = null;
+  let expandedLiveGame = null;
   function liveRemaining(value) {
     return Number.isInteger(value) ? (value === 0 ? 'CHECK' : String(value)) : '–';
   }
-  const LIVE_FINISH_GRACE_MS = 20_000;
   function normalizedLiveGames(group) {
-    const now=Date.now();
-    return (group?.matches || []).filter(match=>{
-      if (match.active || !match.finished) return true;
-      const updatedMs=Number(match.lastUpdateNs)/1e6;
-      return Number.isFinite(updatedMs) && now-updatedMs<=LIVE_FINISH_GRACE_MS;
-    }).map(match=>({
+    return dartsCurrentLiveGames(group).map(match=>({
       id:match.id, matchKey:match.matchKey, board:match.board, mode:match.mode,
       home:{...match.home,name:match.home?.name || 'Heim',remaining:match.home?.points},
       away:{...match.guest,name:match.guest?.name || 'Gast',remaining:match.guest?.points},
@@ -799,7 +810,7 @@ function initDarts() {
       activeMatchDetailData={...activeMatchDetailData,liveGames:normalizedLiveGames(group),match:{...activeMatchDetailData.match,kind:group.finished?'final':'live',score:item?.score || activeMatchDetailData.match?.score}};
       renderMatchDetail(activeMatchDetailData);
     }
-    renderCompleteMatchCenter(); renderToday(tickerData); updateFreshness(!group.connected);
+    renderCompleteMatchCenter(); renderToday(tickerData); refreshLeagueLiveMarkers(); updateFreshness(!group.connected);
     if(moments.length)renderTicker(tickerData);
   }
   function initServerLiveStream() {
@@ -854,6 +865,8 @@ function initDarts() {
   function renderToday(data) {
     const target = q('#todayGrid');
     if (!target) return;
+    const focusKey=target.contains(document.activeElement)?document.activeElement.dataset.liveToggle:null;
+    const activeKeys=new Set();
     const items = Array.isArray(data.items) ? data.items.slice() : [];
     const teamOrder=item=>({A:0,B:1,C:2,D:3})[barverTeam(item)] ?? 99;
     const wanted = items.sort((a,b)=>
@@ -907,11 +920,18 @@ function initDarts() {
         if (liveGames.length && item.kind==='live') {
           const list=document.createElement('span'); list.className='today-live-games';
           for (const game of liveGames) {
-            const liveGame=document.createElement('span'); liveGame.className='today-live-game';
-            if (game.board) {
-              const board=document.createElement('small'); board.className='today-live-board'; board.textContent=`BOARD ${game.board}`;
-              liveGame.append(board);
-            }
+            const key=`${item.id}:${game.liveGameId}`;activeKeys.add(key);
+            const expanded=expandedLiveGame===key;
+            const liveGame=document.createElement('span'); liveGame.className=`today-live-game${expanded?' is-expanded':''}`;
+            liveGame.dataset.liveGame=key;
+            const boardHead=document.createElement('span');boardHead.className='today-board-header';
+            const board=document.createElement('small');board.className='today-live-board';board.textContent=`${game.board?`BOARD ${game.board} · `:''}Restpunkte`;
+            const toggle=document.createElement('button');toggle.type='button';toggle.className='today-board-toggle';toggle.dataset.liveToggle=key;
+            toggle.textContent=expanded?'Verkleinern':'Vergrößern';toggle.setAttribute('aria-expanded',String(expanded));toggle.setAttribute('aria-label',`${toggle.textContent}: ${game.homeName} gegen ${game.awayName}`);
+            const toggleBoard=()=>{expandedLiveGame=expandedLiveGame===key?null:key;renderToday(tickerData);[...target.querySelectorAll('[data-live-toggle]')].find(node=>node.dataset.liveToggle===key)?.focus({preventScroll:true});};
+            toggle.addEventListener('click',toggleBoard);
+            liveGame.addEventListener('click',event=>{if(window.matchMedia('(max-width:650px)').matches&&!event.target.closest('button,a'))toggleBoard();});
+            boardHead.append(board,toggle);liveGame.append(boardHead);
             const scoreline=document.createElement('span'); scoreline.className='today-live-score';
             const homeSide=document.createElement('span'); homeSide.className=game.currentSide==='home'?'throwing':'';
             const homeName=matchPlayerNode(game.homeName,item.id,'home');homeName.classList.add('today-player-name');
@@ -924,9 +944,11 @@ function initDarts() {
             const awayName=matchPlayerNode(game.awayName,item.id,'away');awayName.classList.add('today-player-name');
             homeSide.append(homeName,homePoints); middle.append(legs,colon); awaySide.append(awayName,awayPoints); scoreline.append(homeSide,middle,awaySide);
             scoreline.setAttribute('aria-label',`${game.homeName} ${homePoints.textContent} zu ${awayPoints.textContent} ${game.awayName}. ${legs.textContent}.`);
-            const fingerprint=JSON.stringify([game.homeRemaining,game.awayRemaining,game.homeLegs,game.awayLegs,game.currentSide]);const key=`${item.id}:${game.liveGameId}`;const previous=liveSnapshots.get(key);const changed=previous&&previous.fingerprint!==fingerprint;const changedAt=changed?Date.now():previous?.changedAt||0;liveSnapshots.set(key,{fingerprint,changedAt});if(liveSnapshots.size>256)liveSnapshots.delete(liveSnapshots.keys().next().value);if(changedAt&&Date.now()-changedAt<4000)liveGame.classList.add('score-updated');
+            const fingerprint=JSON.stringify([game.homeRemaining,game.awayRemaining,game.homeLegs,game.awayLegs,game.currentSide]);const previous=liveSnapshots.get(key);const changed=previous&&previous.fingerprint!==fingerprint;const changedAt=changed?Date.now():previous?.changedAt||0;liveSnapshots.set(key,{fingerprint,changedAt});if(liveSnapshots.size>256)liveSnapshots.delete(liveSnapshots.keys().next().value);if(changedAt&&Date.now()-changedAt<4000)liveGame.classList.add('score-updated');
             const facts=document.createElement('div');facts.className='today-live-facts';facts.append(livePlayerFacts(game.home),livePlayerFacts(game.away));
-            liveGame.append(scoreline,facts);const updated=document.createElement('small');updated.className='live-game-updated';const observed=Date.parse(game.updatedAt||item.updatedAt||data.updatedAt||'');updated.textContent=Number.isFinite(observed)?`Stand: ${new Date(observed).toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'})} Uhr`:'Aktualisierung wird geprüft';liveGame.append(updated);
+            facts.id=`live-facts-${item.id}-${game.liveGameId}`;toggle.setAttribute('aria-controls',facts.id);
+            const brief=document.createElement('span');brief.className='today-live-brief';for(const player of [game.home,game.away]){const line=document.createElement('small');line.textContent=`AVG ${typeof player?.average==='number'?player.average.toLocaleString('de-DE',{maximumFractionDigits:1}):'–'} · ${player?.darts??'–'} Darts`;brief.append(line);}
+            liveGame.append(scoreline,brief,facts);const updated=document.createElement('small');updated.className='live-game-updated';const observed=Date.parse(game.updatedAt||item.updatedAt||data.updatedAt||'');updated.textContent=Number.isFinite(observed)?`Stand: ${new Date(observed).toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'})} Uhr`:'Aktualisierung wird geprüft';liveGame.append(updated);
             if (!Number.isInteger(game.homeRemaining) || !Number.isInteger(game.awayRemaining)) {
               const wait=document.createElement('small'); wait.className='today-live-wait'; wait.textContent='Punktestand wird noch geladen'; liveGame.append(wait);
             }
@@ -939,6 +961,8 @@ function initDarts() {
           copy.append(text); detail.append(label,copy);
         }
         card.append(detail);
+      } else if(item.kind==='live') {
+        const wait=document.createElement('p');wait.className='today-detail today-board-wait';wait.textContent='Zwischen den Partien · das nächste Board erscheint automatisch.';card.append(wait);
       }
       const highlights=events.filter(event=>event.type==='180'||event.type==='high_finish').slice(-3);
       if (highlights.length) {
@@ -949,6 +973,8 @@ function initDarts() {
       const report=document.createElement('button');report.type='button';report.className='calendar-button';report.textContent='Spielbericht öffnen';report.addEventListener('click',()=>openMatch(item.id));card.append(when,report); fragment.append(card);
     }
     target.replaceChildren(fragment);
+    if(expandedLiveGame&&!activeKeys.has(expandedLiveGame))expandedLiveGame=null;
+    if(focusKey)[...target.querySelectorAll('[data-live-toggle]')].find(node=>node.dataset.liveToggle===focusKey)?.focus({preventScroll:true});
   }
   const resultSnapshots=new Map(),recentResults=new Map();
   function rememberResults(matches){
@@ -1004,8 +1030,12 @@ function initDarts() {
     const source=activeMatchDetailData?.match?.id===matchId?activeMatchDetailData.match:(tickerData.items||[]).find(m=>m.id===matchId)||(seasonData?.matches||[]).find(m=>m.id===matchId);
     const code=dartsTeamCode(source?.[side]||'');
     const matches=[];for(const team of seasonData?.teams||[])for(const member of dartsTeamRoster(team))if(team.code===code&&memberNameKey(member.name)===memberNameKey(name))matches.push({member,team});
-    if(matches.length!==1){const span=document.createElement('span');span.textContent=name;return span;}
-    const button=document.createElement('button');button.type='button';button.className='linked-player-name';button.textContent=name;button.setAttribute('aria-label',`Spielerprofil von ${name} öffnen`);button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();q('#matchDialog').close();profileReturnMatch=matchId;openPlayerProfile(matches[0].member,matches[0].team);});return button;
+    const result=document.createElement(matches.length===1?'button':'span');result.textContent=name;
+    if(matches.length===1){result.type='button';result.className='linked-player-name';result.setAttribute('aria-label',`Spielerprofil von ${name} öffnen`);result.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();q('#matchDialog').close();profileReturnMatch=matchId;openPlayerProfile(matches[0].member,matches[0].team);});}
+    const profiles=new Map(Object.entries(playerProfiles));for(const team of seasonData?.teams||[])for(const member of dartsTeamRoster(team))profiles.set(String(member.id),{...member,...playerProfiles[String(member.id)],name:member.name,team:team.code});
+    const portraits=window.DartsBroadcast?.playerPortraits(name,code,[...profiles.values()])||[];
+    if(portraits.length){const icons=document.createElement('span');icons.className='game-player-icons';icons.setAttribute('aria-hidden','true');for(const player of portraits){const image=document.createElement('img');image.src=player.image;image.alt='';image.classList.toggle('is-logo',player.fallback);image.decoding='async';image.addEventListener('error',()=>{image.src='/pics/sv-barver-darts-tight-512.webp';image.classList.add('is-logo');},{once:true});icons.append(image);}result.prepend(icons);}
+    return result;
   }
   const liveSnapshots=new Map();
   function renderHomeSchedule() {
@@ -1335,11 +1365,9 @@ function initDarts() {
   function playerAvatar(member, large=false) {
     const avatar=document.createElement('span'); avatar.className=`player-avatar${large?' large':''}`;
     const photo=member?.id ? playerProfiles[String(member.id)]?.image : '';
-    if (photo) {
-      const image=document.createElement('img'); image.src=photo; image.alt=`Porträt von ${member.name}`; image.loading=large?'eager':'lazy'; image.fetchPriority=large?'high':'low'; image.decoding='async';
-      image.addEventListener('error',()=>{ avatar.replaceChildren(document.createTextNode(playerInitials(member.name))); avatar.classList.add('avatar-fallback'); },{once:true});
-      avatar.append(image);
-    } else { avatar.textContent=playerInitials(member?.name); avatar.classList.add('avatar-fallback'); }
+    const image=document.createElement('img');image.src=photo||'/pics/sv-barver-darts-tight-512.webp';image.alt=photo?`Porträt von ${member.name}`:`Vereinslogo für ${member?.name||'Barver'}`;image.loading=large?'eager':'lazy';image.fetchPriority=large?'high':'low';image.decoding='async';
+    avatar.classList.toggle('avatar-fallback',!photo);avatar.classList.toggle('avatar-logo',!photo);
+    image.addEventListener('error',()=>{image.src='/pics/sv-barver-darts-tight-512.webp';image.alt=`Vereinslogo für ${member?.name||'Barver'}`;avatar.classList.add('avatar-fallback','avatar-logo');},{once:true});avatar.append(image);
     return avatar;
   }
   function openPlayerProfile(member, team) {
@@ -1711,7 +1739,7 @@ function initDarts() {
     const sideFinish=side=>{ const values=performancesBySide(side).filter(event=>event.type==='high_finish').map(event=>event.value||0); return values.length?Math.max(...values):0; };
     const makeLiveScores=()=>{
       const liveScores=document.createElement('div'); liveScores.className='native-live-scores';
-      for (const live of data.liveGames || []) {
+      for (const live of (data.liveGames || []).filter(game=>!dartsLiveGameFinished(game)&&game.active!==false)) {
         const panel=document.createElement('section'); panel.className='native-live-score';
         const label=document.createElement('b'); label.textContent=live.board?`BOARD ${live.board}`:'AKTUELLES LEG';
         const leg=document.createElement('span'); leg.textContent=Number.isInteger(live.home?.legs)&&Number.isInteger(live.away?.legs)?`Legstand ${live.home.legs}:${live.away.legs}`:'Leg läuft';
@@ -1976,6 +2004,43 @@ function initDarts() {
   function formatDate(value, options={weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'}) {
     try { return new Intl.DateTimeFormat('de-DE',options).format(new Date(value)); } catch (_) { return ''; }
   }
+  function liveTableMatch(item) {
+    if(item.kind==='final')return null;
+    const group=serverLiveGroups.get(String(item.id));
+    if(group){
+      if(!dartsLiveGroupActive(group))return null;
+      const latest=[...group.matches].sort((a,b)=>Number(b.lastUpdateNs)-Number(a.lastUpdateNs))[0];
+      return {...item,kind:'live',score:Number.isInteger(latest?.teamScoreHome)&&Number.isInteger(latest?.teamScoreGuest)?`${latest.teamScoreHome}:${latest.teamScoreGuest}`:item.score};
+    }
+    return item.kind==='live'?item:null;
+  }
+  function refreshLeagueLiveMarkers() {
+    for(const data of visibleCenters.values()){
+      const block=q(`.league-block[data-league="${data.league.key}"]`);if(!block)continue;
+      const matches=(data.matches||[]).map(item=>({item,live:liveTableMatch(item)}));
+      const teamMatches=[...matches.map(({live})=>live).filter(Boolean),...[...serverLiveGroups.values()]
+        .filter(group=>group.meta?.league===data.league.key||Number(group.meta?.eventId)===Number(data.league.event))
+        .map(group=>liveTableMatch({...group.meta,id:Number(group.meta?.id||group.groupKey)})).filter(Boolean)];
+      for(const {item,live} of matches){
+        const link=block.querySelector(`.round-match[data-match-id="${item.id}"]`);if(!link)continue;
+        link.classList.toggle('is-live',!!live);
+        const state=link.querySelector('small');state.className=live?'table-live-badge':'';
+        state.textContent=live?'LIVE':item.kind==='final'?'Endstand':item.kind==='pending'?'Vorläufig beendet · Bestätigung ausstehend':tickerTime(item);
+        link.querySelector('b').textContent=live?.score||item.score||'–';
+        link.setAttribute('aria-label',`${item.home} gegen ${item.away}${live?`, live, ${live.score||'Spielstand wird geladen'}`:''}`);
+      }
+      for(const cell of block.querySelectorAll('[data-live-team]')){
+        const name=cell.dataset.liveTeam;
+        const live=teamMatches.find(item=>item.home===name||item.away===name);
+        const liveId=String(live?.id||'');
+        if(cell.dataset.liveMatchId===liveId&&cell.childNodes.length)continue;
+        cell.dataset.liveMatchId=liveId;
+        cell.replaceChildren();
+        if(live){const link=document.createElement('a');link.className='table-live-team';link.href=`#match-${live.id}`;link.append(document.createTextNode(name));const marker=document.createElement('span');marker.className='table-live-badge';marker.textContent='LIVE';link.append(marker);link.setAttribute('aria-label',`${name}: laufendes Spiel öffnen`);link.addEventListener('click',event=>{event.preventDefault();openMatch(live.id);});cell.append(link);}
+        else cell.textContent=name;
+      }
+    }
+  }
   function renderLeague(data) {
     const block=q(`.league-block[data-league="${data.league.key}"]`);
     if (!block) return;
@@ -2002,7 +2067,7 @@ function initDarts() {
     roundSelect.value=current;
     const games=document.createDocumentFragment();
     for (const item of data.matches || []) {
-      const link=document.createElement('a'); link.className=`round-match ${item.kind}`; link.href=`#match-${item.id}`; link.addEventListener('click',event=>{ event.preventDefault(); openMatch(item.id); });
+      const link=document.createElement('a'); link.className=`round-match ${item.kind}`; link.dataset.matchId=String(item.id);link.href=`#match-${item.id}`; link.addEventListener('click',event=>{ event.preventDefault(); openMatch(item.id); });
       const home=document.createElement('span'); home.textContent=item.home;
       const score=document.createElement('b'); score.textContent=item.score || '–';
       const away=document.createElement('span'); away.textContent=item.away;
@@ -2021,11 +2086,12 @@ function initDarts() {
     for(const entry of data.standings || []){
       const row=document.createElement('tr');if(entry.barver)row.className='barver';
       const values={...entry,rank:dartsTableRank(entry),points:pair(entry.pointsFor,entry.pointsAgainst),sets:pair(entry.setsFor,entry.setsAgainst),legs:pair(entry.legsFor,entry.legsAgainst)};
-      for(const [,key] of columns){const cell=document.createElement(key==='name'?'th':'td');if(key==='name')cell.scope='row';cell.textContent=key==='name'?entry.name:['points','sets','legs'].includes(key)?values[key]:number(values[key]);row.append(cell);}body.append(row);
+      for(const [,key] of columns){const cell=document.createElement(key==='name'?'th':'td');if(key==='name'){cell.scope='row';cell.dataset.liveTeam=entry.name;}cell.textContent=key==='name'?entry.name:['points','sets','legs'].includes(key)?values[key]:number(values[key]);row.append(cell);}body.append(row);
     }
     table.append(body);
     const root=inside('[data-role="standings"]');
     root.replaceChildren(body.childNodes.length?table:Object.assign(document.createElement('p'),{className:'panel-loading',textContent:data.standingsUnavailable?'Die Tabelle ist gerade nicht erreichbar.':'Noch keine Tabelle verfügbar.'}));
+    refreshLeagueLiveMarkers();
     const eventList=document.createDocumentFragment();
     for (const item of data.events || []) {
       const event=document.createElement('div'); event.className=`darts-event ${item.type}`;
