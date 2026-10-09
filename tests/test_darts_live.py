@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 
-from darts_live import DartsLiveHub, _watch_live_candidate, detect_events, normalize_match, normalize_rest, timestamp_ns
+from darts_live import DartsLiveHub, _watch_live_candidate, detect_events, normalize_match, normalize_rest, timestamp_ns, source_timestamp
 
 
 def raw_match(match_key="1657291", board="2", stamp="2026-09-27T13:35:52.718986398", **changes):
@@ -65,6 +65,18 @@ class DartsLiveTests(unittest.TestCase):
     def test_nanosecond_timestamp_order_is_preserved(self):
         self.assertLess(timestamp_ns("2026-09-27T13:35:52.718986397"), timestamp_ns("2026-09-27T13:35:52.718986398"))
         self.assertEqual(timestamp_ns("invalid"), 0)
+
+    def test_unzoned_scorer_time_is_german_local_time_in_summer_and_winter(self):
+        for local, utc, offset in [
+            ("2026-10-09T19:54:46.115028486", "2026-10-09T17:54:46.115028486Z", "+02:00"),
+            ("2026-11-09T19:54:46.115028486", "2026-11-09T18:54:46.115028486Z", "+01:00"),
+        ]:
+            self.assertEqual(timestamp_ns(local), timestamp_ns(utc))
+            self.assertEqual(source_timestamp(local), local + offset)
+            self.assertEqual(source_timestamp(utc), utc)
+            mapped = normalize_match(raw_match(stamp=local))
+            self.assertEqual(mapped["lastUpdate"], local + offset)
+            self.assertEqual(mapped["lastUpdateNs"], timestamp_ns(utc))
 
     def test_mapper_whitelists_and_calculates_average(self):
         mapped = normalize_match(raw_match())

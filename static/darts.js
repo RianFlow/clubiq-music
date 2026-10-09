@@ -49,8 +49,12 @@ function dartsHomeGroups(items, filters={}, now=new Date()) {
     final:matches.filter(m=>(m.kind==='final'||m.kind==='pending')&&dartsLocalDay(m.plannedAt)!==today).sort((a,b)=>byTime(b,a))};
 }
 function dartsLiveGroupActive(group,now=Date.now()) {
-  if(group?.retired||group?.finished)return false;
-  return (group?.matches||[]).some(m=>m.active&&!m.finished&&Number(m.lastUpdateNs)>0&&now-Number(m.lastUpdateNs)/1e6>=0&&now-Number(m.lastUpdateNs)/1e6<600000);
+  if(group?.retired||group?.finished||group?.stale)return false;
+  return (group?.matches||[]).some(m=>{
+    const age=now-Number(m.lastUpdateNs)/1e6;
+    const betweenBoards=m.finished&&Number.isInteger(m.teamScoreHome)&&Number.isInteger(m.teamScoreGuest)&&m.teamScoreHome+m.teamScoreGuest>0&&m.teamScoreHome+m.teamScoreGuest<12;
+    return (m.active&&!m.finished||betweenBoards)&&Number(m.lastUpdateNs)>0&&age>=-5000&&age<600000;
+  });
 }
 function dartsCupActive(season) {
   if(!season||season.stale||season.specialEventsAvailable===false)return true;
@@ -710,7 +714,7 @@ function initDarts() {
     if (!group?.groupKey) return null;
     const matchId=Number(group.meta?.id || group.groupKey);
     const existing=(tickerData.items||[]).find(entry=>entry.id===matchId);
-    if (group.stale||tickerData.source==='browser-3k') return existing || null;
+    if (group.stale) return existing || null;
     if(!group.finished&&!dartsLiveGroupActive(group))return existing || null;
     if(existing?.kind==='final'&&!group.finished)return existing;
     const latest=(group.matches || []).slice().sort((a,b)=>(b.lastUpdateNs||0)-(a.lastUpdateNs||0))[0];
@@ -745,7 +749,7 @@ function initDarts() {
   function applyServerLiveGroup(group) {
     if (!group?.groupKey) return;
     serverLiveGroups.set(String(group.groupKey),group);
-    if (group.stale||tickerData.source==='browser-3k') return;
+    if (group.stale) return;
     if (!demoLive && !group.stale && Array.isArray(group.events)) window.DartsBroadcast?.ingest(group.events);
     const serverCenters=[...serverLiveGroups.values()].filter(entry=>dartsLiveGroupActive(entry)).map(liveGroupAsCenter);
     const ids=new Set(serverCenters.flatMap(center=>center.barverMatches.map(match=>match.id)));
@@ -1049,7 +1053,7 @@ function initDarts() {
         if (!Array.isArray(payload.items)) throw new Error('invalid ticker');
       } catch (_) { /* Try the independent public connection below. */ }
       clearTimeout(timeout);
-      const serverFresh=payload&&!payload.stale&&Date.now()-Date.parse(payload.updatedAt||'')<180000;
+      const serverFresh=payload&&!payload.stale&&Date.now()-Date.parse(payload.updatedAt||'')<(payload.sourceConnection==='collector'?360000:180000);
       if (!demoLive&&!serverFresh&&window.DartsSourceFallback) {
         try {payload=await window.DartsSourceFallback.load();}
         catch (_) { /* Keep the server snapshot or previously displayed data. */ }
@@ -1059,7 +1063,7 @@ function initDarts() {
       renderTicker(rendered);tickerDelay=payload.stale?60000:30000;
       if (!demoLive&&!payload.stale) {try {localStorage.setItem('clubiq_darts_last_ticker',JSON.stringify(payload));} catch (_) {}}
       updateFreshness();
-      if (demoLive||(rendered.items||[]).some(item=>item.kind==='live')) loadLiveDetails();
+      if (demoLive||(tickerData.items||[]).some(item=>item.kind==='live')) loadLiveDetails();
       else {liveCenters=[];updateFreshness();}
     } catch (_) {
       tickerData={...tickerData,stale:true};
@@ -1118,7 +1122,8 @@ function initDarts() {
   let liveDetailsLoading=false, liveDetailsLoadedAt=0, liveDetailsFirstAttempt=0;
   async function loadLiveDetails(force=false) {
     if (tickerData.source==='browser-3k'&&Array.isArray(tickerData.centers)) {
-      liveCenters=tickerData.centers;
+      const streamedCenters=[...serverLiveGroups.values()].filter(group=>dartsLiveGroupActive(group)).map(liveGroupAsCenter);
+      liveCenters=[...streamedCenters,...tickerData.centers];
       if (!liveDetailsFirstAttempt) liveDetailsFirstAttempt=Date.now();
       if (liveCenters.every(center=>!center.stale)) liveDetailsLoadedAt=Date.parse(tickerData.updatedAt);
       renderToday(tickerData);updateFreshness();return;
@@ -1152,7 +1157,8 @@ function initDarts() {
           window.DartsBroadcast?.ingest(streamEvents,{baseline:true});
           window.DartsBroadcast?.ingest(events.filter(event=>!streamEvents.includes(event)),{baseline});
         }
-        liveCenters=[...available,...liveCenters.filter(old=>!available.some(fresh=>fresh.league?.key===old.league?.key))];
+        const streamedCenters=[...serverLiveGroups.values()].filter(group=>dartsLiveGroupActive(group)).map(liveGroupAsCenter);
+        liveCenters=[...streamedCenters,...available,...liveCenters.filter(old=>!old.liveGroup&&!available.some(fresh=>fresh.league?.key===old.league?.key))];
         if (demoLive) {
           const liveItems=(tickerData.items || []).filter(item=>item.kind==='live');
           liveCenters.unshift({barverMatches:liveItems,pushEvents:liveItems.flatMap((item,index)=>[
@@ -1632,6 +1638,7 @@ function initDarts() {
   }
   function renderMatchDetail(data) {
     const target=q('#matchDetail'), match=data.match || {};
+    const selectedTab=target.querySelector('[role="tab"][aria-selected="true"]')?.id.replace('match-tab-','')||'overview';
     if ((data.reportAvailable===false&&!(data.liveGames||[]).length)||(!(data.games||[]).length&&!(data.liveGames||[]).length)) {renderMatchSummary(data);return;}
     q('#matchHeading').textContent=`${match.home || 'Heim'} ${match.score || '–'} ${match.away || 'Gast'}`;
     const finished=(data.games || []).filter(game=>game.status==='FINISH'&&Number.isInteger(game.homeLegs)&&Number.isInteger(game.awayLegs));
@@ -1784,8 +1791,8 @@ function initDarts() {
     const tabDefinitions=[['overview','Übersicht'],['live','Live'],['games','Einzelpartien'],['stats','Statistiken']];
     const panelMap=new Map();
     for (const [id,label] of tabDefinitions) {
-      const button=document.createElement('button'); button.type='button'; button.id=`match-tab-${id}`; button.textContent=label; button.setAttribute('role','tab'); button.setAttribute('aria-controls',`match-panel-${id}`); button.setAttribute('aria-selected',String(id==='overview'));
-      const panel=document.createElement('section'); panel.id=`match-panel-${id}`; panel.className='match-detail-panel'; panel.setAttribute('role','tabpanel'); panel.setAttribute('aria-labelledby',button.id); panel.hidden=id!=='overview';
+      const button=document.createElement('button'); button.type='button'; button.id=`match-tab-${id}`; button.textContent=label; button.setAttribute('role','tab'); button.setAttribute('aria-controls',`match-panel-${id}`); button.setAttribute('aria-selected',String(id===selectedTab));
+      const panel=document.createElement('section'); panel.id=`match-panel-${id}`; panel.className='match-detail-panel'; panel.setAttribute('role','tabpanel'); panel.setAttribute('aria-labelledby',button.id); panel.hidden=id!==selectedTab;
       button.addEventListener('click',()=>{ for (const tab of tabs.querySelectorAll('[role="tab"]')) tab.setAttribute('aria-selected',String(tab===button)); for (const item of panels.querySelectorAll('[role="tabpanel"]')) item.hidden=item!==panel; });
       tabs.append(button); panels.append(panel); panelMap.set(id,panel);
     }
@@ -1839,6 +1846,12 @@ function initDarts() {
     if(summary)renderMatchDetail(summary);
     else {q('#matchHeading').textContent='Begegnung';q('#matchDetail').innerHTML='<p class="panel-loading">Spielbericht wird geladen …</p>';}
     if(!q('#matchDialog').open)q('#matchDialog').showModal();
+    const initialGroup=serverLiveGroups.get(String(matchId));
+    if(summary&&dartsLiveGroupActive(initialGroup)){
+      const item=upsertServerLiveTickerItem(initialGroup);
+      activeMatchDetailData={...summary,checking:false,stale:false,liveGames:normalizedLiveGames(initialGroup),match:{...knownMatch,kind:'live',score:item?.score||knownMatch.score}};
+      renderMatchDetail(activeMatchDetailData);
+    }
     let payload=null;
     try {
       if(demoLive&&knownMatch?.kind==='live'){activeMatchDetailData=demoMatchData(knownMatch);renderMatchDetail(activeMatchDetailData);q('#matchHeading').textContent=`DEMO · ${q('#matchHeading').textContent}`;return;}
@@ -1865,7 +1878,10 @@ function initDarts() {
       if(!payload)throw new Error('no known match');
       activeMatchDetailData=payload;
       const group=serverLiveGroups.get(String(matchId));
-      if(group&&!group.stale&&payload.source!=='browser-3k'&&tickerData.source!=='browser-3k')activeMatchDetailData={...payload,liveGames:normalizedLiveGames(group)};
+      if(group&&(group.finished||dartsLiveGroupActive(group))&&!group.stale){
+        const item=upsertServerLiveTickerItem(group);
+        activeMatchDetailData={...payload,liveGames:normalizedLiveGames(group),match:{...payload.match,kind:group.finished?'final':'live',score:item?.score||payload.match?.score}};
+      }
       renderMatchDetail(activeMatchDetailData);
     } catch(_) {
       if(sequence!==matchLoadSequence||!q('#matchDialog').open)return;

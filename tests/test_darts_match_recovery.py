@@ -68,3 +68,43 @@ class MatchRecoveryTests(unittest.TestCase):
         with patch.object(feed, "get_darts_season", return_value=self.season), patch.object(feed, "_public_get") as get:
             with self.assertRaises(ValueError): feed.get_darts_match(999, self.now)
         get.assert_not_called()
+
+    def test_early_started_match_loads_report_before_schedule_status_changes(self):
+        now = datetime(2026, 10, 9, 17, 55, tzinfo=timezone.utc)
+        raw = [{"id": 9, "gameNr": 1, "statusCd": "FINISH", "legsHome": 0, "legsAway": 3,
+                "participantHome": {"displayName": "Heim"}, "participantGuest": {"displayName": "Gast"}}]
+        with patch.object(feed, "get_darts_season", return_value=self.season), \
+             patch.object(feed, "_public_get", side_effect=[raw, [], []]), patch.object(feed, "save_snapshot"):
+            data = feed.get_darts_match(123, now)
+        self.assertEqual(data["match"]["kind"], "live")
+        self.assertEqual(data["match"]["score"], "0:1")
+        self.assertEqual(len(data["games"]), 1)
+        self.assertTrue(data["reportAvailable"])
+        self.assertEqual(self.match["kind"], "upcoming")
+
+    def test_live_boards_survive_report_outage_and_cached_summary(self):
+        now = datetime(2026, 10, 9, 17, 55, tzinfo=timezone.utc)
+        board = {"id": 99, "matchKey": "9", "active": True, "finished": False,
+                 "lastUpdateNs": int(now.timestamp() * 1e9), "lastUpdate": now.isoformat(),
+                 "teamScoreHome": 0, "teamScoreGuest": 1, "currentPlayerIndex": 1,
+                 "home": {"name": "Heim", "points": 320}, "guest": {"name": "Gast", "points": 180}}
+        group = {"matches": [board], "stale": False, "finished": False}
+        with patch.object(feed, "get_darts_season", return_value=self.season), \
+             patch.object(feed.darts_live_hub, "get_group", return_value=group), \
+             patch.object(feed, "_public_get", side_effect=requests.Timeout), \
+             patch.object(feed, "load_snapshot", return_value=None):
+            data = feed.get_darts_match(123, now)
+            self.assertEqual(data["match"]["kind"], "live")
+            self.assertEqual(data["liveGames"][0]["away"]["remaining"], 180)
+            self.assertTrue(data["reportAvailable"])
+            feed._match_cache[123] = (now.timestamp(), {**data, "reportAvailable": False, "liveGames": []})
+            board["guest"]["points"] = 140
+            cached = feed.get_darts_match(123, now)
+            self.assertEqual(cached["liveGames"][0]["away"]["remaining"], 140)
+
+    def test_old_or_retired_board_does_not_promote_upcoming_match(self):
+        for group in [{"retired": True}, {"stale": True}, {"matches": [{"active": True, "lastUpdateNs": 1}]}]:
+            with patch.object(feed.darts_live_hub, "get_group", return_value=group):
+                match, games = feed._match_live_state(self.match, self.now)
+                self.assertEqual(match["kind"], "upcoming")
+                self.assertEqual(games, [])
