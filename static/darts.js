@@ -28,7 +28,18 @@ function dartsTableRank(entry) {
 function dartsSeasonRanks(data) {
   return {...data,teams:(data.teams||[]).map(team=>({...team,rank:dartsTableRank(team)}))};
 }
-const DARTS_EVENT_LABELS = {'180':'180er',high_finish:'High Finishes',leg:'Gewonnene Legs',game:'Einzel- & Doppelpartien',match:'Gesamtergebnisse'};
+const DARTS_EVENT_LABELS = {'180':'180er',high_finish:'High Finishes',leg:'Gewonnene und verlorene Legs',game:'Siege und Niederlagen in Einzel- und Doppelpartien',match:'Gesamtergebnisse'};
+function dartsHighlightIdentity(item) {
+  const team=/^[A-D]$/.test(item.team||'')?item.team:dartsTeamCode(item.team||'');
+  if(item.gameId!=null&&['leg','game'].includes(item.type))return JSON.stringify([item.matchId,item.type,String(item.gameId),team,item.type==='leg'?item.winnerSide:'',item.type==='leg'?item.legCount:item.homeLegs,item.type==='leg'?'':item.awayLegs]);
+  return item.id||item.event_id||item.eventId;
+}
+function dartsLiveMoment(event) {
+  if(!['leg','game'].includes(event?.type)||typeof event.barverWon!=='boolean')return null;
+  return {...event,id:dartsHighlightIdentity(event),occurredAt:event.occurred_at,
+    title:event.type==='game'?(event.barverWon?'✅ Partie gewonnen':'Partie verloren'):`🎯 ${event.title}`,
+    body:`${event.team} · ${event.text}`};
+}
 function dartsPreferences(value={}) {
   const list=(key,allowed,fallback)=>Array.isArray(value?.[key])?[...new Set(value[key].filter(v=>allowed.includes(v)))]:fallback;
   return {teams:list('teams',['A','B','C','D'],['A','B','C','D']),eventTypes:list('eventTypes',Object.keys(DARTS_EVENT_LABELS),Object.keys(DARTS_EVENT_LABELS)),
@@ -507,6 +518,7 @@ function initDarts() {
   const mergePlayerProfiles=()=>{
     const ids=new Set([...Object.keys(playerProfileBase),...Object.keys(playerStatCache)]);
     playerProfiles=Object.fromEntries([...ids].map(id=>[id,{...(playerProfileBase[id]||{}),...(playerStatCache[id]||{}),playerNumber:playerProfileBase[id]?.playerNumber||playerStatCache[id]?.playerNumber||''}]));
+    window.DartsBroadcast?.configure({profiles:Object.values(playerProfiles)});
   };
   const syncProfileRosters=()=>{
     for (const [id,profile] of Object.entries(playerProfileBase)) {
@@ -750,7 +762,9 @@ function initDarts() {
     if (!group?.groupKey) return;
     serverLiveGroups.set(String(group.groupKey),group);
     if (group.stale) return;
+    const moments=!demoLive&&Array.isArray(group.events)?group.events.map(dartsLiveMoment).filter(Boolean):[];
     if (!demoLive && !group.stale && Array.isArray(group.events)) window.DartsBroadcast?.ingest(group.events);
+    if(moments.length){const merged=new Map([...recentHighlights,...moments].map(moment=>[dartsHighlightIdentity(moment),moment]));recentHighlights=[...merged.values()].sort((a,b)=>Date.parse(b.occurredAt||0)-Date.parse(a.occurredAt||0)).slice(0,60);}
     const serverCenters=[...serverLiveGroups.values()].filter(entry=>dartsLiveGroupActive(entry)).map(liveGroupAsCenter);
     const ids=new Set(serverCenters.flatMap(center=>center.barverMatches.map(match=>match.id)));
     liveCenters=[...serverCenters,...liveCenters.filter(center=>!center.liveGroup&&!(center.barverMatches || []).some(match=>ids.has(match.id)))];
@@ -760,6 +774,7 @@ function initDarts() {
       renderMatchDetail(activeMatchDetailData);
     }
     renderCompleteMatchCenter(); renderToday(tickerData); updateFreshness(!group.connected);
+    if(moments.length)renderTicker(tickerData);
   }
   function initServerLiveStream() {
     if (!('EventSource' in window) || demoLive) return;
@@ -1016,9 +1031,11 @@ function initDarts() {
       const when = tickerTime(item); if (when) { const time=document.createElement('span'); time.className='ticker-time'; time.textContent=when; link.append(time); }
       group.append(link);
     }
-    for (const item of recentHighlights.filter(item=>['180','high_finish','game','match'].includes(item.type)).slice(0,12)) {
+    for (const item of recentHighlights.filter(item=>['180','high_finish','leg','game','match'].includes(item.type)).slice(0,12)) {
       const link=document.createElement('a'); link.className='ticker-item highlight'; link.href=`#match-${item.matchId}`;
-      link.textContent=`Rückblick ${new Date(item.occurredAt).toLocaleDateString('de-DE')} · ${item.title} · ${item.body}`;
+      const date=new Date(item.occurredAt),today=dartsLocalDay(date)===dartsLocalDay(new Date());
+      const label=today?((tickerData.items||[]).some(match=>match.id===item.matchId&&match.kind==='live')?'LIVE':'Heute'):`Rückblick ${date.toLocaleDateString('de-DE')}`;
+      link.textContent=`${label} · ${item.title} · ${item.body}`;
       group.append(link);
     }
     const duplicate = group.cloneNode(true); duplicate.setAttribute('aria-hidden','true'); duplicate.querySelectorAll('a,[role="link"]').forEach(link=>link.tabIndex=-1);
@@ -1075,13 +1092,14 @@ function initDarts() {
     const age=Date.now()-Date.parse(tickerData.updatedAt||'');
     const detailsAge=Date.now()-(liveDetailsLoadedAt||liveDetailsFirstAttempt);
     const directDetailsFailed=tickerData.source==='browser-3k'&&(tickerData.centers||[]).some(center=>center.stale);
-    const detailsStale=directDetailsFailed||((tickerData.items||[]).some(m=>m.kind==='live')&&liveDetailsFirstAttempt>0&&detailsAge>180000);
+    const uncoveredLive=(tickerData.items||[]).some(m=>m.kind==='live'&&!dartsLiveGroupActive(serverLiveGroups.get(String(m.id))));
+    const detailsStale=uncoveredLive&&(directDetailsFailed||(liveDetailsFirstAttempt>0&&detailsAge>180000));
     const activeServerGroups=[...serverLiveGroups.values()].filter(group=>!group.finished&&!group.stale);
     const upstreamLiveConnected=activeServerGroups.some(group=>group.connected);
     const serverFallback=activeServerGroups.length>0&&(!serverLiveConnected||!upstreamLiveConnected);
     const serverUpdates=activeServerGroups.map(group=>Date.parse(group.lastSuccess||group.lastUpdate||'')).filter(Number.isFinite);
     const serverLiveStale=tickerData.source!=='browser-3k'&&serverUpdates.length>0&&Date.now()-Math.max(...serverUpdates)>180000;
-    const freshnessLimit=tickerData.sourceConnection==='collector'?((tickerData.items||[]).some(m=>m.kind==='live')?120000:360000):180000;
+    const freshnessLimit=tickerData.sourceConnection==='collector'?360000:180000;
     const stale=tickerData.stale||!Number.isFinite(age)||age>freshnessLimit||detailsStale||serverLiveStale;
     const status=q('#liveDataStatus'); status.dataset.state=stale?'warn':reconnecting?'wait':'ok';
     if (demoLive) status.textContent='Demo-Live aktiv';
@@ -1104,7 +1122,9 @@ function initDarts() {
     try {
       const response=await fetch('/api/v1/darts/highlights',{signal:AbortSignal.timeout(8000)});
       if (!response.ok) return;
-      recentHighlights=(await response.json()).items||[]; highlightsLoadedAt=Date.now();
+      const fetched=(await response.json()).items||[];
+      const merged=new Map([...recentHighlights,...fetched].map(moment=>[dartsHighlightIdentity(moment),moment]));
+      recentHighlights=[...merged.values()].sort((a,b)=>Date.parse(b.occurredAt||0)-Date.parse(a.occurredAt||0)).slice(0,60);highlightsLoadedAt=Date.now();
       if (tickerData.items?.length) renderTicker(tickerData);
     } catch (_) { /* Keep highlights on transient failures. */ }
     finally { highlightsLoading=false; }

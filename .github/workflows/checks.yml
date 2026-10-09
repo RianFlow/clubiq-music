@@ -37,6 +37,7 @@ jobs:
           node tests/test_song_info.cjs
           node tests/test_darts.cjs
           node tests/test_darts_home.cjs
+          node tests/test_darts_broadcast.cjs
           node tests/test_darts_history.cjs
           node tests/test_darts_experience.cjs
           node tests/test_darts_usability.cjs

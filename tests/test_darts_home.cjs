@@ -40,3 +40,9 @@ assert.equal(dartsLiveGroupActive({stale:true,matches:[{active:true,lastUpdateNs
 assert.equal(dartsLiveGroupActive({matches:[{finished:true,teamScoreHome:0,teamScoreGuest:1,lastUpdateNs:(liveTestNow-1000)*1e6}]},liveTestNow),true);
 assert.equal(dartsLiveGroupActive({matches:[{finished:true,teamScoreHome:4,teamScoreGuest:8,lastUpdateNs:(liveTestNow-1000)*1e6}]},liveTestNow),false);
 console.log('Cup elimination and empty/old live watcher safeguards OK');
+const {dartsLiveMoment,dartsHighlightIdentity}=vm.runInContext('({dartsLiveMoment,dartsHighlightIdentity})',context);
+const loss={type:'game',matchId:123,gameId:7,team:'SV Barver Darts B',player:'Max',barverWon:false,homeLegs:3,awayLegs:1,text:'Max verliert 1:3 gegen Gast · AVG 55,6 / 60,2',occurred_at:new Date().toISOString()};
+const moment=dartsLiveMoment(loss);
+assert.equal(moment.title,'Partie verloren');assert.match(moment.body,/Max verliert 1:3/);assert.match(moment.body,/AVG 55,6/);
+assert.equal(dartsHighlightIdentity(moment),dartsHighlightIdentity({...moment,team:'B',id:'server-event-id'}));
+assert.notEqual(dartsHighlightIdentity(moment),dartsHighlightIdentity({...moment,team:'A'}));

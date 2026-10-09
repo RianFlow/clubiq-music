@@ -10,7 +10,7 @@
   const BARVER_TEAM = /^SV\s+Barver\s+Darts\s+[A-D]$/i;
   const TYPES = new Set(['180', 'high_finish', 'short_leg', 'leg', 'game', 'match']);
   const state = { enabled: true, tv: false, seen: new Map(), initialized: false, queue: [], active: null,
-    highlightTimer: null, rosterTimer: null, roster: null, node: null, previousFocus: null };
+    highlightTimer: null, rosterTimer: null, roster: null, node: null, previousFocus: null, profiles: [] };
 
   function text(value, limit = 120) {
     return typeof value === 'string' ? value.trim().slice(0, limit) : '';
@@ -79,6 +79,33 @@
     return /^\/pics\/players\/[a-z0-9][a-z0-9._-]*\.(?:avif|jpe?g|png|webp)(?:\?v=\d+)?$/i.test(path)
       || /^\/api\/v1\/darts\/players\/\d{1,12}\/photo(?:\?v=\d+)?$/i.test(path) ? path : '';
   }
+  function normalizedName(value) {
+    return text(value, 100).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLocaleLowerCase('de-DE').replace(/\s+/g, ' ');
+  }
+  function winnerPortraits(event, profiles = state.profiles) {
+    if (!['leg', 'game'].includes(event?.type) || !authentic(event)) return [];
+    const code = teamCode(event.team);
+    const candidates = (Array.isArray(profiles) ? profiles : []).filter(profile => profile
+      && (text(profile.team).toUpperCase() === code || teamCode(profile.team) === code) && text(profile.name));
+    const result = [];
+    for (const name of text(event.player, 220).split(/\s*&\s*/).slice(0, 2)) {
+      const normalized = normalizedName(name);
+      let matches = candidates.filter(profile => normalizedName(profile.name) === normalized);
+      if (!matches.length) {
+        const abbreviated = normalized.match(/^([a-z])\.\s*(.+)$/);
+        if (abbreviated) matches = candidates.filter(profile => {
+          const parts = normalizedName(profile.name).split(' ');
+          return parts[0][0] === abbreviated[1] && parts.slice(1).join(' ') === abbreviated[2];
+        });
+      }
+      // An ambiguous initial or an absent photo must never show another player.
+      if (matches.length !== 1) continue;
+      const profile = matches[0], image = safeImage(profile.image);
+      if (image && !result.some(item => item.name === profile.name)) result.push({ name: text(profile.name, 100), image });
+    }
+    return result;
+  }
   function roleRank(role) {
     const value = text(role).toLocaleLowerCase('de-DE');
     return value.includes('stell') ? 1 : value.includes('kapit') ? 0 : 2;
@@ -130,7 +157,23 @@
     const event = state.queue.shift(), view = graphic(event), host = mount();
     if (!host) return;
     const card = element('section', `darts-broadcast-card type-${event.type.replace('_', '-')}`);
-    card.append(element('span', 'darts-broadcast-kicker', view.label), element('strong', 'darts-broadcast-headline', view.headline));
+    card.append(element('span', 'darts-broadcast-kicker', view.label));
+    const portraits = winnerPortraits(event);
+    if (portraits.length) {
+      card.classList.add('has-portraits');
+      const strip = element('div', 'darts-broadcast-portraits');
+      for (const player of portraits) {
+        const portrait = element('img');
+        portrait.src = player.image; portrait.alt = `Porträt von ${player.name}`;
+        portrait.addEventListener('error', () => {
+          portrait.remove();
+          if (!strip.children.length) { strip.remove(); card.classList.remove('has-portraits'); }
+        }, { once: true });
+        strip.append(portrait);
+      }
+      card.append(strip);
+    }
+    card.append(element('strong', 'darts-broadcast-headline', view.headline));
     if (view.detail) card.append(element('span', 'darts-broadcast-detail', view.detail));
     if (view.foot) card.append(element('span', 'darts-broadcast-foot', view.foot));
     host.replaceChildren(card);
@@ -154,6 +197,7 @@
     return queued;
   }
   function configure(options = {}) {
+    if (Array.isArray(options.profiles)) state.profiles = options.profiles.slice(0, 200);
     if (typeof options.enabled === 'boolean') {
       state.enabled = options.enabled;
       if (!state.enabled) { state.queue.length = 0; clearHighlight(); }
@@ -280,5 +324,5 @@
 
   const api = { configure, ingest, presentRoster, closeRoster };
   root.DartsBroadcast = api;
-  if (typeof module !== 'undefined' && module.exports) module.exports = { ...api, eventKey, authentic, orderedPlayers, graphic };
+  if (typeof module !== 'undefined' && module.exports) module.exports = { ...api, eventKey, authentic, orderedPlayers, graphic, winnerPortraits };
 })(typeof window !== 'undefined' ? window : globalThis);

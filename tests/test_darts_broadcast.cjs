@@ -8,6 +8,34 @@ vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../static/darts-broadca
 const broadcast = context.module.exports;
 
 const base = { matchId: 123, team: 'SV Barver Darts B', player: 'Robin Tiedemann' };
+const profiles = [
+  {name:'Robin Tiedemann',team:'B',image:'/pics/players/robin-tiedemann-cutout.webp'},
+  {name:'Jörg Renzelmann',team:'B',image:'/pics/players/joerg-renzelmann-cutout.webp'},
+  {name:'Max Lowak',team:'B',image:'/pics/players/max-lowak-cutout.webp'},
+];
+
+test('victories use existing single and double portraits, including unambiguous 3K initials', () => {
+  const win = {...base,type:'game',gameId:2,barverWon:true};
+  assert.equal(broadcast.winnerPortraits(win,profiles).map(p=>p.name).join('|'),'Robin Tiedemann');
+  assert.equal(broadcast.winnerPortraits({...win,player:'R. Tiedemann & J. Renzelmann'},profiles).map(p=>p.name).join('|'),'Robin Tiedemann|Jörg Renzelmann');
+  assert.equal(broadcast.winnerPortraits({...win,player:'Jorg Renzelmann'},profiles)[0].image,profiles[1].image);
+  assert.equal(broadcast.winnerPortraits({...base,type:'leg',gameId:2,legCount:1,winnerSide:'away',barverSide:'away'},profiles).length,1);
+});
+
+test('missing photos, ambiguous initials, opponents and losses do not show an incorrect portrait', () => {
+  const win = {...base,type:'game',gameId:2,barverWon:true};
+  const ambiguous = [...profiles,{name:'Ralf Tiedemann',team:'B',image:'/pics/players/ralf.webp'}];
+  assert.equal(broadcast.winnerPortraits({...win,player:'R. Tiedemann'},ambiguous).length,0);
+  assert.equal(broadcast.winnerPortraits({...win,player:'Unbekannt & Max Lowak'},profiles).map(p=>p.name).join('|'),'Max Lowak');
+  assert.equal(broadcast.winnerPortraits({...win,barverWon:false},profiles).length,0);
+  assert.equal(broadcast.winnerPortraits({...win,team:'Gäste'},profiles).length,0);
+  assert.equal(broadcast.winnerPortraits(win,[{...profiles[0],team:'A'}]).length,0);
+  for (const image of ['', 'https://example.org/portrait.png', '/pics/players/../other.png']) {
+    assert.equal(broadcast.winnerPortraits(win,[{...profiles[0],image}]).length,0);
+  }
+  broadcast.configure({profiles});
+  assert.equal(broadcast.winnerPortraits(win).length,1);
+});
 
 test('authenticity rejects opponent legs, unverified short legs, and opponent scores', () => {
   assert.equal(broadcast.authentic({ ...base, type: 'leg', gameId: 2, legCount: 1, winnerSide: 'home', barverSide: 'away' }), false);

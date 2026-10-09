@@ -13,7 +13,7 @@ import requests
 from darts_resilience import PublicSession, source_recovery, save_snapshot, load_snapshot, last_known
 from darts_collector import collected_snapshot
 from darts_transport import scoped_get
-from darts_live import darts_live_hub, _watch_live_candidate
+from darts_live import darts_live_hub, _watch_live_candidate, _average_text
 
 
 FRONTEND_API = "https://backend-ddv.3k-darts.com/2k-backend-ddv/api/v1/frontend"
@@ -513,23 +513,32 @@ def _game_events(payload: list[dict], match: dict, team_name: str = "", barver_s
         winner = home if home_legs > away_legs else away
         loser = away if home_legs > away_legs else home
         winner_legs, loser_legs = (home_legs, away_legs) if home_legs > away_legs else (away_legs, home_legs)
+        own = home if barver_side == "home" else away if barver_side == "away" else winner
+        other = away if barver_side == "home" else home if barver_side == "away" else loser
+        won = (home_legs > away_legs) == (barver_side == "home") if barver_side in {"home", "away"} else None
+        result_text = f"{winner.get('displayName') or 'Sieger'} gewinnt {winner_legs}:{loser_legs} gegen {loser.get('displayName') or 'Gegner'}"
+        if won is False:
+            result_text = f"{own.get('displayName') or 'Barver'} verliert {loser_legs}:{winner_legs} gegen {other.get('displayName') or 'Gegner'}"
+        if _average(own) is not None or _average(other) is not None:
+            result_text += f" · AVG {_average_text(_average(own))} / {_average_text(_average(other))}"
         finished.append({
             "type": "game",
             "title": f"Spiel {game.get('gameNr') or game.get('gameNrRound') or ''} beendet".strip(),
-            "text": f"{winner.get('displayName') or 'Sieger'} gewinnt {winner_legs}:{loser_legs} gegen {loser.get('displayName') or 'Gegner'}",
+            "text": result_text,
             "matchId": int(match.get("id") or 0),
             "gameId": int(game.get("id") or 0),
             "order": int(game.get("gameNr") or game.get("gameNrRound") or 0),
             "team": team_name,
-            "player": str(winner.get("displayName") or "Sieger")[:100],
+            "player": str(own.get("displayName") or "Barver")[:100],
             "homeLegs": home_legs,
             "awayLegs": away_legs,
-            "barverWon": (home_legs > away_legs) == (barver_side == "home") if barver_side in {"home", "away"} else None,
+            "barverWon": won,
+            "barverDerby": all(_barver_code_from_name((match.get(key) or {}).get("displayName", "")) for key in ("participantHome", "participantGuest")),
         })
     return sorted(finished, key=lambda item: item["order"], reverse=True)[:2]
 
 
-def _leg_events(payload: list[dict], match: dict, team_name: str = "") -> list[dict]:
+def _leg_events(payload: list[dict], match: dict, team_name: str = "", barver_side: str = "") -> list[dict]:
     events = []
     for game in payload:
         if game.get("statusCd") == "FINISH":
@@ -557,6 +566,10 @@ def _leg_events(payload: list[dict], match: dict, team_name: str = "") -> list[d
                 "player": winner[:100],
                 "winnerSide": side,
                 "legCount": count,
+                "barverDerby": all(_barver_code_from_name((match.get(key) or {}).get("displayName", "")) for key in ("participantHome", "participantGuest")),
+                **({"player": home_name if barver_side == "home" else away_name,
+                    "barverSide": barver_side, "barverWon": side == barver_side,
+                    "title": f"Leg {'gewonnen' if side == barver_side else 'verloren'}: {home_name if barver_side == 'home' else away_name}"} if barver_side in {"home", "away"} else {}),
             })
     return events
 
@@ -717,7 +730,7 @@ def get_darts_center(league_key: str = "kl04", round_id: int | None = None, now:
                 if isinstance(report_payload, list):
                     events.extend(_game_events(report_payload, raw_match, barver_team, barver_side))
                     if item["kind"] == "live":
-                        events.extend(_leg_events(report_payload, raw_match, barver_team))
+                        events.extend(_leg_events(report_payload, raw_match, barver_team, barver_side))
         result = {
             "available": True,
             "stale": False,

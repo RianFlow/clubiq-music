@@ -61,6 +61,11 @@ def _event_identity(league: str, event: dict) -> tuple[str, str] | None:
         identity = f"{event.get('gameId')}|{event.get('homeLegs')}|{event.get('awayLegs')}"
     else:
         identity = str(event.get("score") or event.get("text") or "final")
+    if event_type in {"leg", "game"}:
+        if league == "live" and event.get("league"):
+            league = str(event["league"])[:40]
+        if event.get("barverDerby"):
+            identity += "|" + str(event.get("team") or "")
     return event_type, f"{league}|{match_id}|{event_type}|{identity}"
 
 
@@ -92,12 +97,12 @@ def barver_push_event(league: str, event: dict) -> dict | None:
         tag = f"clubiq-high-finish-{match_id}-{player.casefold().replace(' ', '-')}"
     elif event_type == "leg":
         title = f"🎯 {event.get('title') or f'Leg für {player}'}"
-        body = f"{team_name} · {str(event.get('text') or '').strip()}"[:220]
+        body = f"{team_name} · {str(event.get('text') or '').strip()}"[:600]
         tag = f"clubiq-leg-{event.get('gameId') or match_id}"
     elif event_type == "game":
         result = event.get("barverWon")
         title = "✅ Partie gewonnen" if result is True else "Partie beendet" if result is None else "Partie verloren"
-        body = f"{team_name} · {str(event.get('text') or '').strip()}"[:220]
+        body = f"{team_name} · {str(event.get('text') or '').strip()}"[:600]
         tag = f"clubiq-game-{event.get('gameId') or match_id}"
     else:
         title = f"🏁 Endstand Barver {team_match.group(1)}"
@@ -110,6 +115,8 @@ def barver_push_event(league: str, event: dict) -> dict | None:
         "team": team_match.group(1),
         "player": player,
         "count": count,
+        **({"game_id": event["gameId"]} if event_type in {"leg", "game"} and isinstance(event.get("gameId"), (int, str)) else {}),
+        **({key: event[key] for key in ("winnerSide", "legCount", "homeLegs", "awayLegs", "barverWon") if key in event and isinstance(event[key], (int, bool, str))}),
         "title": title,
         "body": body,
         "url": "https://barverdarts.clubiq.party/",
@@ -166,6 +173,8 @@ def push_payload(event: dict) -> str:
     return json.dumps(
         {**{key: event[key] for key in ("title", "body", "url", "tag")},
          "matchId": event.get("match_id"), "eventId": event.get("event_id"),
+         **({"gameId": event["game_id"]} if event.get("game_id") is not None else {}),
+         **({key: event[key] for key in ("winnerSide", "legCount", "homeLegs", "awayLegs", "barverWon") if key in event}),
          **({"scope": "training", "trainingId": event["training_id"]} if event.get("scope") == "training" else {})},
         ensure_ascii=False,
         separators=(",", ":"),

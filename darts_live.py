@@ -171,6 +171,35 @@ def _event_id(*parts) -> str:
     return hashlib.sha256("|".join(str(part) for part in parts).encode("utf-8")).hexdigest()
 
 
+def winning_legs(mode: str) -> int | None:
+    mode = str(mode or "").strip()
+    best = re.fullmatch(r"best\s*of\s*(\d+)\s*legs?", mode, re.I)
+    first = re.fullmatch(r"first\s*to\s*(\d+)\s*legs?", mode, re.I)
+    if best:
+        count = int(best[1])
+        return count // 2 + 1 if 1 <= count <= 99 and count % 2 else None
+    if first and 1 <= int(first[1]) <= 50:
+        return int(first[1])
+    return None
+
+
+def game_winner(match: dict) -> str | None:
+    home, away = (match.get(side, {}).get("legs") for side in ("home", "guest"))
+    if not isinstance(home, int) or not isinstance(away, int) or home == away:
+        return None
+    target = winning_legs(match.get("mode"))
+    if target is not None:
+        if max(home, away) != target or min(home, away) >= target:
+            return None
+    elif not match.get("finished"):
+        return None
+    return "home" if home > away else "away"
+
+
+def _average_text(value) -> str:
+    return f"{value:.1f}".replace(".", ",") if isinstance(value, (int, float)) and not isinstance(value, bool) and 0 <= value <= 180 else "–"
+
+
 def detect_events(previous: dict | None, current: dict, meta: dict, new_game: bool = False) -> list[dict]:
     """Detect state transitions only; an initial snapshot never creates alerts."""
     if not previous and not new_game:
@@ -181,6 +210,33 @@ def detect_events(previous: dict | None, current: dict, meta: dict, new_game: bo
     team_sides = meta.get("barverSides") or {}
     events = []
     occurred = current.get("lastUpdate")
+    game_id = int(current["matchKey"]) if current["matchKey"].isdigit() else current["matchKey"]
+    common = {"matchId": group_key, "gameId": game_id, "league": meta.get("league"),
+              "board": current.get("board"), "occurred_at": occurred,
+              "barverDerby": len(team_sides) > 1}
+    if had_previous:
+        for winner_side, key in (("home", "home"), ("away", "guest")):
+            old_legs, legs = previous.get(key, {}).get("legs"), current.get(key, {}).get("legs")
+            if not isinstance(old_legs, int) or not isinstance(legs, int) or legs <= old_legs:
+                continue
+            for code, own_side in team_sides.items():
+                own = current["home" if own_side == "home" else "guest"]
+                won = own_side == winner_side
+                events.append({**common, "type": "leg", "winnerSide": winner_side, "legCount": legs,
+                               "team": f"SV Barver Darts {code}", "player": own["name"],
+                               "barverSide": own_side, "barverWon": won,
+                               "title": f"Leg {'gewonnen' if won else 'verloren'}: {own['name']}",
+                               "text": f"{current['home']['name']} {current['home'].get('legs', 0)}:{current['guest'].get('legs', 0)} {current['guest']['name']}"})
+        winner = game_winner(current)
+        if winner and not game_winner(previous):
+            for code, own_side in team_sides.items():
+                own_key, other_key = ("home", "guest") if own_side == "home" else ("guest", "home")
+                own, other = current[own_key], current[other_key]
+                won = winner == own_side
+                events.append({**common, "type": "game", "winnerSide": winner, "barverSide": own_side,
+                               "team": f"SV Barver Darts {code}", "player": own["name"], "barverWon": won,
+                               "homeLegs": current["home"]["legs"], "awayLegs": current["guest"]["legs"],
+                               "text": f"{own['name']} {'gewinnt' if won else 'verliert'} {own['legs']}:{other['legs']} gegen {other['name']} · AVG {_average_text(own.get('average'))} / {_average_text(other.get('average'))}"})
     for side, key in (("home", "home"), ("guest", "guest")):
         old_player, player = previous.get(key) or {}, current.get(key) or {}
         code = next((code for code, configured in team_sides.items() if configured == ("away" if side == "guest" else side)), None)
@@ -199,15 +255,6 @@ def detect_events(previous: dict | None, current: dict, meta: dict, new_game: bo
             })
         if not had_previous:
             continue
-        old_legs, new_legs = old_player.get("legs"), player.get("legs")
-        if isinstance(old_legs, int) and isinstance(new_legs, int) and new_legs > old_legs:
-            events.append({
-                "type": "leg", "matchId": group_key, "gameId": current["id"], "winnerSide": side,
-                "legCount": new_legs, "team": team_name, "player": player["name"], "barverWon": True,
-                "title": f"Leg für {player['name']}",
-                "text": f"{current['home']['name']} {current['home'].get('legs', 0)}:{current['guest'].get('legs', 0)} {current['guest']['name']}",
-                "occurred_at": occurred,
-            })
         old_180, new_180 = old_player.get("count180") or 0, player.get("count180") or 0
         if new_180 > old_180:
             events.append({
@@ -221,23 +268,14 @@ def detect_events(previous: dict | None, current: dict, meta: dict, new_game: bo
                 "value": new_finish, "count": 1, "team": team_name, "player": player["name"], "occurred_at": occurred,
             })
 
-    home_before, guest_before = previous.get("teamScoreHome"), previous.get("teamScoreGuest")
-    home_now, guest_now = current.get("teamScoreHome"), current.get("teamScoreGuest")
-    score_changed = all(isinstance(value, int) for value in (home_before, guest_before, home_now, guest_now)) and (home_now > home_before or guest_now > guest_before)
-    if score_changed:
-        winner_side = "home" if home_now > home_before else "away"
-        code = next((code for code, side in team_sides.items() if side == winner_side), None)
-        if code:
-            events.append({
-                "type": "game", "matchId": group_key, "gameId": f"{group_key}:{home_now}:{guest_now}", "homeLegs": home_now,
-                "awayLegs": guest_now, "barverWon": True, "team": f"SV Barver Darts {code}",
-                "player": current[winner_side if winner_side == "home" else "guest"]["name"],
-                "text": f"Neuer Mannschaftsstand {home_now}:{guest_now}", "occurred_at": occurred,
-            })
     for event in events:
         event["event_id"] = _event_id(current["groupKey"], current["matchKey"], event["type"], event.get("performanceId"), event.get("gameId"), event.get("legCount"), event.get("score"), event.get("value"))
         if event["type"] == "player_start":
             event["event_id"] = _event_id(event["event_id"], event["playerSide"], event["player"])
+        elif event["type"] == "leg":
+            event["event_id"] = _event_id(event["event_id"], event["winnerSide"])
+        if event.get("barverDerby"):
+            event["event_id"] = _event_id(event["event_id"], event["team"])
     return events
 
 
