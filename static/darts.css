@@ -1417,5 +1417,5 @@ body.app-tv #liveDataStatus{font-size:.72rem;max-width:100%;white-space:normal}
  body.app-tv .today-live-legs{font-size:.8rem!important;padding:6px}
  body.app-tv .today-detail{padding:8px 0}
  body.app-tv .today-live-game{padding:10px}
- body.app-tv .tv-team-controls>span,body.app-tv #tvTeamCount{display:none}
+ body.app-tv .tv-team-controls>span:not(#liveDataStatus),body.app-tv #tvTeamCount{display:none}
 }
