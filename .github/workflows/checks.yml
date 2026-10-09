@@ -13,6 +13,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Öffentliche Containerimages über den Cache laden
+        run: |
+          # Google caches public Docker Hub images; uncached images keep the
+          # regular Docker Hub fallback. Configure only this disposable runner.
+          sudo python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path('/etc/docker/daemon.json')
+          settings = json.loads(path.read_text()) if path.exists() else {}
+          mirrors = settings.setdefault('registry-mirrors', [])
+          assert isinstance(mirrors, list)
+          if 'https://mirror.gcr.io' not in mirrors:
+              mirrors.insert(0, 'https://mirror.gcr.io')
+          path.write_text(json.dumps(settings) + '\n')
+          PY
+          sudo systemctl restart docker
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
