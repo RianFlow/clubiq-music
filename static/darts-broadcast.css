@@ -45,6 +45,9 @@
 }
 .darts-broadcast-detail { font-size: 1.06rem; font-weight: 650; overflow-wrap: anywhere; }
 .darts-broadcast-foot { margin-top: .3rem; color: #b8c8bf; font-size: .78rem; letter-spacing: .07em; text-transform: uppercase; }
+.darts-broadcast-portraits { display: flex; justify-content: center; align-items: end; gap: .75rem; height: 132px; margin: .5rem 0; }
+.darts-broadcast-portraits img { display: block; width: auto; max-width: 46%; height: 100%; object-fit: contain; object-position: bottom; filter: drop-shadow(0 5px 9px #0008); }
+.darts-broadcast-card.has-portraits .darts-broadcast-headline { font-size: clamp(1.6rem, 5vw, 2.5rem); }
 .darts-broadcast.is-tv:not(.has-roster) {
   inset: 0;
   width: 100vw;
@@ -63,6 +66,10 @@
 .darts-broadcast.is-tv .darts-broadcast-headline { font-size: clamp(4rem, 12vw, 10rem); }
 .darts-broadcast.is-tv .darts-broadcast-kicker { font-size: clamp(1rem, 2vw, 1.6rem); }
 .darts-broadcast.is-tv .darts-broadcast-detail { font-size: clamp(1.4rem, 3vw, 2.6rem); }
+.darts-broadcast.is-tv .has-portraits { padding: clamp(1rem, 3vw, 2.5rem); min-height: min(70dvh, 650px); }
+.darts-broadcast.is-tv .darts-broadcast-portraits { height: min(28dvh, 260px); gap: clamp(1rem, 4vw, 3rem); }
+.darts-broadcast.is-tv .has-portraits .darts-broadcast-headline { font-size: clamp(1.6rem, 5.5vw, 4.5rem); }
+.darts-broadcast.is-tv .has-portraits .darts-broadcast-detail { font-size: clamp(1rem, 2vw, 1.8rem); }
 .darts-broadcast.has-roster {
   inset: 0;
   width: 100vw;

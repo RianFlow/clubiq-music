@@ -72,6 +72,25 @@ class DartsPushTests(unittest.TestCase):
         }
         self.assertEqual([event["deliver"] for event in barver_push_candidates("kl04", center, now)], [True, True, True])
 
+    def test_report_losses_follow_barver_player_and_keep_average_in_payload(self):
+        from darts_feed import _game_events, _leg_events
+        match = {"id": 12, "participantHome": {"displayName": "Gäste"}, "participantGuest": {"displayName": "SV Barver Darts B"}}
+        raw = {"id": 7, "statusCd": "FINISH", "legsHome": 3, "legsAway": 1,
+               "participantHome": {"displayName": "Gegner", "score": 1503, "darts": 75},
+               "participantGuest": {"displayName": "Max", "score": 1002, "darts": 60}}
+        event = _game_events([raw], match, "SV Barver Darts B", "away")[0]
+        self.assertEqual(event["player"], "Max")
+        self.assertFalse(event["barverWon"])
+        self.assertIn("Max verliert 1:3", event["text"])
+        self.assertIn("AVG 50,1 / 60,1", event["text"])
+        normalized = barver_push_event("kl04", event)
+        self.assertTrue(subscription_matches(normalized, [], ["Max"], ["game"]))
+        self.assertIn("AVG 50,1", json.loads(push_payload(normalized))["body"])
+        live = _leg_events([{**raw, "statusCd": "ACTIVE", "liveLegsHome": 1, "liveLegsAway": 0}], match, "SV Barver Darts B", "away")[0]
+        self.assertEqual(live["player"], "Max")
+        self.assertFalse(live["barverWon"])
+        self.assertIn("Leg verloren", live["title"])
+
     def test_allows_known_browser_push_services_only(self):
         for endpoint in (
             "https://fcm.googleapis.com/wp/abc",

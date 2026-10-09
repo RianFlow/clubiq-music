@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 
-from darts_live import DartsLiveHub, _watch_live_candidate, detect_events, normalize_match, normalize_rest, timestamp_ns, source_timestamp
+from darts_live import DartsLiveHub, _watch_live_candidate, detect_events, normalize_match, normalize_rest, timestamp_ns, source_timestamp, winning_legs
 
 
 def raw_match(match_key="1657291", board="2", stamp="2026-09-27T13:35:52.718986398", **changes):
@@ -95,7 +95,7 @@ class DartsLiveTests(unittest.TestCase):
         updated_players[1].update({"legs": 3, "count180": 1, "highfinish": 121})
         after = normalize_match(raw_match(stamp="2026-09-27T13:35:53.000000001", matchPlayers=updated_players))
         events = detect_events(before, after, META)
-        self.assertEqual({event["type"] for event in events}, {"leg", "180", "high_finish"})
+        self.assertEqual({event["type"] for event in events}, {"leg", "game", "180", "high_finish"})
         self.assertTrue(all(event["team"] == "SV Barver Darts B" for event in events))
         self.assertTrue(next(event for event in events if event["type"] == "leg")["barverWon"])
 
@@ -127,6 +127,58 @@ class DartsLiveTests(unittest.TestCase):
         now = datetime(2026, 9, 28, 18, 0, tzinfo=timezone.utc)
         match = {**META, "kind": "upcoming", "plannedAt": "2026-09-28T17:30:00+00:00"}
         self.assertTrue(_watch_live_candidate(match, now))
+
+    def test_win_and_loss_are_separate_leg_and_game_events_with_owned_player(self):
+        from darts_push import barver_push_event, subscription_matches, push_payload
+        import json
+        for winner_side in (0, 1):
+            players = [dict(player, legs=1 if index != winner_side else 2)
+                       for index, player in enumerate(raw_match()["matchPlayers"])]
+            before = normalize_match(raw_match(matchPlayers=players))
+            players[winner_side]["legs"] = 3
+            after = normalize_match(raw_match(matchPlayers=players))
+            events = detect_events(before, after, {**META, "league": "kl04"})
+            self.assertEqual([event["type"] for event in events], ["leg", "game"])
+            self.assertTrue(all(event["player"] == after["guest"]["name"] for event in events))
+            self.assertTrue(all(event["barverWon"] == (winner_side == 1) for event in events))
+            self.assertIn("AVG", events[1]["text"])
+            self.assertIn("3:1" if winner_side == 1 else "1:3", events[1]["text"])
+            normalized = barver_push_event("live", events[1])
+            self.assertTrue(subscription_matches(normalized, [], ["J. Renzelmann"], ["game"]))
+            self.assertEqual(json.loads(push_payload(normalized))["gameId"], 1657291)
+            self.assertEqual(normalized["event_id"], barver_push_event("kl04", events[1])["event_id"])
+            self.assertEqual(detect_events(after, {**after, "finished": True}, META), [])
+
+    def test_mode_threshold_does_not_call_three_legs_a_best_of_seven_win(self):
+        self.assertEqual(winning_legs("Best of 5 Legs"), 3)
+        self.assertEqual(winning_legs("Best of 7 Legs"), 4)
+        self.assertEqual(winning_legs("First to 6 Legs"), 6)
+        self.assertIsNone(winning_legs("Best of 5 Sets"))
+        players = [dict(player, legs=2) for player in raw_match()["matchPlayers"]]
+        before = normalize_match(raw_match(mode="Best of 7 Legs", matchPlayers=players))
+        players[1]["legs"] = 3
+        after = normalize_match(raw_match(mode="Best of 7 Legs", matchPlayers=players))
+        self.assertEqual([event["type"] for event in detect_events(before, after, META)], ["leg"])
+        players[1]["legs"] = 4
+        final = normalize_match(raw_match(mode="Best of 7 Legs", matchPlayers=players))
+        self.assertEqual([event["type"] for event in detect_events(after, final, META)], ["leg", "game"])
+
+    def test_team_score_update_on_another_board_is_not_a_fake_player_win(self):
+        before = normalize_match(raw_match())
+        after = {**before, "teamScoreGuest": 1}
+        self.assertEqual(detect_events(before, after, META), [])
+
+    def test_derby_sends_both_team_outcomes_without_shared_identity(self):
+        from darts_push import barver_push_event
+        players = [dict(player, legs=2) for player in raw_match()["matchPlayers"]]
+        before = normalize_match(raw_match(matchPlayers=players))
+        players[1]["legs"] = 3
+        after = normalize_match(raw_match(matchPlayers=players))
+        meta = {**META, "barverSides": {"A": "home", "B": "away"}}
+        events = detect_events(before, after, meta)
+        games = [event for event in events if event["type"] == "game"]
+        self.assertEqual([game["barverWon"] for game in games], [False, True])
+        self.assertNotEqual(barver_push_event("live", games[0])["event_id"], barver_push_event("live", games[1])["event_id"])
 
     def test_distant_upcoming_match_is_not_watched(self):
         now = datetime(2026, 9, 28, 18, 0, tzinfo=timezone.utc)
