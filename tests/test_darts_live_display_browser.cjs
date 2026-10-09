@@ -55,6 +55,11 @@ const server=http.createServer((req,res)=>{
     const leagueBlock=page.locator('.league-block[data-league="kl04"]');
     await leagueBlock.locator('.round-match.is-live .table-live-badge').waitFor();
     assert.equal(await leagueBlock.locator('.league-standings-table .table-live-team').count(),2,'both teams link to their live fixture');
+    await leagueBlock.getByRole('link',{name:'SV Barver Darts B: laufendes Spiel öffnen'}).focus();
+    remaining=415;publish();
+    await page.waitForFunction(()=>document.querySelector('#todayGrid .today-live-score')?.textContent.includes('415'));
+    assert.match(await page.evaluate(()=>document.activeElement?.getAttribute('aria-label')||''),/SV Barver Darts B: laufendes Spiel öffnen/,'score updates retain keyboard focus on the live team link');
+    remaining=416;publish();
     await leagueBlock.locator('[data-role="round"]').selectOption('2');
     await leagueBlock.locator('[data-role="matches"]').getByText('Keine Begegnungen an diesem Spieltag.').waitFor();
     assert.equal(await leagueBlock.locator('.league-standings-table .table-live-team').count(),2,'standings show current live fixtures even when another round is selected');

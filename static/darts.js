@@ -2029,6 +2029,9 @@ function initDarts() {
       for(const cell of block.querySelectorAll('[data-live-team]')){
         const name=cell.dataset.liveTeam;
         const live=teamMatches.find(item=>item.home===name||item.away===name);
+        const liveId=String(live?.id||'');
+        if(cell.dataset.liveMatchId===liveId&&cell.childNodes.length)continue;
+        cell.dataset.liveMatchId=liveId;
         cell.replaceChildren();
         if(live){const link=document.createElement('a');link.className='table-live-team';link.href=`#match-${live.id}`;link.append(document.createTextNode(name));const marker=document.createElement('span');marker.className='table-live-badge';marker.textContent='LIVE';link.append(marker);link.setAttribute('aria-label',`${name}: laufendes Spiel öffnen`);link.addEventListener('click',event=>{event.preventDefault();openMatch(live.id);});cell.append(link);}
         else cell.textContent=name;
