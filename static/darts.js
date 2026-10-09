@@ -714,7 +714,7 @@ function initDarts() {
     if (!group?.groupKey) return null;
     const matchId=Number(group.meta?.id || group.groupKey);
     const existing=(tickerData.items||[]).find(entry=>entry.id===matchId);
-    if (group.stale||tickerData.source==='browser-3k') return existing || null;
+    if (group.stale) return existing || null;
     if(!group.finished&&!dartsLiveGroupActive(group))return existing || null;
     if(existing?.kind==='final'&&!group.finished)return existing;
     const latest=(group.matches || []).slice().sort((a,b)=>(b.lastUpdateNs||0)-(a.lastUpdateNs||0))[0];
@@ -749,7 +749,7 @@ function initDarts() {
   function applyServerLiveGroup(group) {
     if (!group?.groupKey) return;
     serverLiveGroups.set(String(group.groupKey),group);
-    if (group.stale||tickerData.source==='browser-3k') return;
+    if (group.stale) return;
     if (!demoLive && !group.stale && Array.isArray(group.events)) window.DartsBroadcast?.ingest(group.events);
     const serverCenters=[...serverLiveGroups.values()].filter(entry=>dartsLiveGroupActive(entry)).map(liveGroupAsCenter);
     const ids=new Set(serverCenters.flatMap(center=>center.barverMatches.map(match=>match.id)));
@@ -1053,7 +1053,7 @@ function initDarts() {
         if (!Array.isArray(payload.items)) throw new Error('invalid ticker');
       } catch (_) { /* Try the independent public connection below. */ }
       clearTimeout(timeout);
-      const serverFresh=payload&&!payload.stale&&Date.now()-Date.parse(payload.updatedAt||'')<180000;
+      const serverFresh=payload&&!payload.stale&&Date.now()-Date.parse(payload.updatedAt||'')<(payload.sourceConnection==='collector'?360000:180000);
       if (!demoLive&&!serverFresh&&window.DartsSourceFallback) {
         try {payload=await window.DartsSourceFallback.load();}
         catch (_) { /* Keep the server snapshot or previously displayed data. */ }
@@ -1122,7 +1122,8 @@ function initDarts() {
   let liveDetailsLoading=false, liveDetailsLoadedAt=0, liveDetailsFirstAttempt=0;
   async function loadLiveDetails(force=false) {
     if (tickerData.source==='browser-3k'&&Array.isArray(tickerData.centers)) {
-      liveCenters=tickerData.centers;
+      const streamedCenters=[...serverLiveGroups.values()].filter(group=>dartsLiveGroupActive(group)).map(liveGroupAsCenter);
+      liveCenters=[...streamedCenters,...tickerData.centers];
       if (!liveDetailsFirstAttempt) liveDetailsFirstAttempt=Date.now();
       if (liveCenters.every(center=>!center.stale)) liveDetailsLoadedAt=Date.parse(tickerData.updatedAt);
       renderToday(tickerData);updateFreshness();return;
@@ -1877,7 +1878,7 @@ function initDarts() {
       if(!payload)throw new Error('no known match');
       activeMatchDetailData=payload;
       const group=serverLiveGroups.get(String(matchId));
-      if(group&&(group.finished||dartsLiveGroupActive(group))&&!group.stale&&tickerData.source!=='browser-3k'){
+      if(group&&(group.finished||dartsLiveGroupActive(group))&&!group.stale){
         const item=upsertServerLiveTickerItem(group);
         activeMatchDetailData={...payload,liveGames:normalizedLiveGames(group),match:{...payload.match,kind:group.finished?'final':'live',score:item?.score||payload.match?.score}};
       }

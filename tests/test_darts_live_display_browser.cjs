@@ -15,7 +15,7 @@ const server=http.createServer((req,res)=>{
   }
   if(p.startsWith('/api/')){
     let data={};
-    if(p.endsWith('/ticker'))data={items:[fixture],updatedAt:new Date().toISOString(),stale:false};
+    if(p.endsWith('/ticker'))data={items:[fixture],updatedAt:new Date().toISOString(),stale:false,source:'browser-3k',centers:[]};
     if(p.endsWith('/season'))data={matches:[fixture],teams:['A','B','C','D'].map(code=>({code,name:`SV Barver Darts ${code}`,roster:[],matches:code==='B'?[fixture]:[]})),updatedAt:new Date().toISOString()};
     if(p.endsWith('/live'))data={groups:[group()]};
     if(p.includes('/matches/'))data={match:fixture,reportAvailable:true,games:[{id:100,number:2,status:'FINISH',homeLegs:0,awayLegs:3,home:{name:'Tim Hammann'},away:{name:'René Lange'}}],liveGames:[],performances:[],sourceUrl:fixture.url};
