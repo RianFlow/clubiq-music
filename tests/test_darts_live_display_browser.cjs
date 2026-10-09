@@ -67,6 +67,9 @@ const server=http.createServer((req,res)=>{
     moments=[];
     await page.click('#closeMatch');
     await page.click('#fullscreen');await page.selectOption('#tvTeamChoice','B');
+    // Chromium's native fullscreen cannot be resized. Choose the mobile viewport
+    // before launching TV mode, as a real phone already has its screen size.
+    await page.setViewportSize({width:390,height:844});
     await page.locator('#tvLauncherForm button[type=submit]').click();
     await page.waitForFunction(()=>document.body.classList.contains('tv-live'));
     assert.equal(await page.locator('#todayGrid').getAttribute('data-live-count'),'1');
@@ -77,7 +80,6 @@ const server=http.createServer((req,res)=>{
     assert.deepEqual(await page.locator('.darts-broadcast-card img').evaluateAll(images=>images.map(img=>img.alt)),['Porträt von Max Lowak','Porträt von René Lange']);
     await page.waitForFunction(()=>[...document.querySelectorAll('.darts-broadcast-card img')].every(img=>img.naturalWidth>0));
     await page.locator('.darts-broadcast-card').evaluate(card=>Promise.all(card.getAnimations().map(animation=>animation.finished)));
-    await page.setViewportSize({width:390,height:844});
     const bounds=await page.locator('.darts-broadcast-card').boundingBox();
     assert.ok(bounds.x>=0&&bounds.x+bounds.width<=390&&bounds.y>=0&&bounds.y+bounds.height<=844,'double victory fits the mobile TV screen');
     if(process.env.DARTS_SCREENSHOT)await page.screenshot({path:process.env.DARTS_SCREENSHOT});
