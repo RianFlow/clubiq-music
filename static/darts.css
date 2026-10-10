@@ -201,6 +201,7 @@ h1 { font:500 clamp(1.7rem,3vw,2.7rem)/1.15 Georgia,serif; margin:0; }
 .today-live-score > span:first-child { text-align:left; }
 .today-live-score > span:last-child { text-align:right; }
 .today-live-score small { overflow:hidden; color:#536c65; font-size:.7rem; font-weight:750; text-overflow:ellipsis; white-space:nowrap; }
+.today-live-score .today-player-name { min-width:0; max-width:100%; font-size:clamp(1.05rem,1.3vw,1.25rem); font-weight:800; line-height:1.3; white-space:normal; overflow-wrap:anywhere; }
 .today-live-score strong { color:#173b35; font:750 1.25rem/1 Georgia,serif; }
 .today-live-middle { justify-items:center; color:#6d7d78; }
 .today-live-middle b { color:#9c3027; font-size:1.2rem; }
@@ -431,6 +432,7 @@ body.tv-live .live-player-metrics dd { font-size:clamp(1.1rem,1.8vw,1.7rem); }
 .native-live-score > div > span { display:grid; gap:2px; text-align:center; }
 .native-live-score strong { font:700 clamp(2rem,7vw,3.5rem)/1 Georgia,serif; }
 .native-live-score small { color:#d5e7e2; font-weight:700; overflow-wrap:anywhere; }
+.native-live-score .native-player-name { min-width:0; max-width:100%; font-size:clamp(1.05rem,1.5vw,1.35rem); font-weight:800; line-height:1.3; white-space:normal; overflow-wrap:anywhere; }
 .native-live-score em { font:700 2rem/1 Georgia,serif; }
 .native-live-score .throwing strong { color:#f1d878; }
 .native-live-score .throwing small::before { content:'● '; color:#efc94d; }
@@ -566,6 +568,7 @@ body:is(:fullscreen,.app-tv) .today-live-games { gap:12px; }
 body:is(:fullscreen,.app-tv) .today-live-game { padding-bottom:12px; }
 body:is(:fullscreen,.app-tv) .today-live-score { gap:18px; }
 body:is(:fullscreen,.app-tv) .today-live-score small { font-size:clamp(.84rem,1.25vw,1.1rem); }
+body:is(:fullscreen,.app-tv,.tv-live) .today-live-score .today-player-name { font-size:clamp(1.3rem,1.65vw,1.8rem); }
 body:is(:fullscreen,.app-tv) .today-live-score strong { font-size:clamp(2.2rem,4.8vw,4.6rem); }
 body:is(:fullscreen,.app-tv) .today-live-middle b { font-size:clamp(1.6rem,3vw,2.8rem); }
 body:is(:fullscreen,.app-tv) .today-highlights span { padding:7px 10px; font-size:.86rem; }
@@ -1449,12 +1452,13 @@ body.app-tv #liveDataStatus{font-size:.72rem;max-width:100%;white-space:normal}
  body .today-live-game:not(.is-expanded) .today-live-score strong{font-size:1.8rem;line-height:1.1}
  body .today-live-game:not(.is-expanded) .today-live-middle{min-width:56px}
  body .today-live-game:not(.is-expanded) .today-live-legs{font-size:.65rem!important;padding:4px;white-space:nowrap}
- body .today-live-game:not(.is-expanded) .today-player-name{font-size:.74rem;line-height:1.25}
+ body .today-live-game:not(.is-expanded) .today-player-name{font-size:.95rem;line-height:1.3}
  body .today-live-game:not(.is-expanded) .today-live-facts{display:none}
  body .today-live-game:not(.is-expanded) .today-live-brief{display:grid;grid-template-columns:1fr 1fr;gap:8px;color:var(--muted,#607269);font-size:.68rem}
  .today-live-brief>small:last-child{text-align:right}
  body .today-live-game.is-expanded .today-live-score strong{font-size:clamp(2.5rem,12vw,3.5rem)}
  body .today-live-game.is-expanded .today-live-score{min-height:110px}
+ body .today-live-game.is-expanded .today-player-name{font-size:1.1rem}
  body .today-live-game.is-expanded .today-live-facts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
  body:is(:fullscreen,.app-tv) .today-live-game:not(.is-expanded) .today-live-score{min-height:58px;gap:6px}
  body:is(:fullscreen,.app-tv) .today-live-game:not(.is-expanded) .today-live-score strong{font-size:1.8rem}
