@@ -31,7 +31,8 @@ self.addEventListener("activate", event => {
 self.addEventListener("fetch", event => {
   const request = event.request;
   const url = new URL(request.url);
-  if (request.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
+  if (request.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/")
+      || url.pathname === "/cms" || url.pathname.startsWith("/cms/") || url.pathname.startsWith("/vereine/")) return;
   const cacheableAsset = url.pathname.startsWith("/static/") || url.pathname.startsWith("/pics/");
   if (cacheableAsset && url.pathname.endsWith('.json')) {
     // Editable player/sponsor configuration must not stay frozen in an old cache.

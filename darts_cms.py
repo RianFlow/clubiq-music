@@ -203,6 +203,7 @@ def create_router(connect, owner_credentials, owner_fingerprint, validate_image,
     router = APIRouter()
     attempts = {}
     attempts_lock = Lock()
+    dummy_hash = password_hash(secrets.token_hex(32))
 
     def private(response: Response):
         response.headers["Cache-Control"] = "no-store"
@@ -295,7 +296,8 @@ def create_router(connect, owner_credentials, owner_fingerprint, validate_image,
             else:
                 cur.execute("SELECT id,password_hash,active FROM cms_users WHERE username=%s", (body.username,))
                 row = cur.fetchone()
-                if not row or not row[2] or not password_matches(body.password, row[1]):
+                valid_password = password_matches(body.password, row[1] if row else dummy_hash)
+                if not row or not row[2] or not valid_password:
                     raise HTTPException(401, "Benutzername oder Passwort ungültig.")
                 user_id = row[0]
             token = secrets.token_hex(32)

@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
 from pydantic import ValidationError
@@ -7,6 +8,11 @@ from darts_cms import ClubCreate, Editor, PostSave, Publish, password_hash, pass
 
 
 class CmsRulesTests(unittest.TestCase):
+    def test_service_worker_excludes_private_cms_and_time_dependent_club_documents(self):
+        source=(Path(__file__).resolve().parents[1] / 'sw.js').read_text()
+        self.assertIn('url.pathname === "/cms"', source)
+        self.assertIn('url.pathname.startsWith("/vereine/")', source)
+
     def test_inputs_reject_unsafe_addresses_colors_unknown_fields_and_invalid_media(self):
         for values in ({"name": "Verein", "slug": "../andere"},
                        {"name": "Verein", "slug": "verein", "accent": "url(javascript:alert(1))"},
