@@ -6,6 +6,7 @@ import socket
 import threading
 import time
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
@@ -32,12 +33,14 @@ class CmsPostgresTests(unittest.TestCase):
         def connect():
             return psycopg.connect(**connection_kwargs(), options=f"-c search_path={cls.schema}")
         cls.connect = staticmethod(connect)
+        from darts_clubs import ClubDartsWorker
+        cls.worker = ClubDartsWorker(connect)
         def image(data):
             from main import _validated_player_image
             return _validated_player_image(data)
         app = FastAPI()
         app.include_router(create_router(connect, lambda user, pwd: user == "owner" and pwd == "owner-test-password",
-                                         lambda: hashlib.sha256(b"owner-test-password").hexdigest(), image, lambda: "owner"))
+                                         lambda: hashlib.sha256(b"owner-test-password").hexdigest(), image, lambda: "owner", darts_worker=cls.worker))
         sock = socket.socket()
         sock.bind(("127.0.0.1", 0))
         cls.origin = f"http://127.0.0.1:{sock.getsockname()[1]}"
@@ -108,12 +111,46 @@ class CmsPostgresTests(unittest.TestCase):
         post = self.call("POST", self.prefix + f"/posts/{post['id']}/publish", {"version": post["version"], "publish_at": (datetime.now(timezone.utc)+timedelta(days=1)).isoformat()}).json()
         public = f"/sites/{self.club['slug']}/posts"
         self.assertEqual(self.call("GET", public).json()["posts"], [])
+
         with self.connect() as conn, conn.cursor() as cur:
             cur.execute("UPDATE cms_posts SET publish_at=CURRENT_TIMESTAMP-INTERVAL '1 minute' WHERE id=%s", (post["id"],))
         self.assertEqual(len(self.call("GET", public).json()["posts"]), 1)
         with self.connect() as conn, conn.cursor() as cur:
             cur.execute("UPDATE cms_posts SET expires_at=CURRENT_TIMESTAMP-INTERVAL '1 second' WHERE id=%s", (post["id"],))
         self.assertEqual(self.call("GET", public).json()["posts"], [])
+
+    def test_team_posts_keep_published_targeting_and_club_isolation(self):
+        self.club=self.call("PUT",self.prefix,{"version":self.club["version"],"name":self.club["name"],"published":True,"teams":[{"key":"A","name":"Team A"},{"key":"B","name":"Team B"}]}).json()
+        public=f"/sites/{self.club['slug']}/posts"
+        post=self.call("POST",self.prefix+"/posts",{"title":"Nur Team A","body":"Neue Mannschaftsinfo","show_home":False,"team_keys":["A"]}).json()
+        self.call("POST",self.prefix+f"/posts/{post['id']}/publish",{"version":post["version"]})
+        self.assertEqual(self.call("GET",public).json()["posts"],[])
+        self.assertEqual(self.call("GET",public+"?team=A").json()["posts"][0]["title"],"Nur Team A")
+        self.assertEqual(self.call("GET",public+"?team=B").json()["posts"],[])
+        self.call("GET",public+"?team=C",expected=404)
+        stored=self.call("GET",self.prefix+"/posts").json()["posts"][0]
+        changed=self.call("PUT",self.prefix+f"/posts/{post['id']}",{"version":stored["version"],"title":"Jetzt B","body":"Noch ein Entwurf","show_home":True,"team_keys":["B"]}).json()
+        self.assertEqual(self.call("GET",public).json()["posts"],[])
+        self.assertEqual(self.call("GET",public+"?team=A").json()["posts"][0]["title"],"Nur Team A")
+        self.call("POST",self.prefix+f"/posts/{post['id']}/publish",{"version":changed["version"]})
+        self.assertEqual(self.call("GET",public).json()["posts"][0]["title"],"Jetzt B")
+        self.assertEqual(self.call("GET",public+"?team=A").json()["posts"],[])
+        self.call("POST",self.prefix+"/posts",{"title":"Fremdes Team","body":"Nicht speichern","team_keys":["C"]},expected=422)
+        hidden=self.call("POST",self.prefix+"/posts",{"title":"Ohne Bereich","body":"Privater Entwurf","show_home":False}).json()
+        self.call("POST",self.prefix+f"/posts/{hidden['id']}/publish",{"version":hidden["version"]},expected=422)
+
+    def test_darts_setup_verifies_team_membership_and_never_overwrites_after_conflict(self):
+        self.club=self.call("PUT",self.prefix,{"version":self.club["version"],"name":self.club["name"],"teams":[{"key":"team-a","name":"Unsere Erste"}]}).json()
+        settings={"version":self.club["version"],"enabled":True,"leagues":[{"url":"https://portal.3k-darts.com/frontend/events/10/event/123/phase/456","name":"Testliga","assignments":[{"team_key":"team-a","participant_id":789}]}]}
+        with patch('darts_cms.preview_source',return_value={"roundCount":18,"teams":[{"id":789,"name":"Unsere Erste"}]}):
+            saved=self.call("PUT",self.prefix+"/darts",settings).json()
+            self.assertTrue(saved["darts"]["enabled"])
+            self.call("PUT",self.prefix+"/darts",settings,expected=409)
+            invalid={**settings,"version":saved["version"],"leagues":[{**settings["leagues"][0],"assignments":[{"team_key":"team-a","participant_id":999}]}]}
+            self.call("PUT",self.prefix+"/darts",invalid,expected=422)
+            invalid["leagues"][0]["assignments"]=[{"team_key":"other-club-team","participant_id":789}]
+            self.call("PUT",self.prefix+"/darts",invalid,expected=422)
+        self.call("GET",f"/sites/{self.club['slug']}/darts/season",expected=404)
 
     def test_editor_has_only_own_club_and_sessions_are_revoked(self):
         username = "redaktion-" + uuid4().hex[:12]
@@ -127,10 +164,31 @@ class CmsPostgresTests(unittest.TestCase):
         self.call("POST", "/clubs", {"slug": "fremd", "name": "Fremder Verein"}, client=client, expected=403)
         self.call("GET", self.prefix + "/users", client=client, expected=403)
         self.call("PUT", self.prefix, {"version": 1, "name": "Testverein", "published": True}, client=client, expected=403)
+        self.club=self.call("PUT",self.prefix,{"version":self.club["version"],"name":self.club["name"],"teams":[{"key":"first","name":"Erste"}]}).json()
+        self.call("POST", "/clubs/1/darts/preview", {"url":"https://portal.3k-darts.com/frontend/events/10/event/123/phase/456"}, client=client, expected=404)
+        self.call("PUT",self.prefix+"/darts",{"version":self.club["version"],"enabled":True,"leagues":[{"url":"https://portal.3k-darts.com/frontend/events/10/event/123/phase/456","name":"Liga","assignments":[{"team_key":"first","participant_id":789}]}]},client=client,expected=403)
         self.call("POST", self.prefix + "/users", {"username": "owner", "password": "anderes-test-password"}, expected=409)
         self.call("PUT", self.prefix + f"/users/{editor['id']}", {"active": False})
         self.call("GET", "/session", client=client, expected=401)
         self.call("POST", "/login", {"username": username, "password": "redaktion-test-password"}, client=client, expected=401)
+
+    def test_club_worker_runs_on_server_and_recovers_last_good_data_after_restart(self):
+        from darts_clubs import ClubDartsWorker
+        self.club=self.call("PUT",self.prefix,{"version":self.club["version"],"name":self.club["name"],"published":True,"teams":[{"key":"first","name":"Erste"}]}).json()
+        settings={"version":self.club["version"],"enabled":True,"leagues":[{"url":"https://portal.3k-darts.com/frontend/events/10/event/123/phase/456","name":"Liga","assignments":[{"team_key":"first","participant_id":789}]}]}
+        with patch('darts_cms.preview_source',return_value={"teams":[{"id":789,"name":"Erste"}]}):
+            self.club=self.call("PUT",self.prefix+"/darts",settings).json()
+        worker=ClubDartsWorker(self.connect)
+        fresh={"available":True,"stale":False,"updatedAt":datetime.now(timezone.utc).isoformat(),"teams":[{"code":"first","name":"Erste"}],"leagues":[],"matches":[]}
+        with patch('darts_clubs.collect_season',return_value=fresh):worker.poll()
+        restarted=ClubDartsWorker(self.connect)
+        self.assertEqual(restarted.season(self.club['id'],self.club['slug'],self.club['darts'])['teams'],fresh['teams'])
+        worker.next_refresh.clear()
+        with patch('darts_clubs.collect_season',side_effect=ValueError('Source unavailable')):worker.poll()
+        fallback=worker.season(self.club['id'],self.club['slug'],self.club['darts'])
+        self.assertTrue(fallback['stale']);self.assertEqual(fallback['teams'],fresh['teams'])
+        different={**self.club['darts'],'leagues':[{**self.club['darts']['leagues'][0],'name':'Changed source'}]}
+        self.assertFalse(restarted.season(self.club['id'],self.club['slug'],different)['available'])
 
     def test_media_are_private_until_published_and_cannot_cross_clubs(self):
         data = (Path(__file__).resolve().parents[1] / "pics/logo.png").read_bytes()
@@ -147,6 +205,25 @@ class CmsPostgresTests(unittest.TestCase):
         second = self.call("POST", "/clubs", {"slug": "second-"+uuid4().hex[:12], "name": "Zweiter Verein"}).json()
         self.call("POST", f"/clubs/{second['id']}/posts", {"title": "Fremdes Bild", "body": "Kein Zugriff", "image_id": image_id}, expected=422)
         self.call("GET", f"/sites/barver/media/{image_id}", expected=404)
+
+    def test_public_game_page_and_reports_are_scoped_to_the_enabled_club(self):
+        self.club=self.call("PUT",self.prefix,{"version":self.club["version"],"name":self.club["name"],"published":True,"teams":[{"key":"first","name":"Erste"}]}).json()
+        settings={"version":self.club["version"],"enabled":True,"leagues":[{"url":"https://portal.3k-darts.com/frontend/events/10/event/123/phase/456","name":"Liga","assignments":[{"team_key":"first","participant_id":789}]}]}
+        with patch('darts_cms.preview_source',return_value={"teams":[{"id":789,"name":"Erste"}]}):
+            self.club=self.call("PUT",self.prefix+"/darts",settings).json()
+        match={"id":345,"eventId":123,"kind":"upcoming","plannedAt":(datetime.now(timezone.utc)+timedelta(days=5)).isoformat(),"url":"https://portal.3k-darts.com/","home":"Erste","away":"Gegner"}
+        fresh={"available":True,"stale":False,"updatedAt":datetime.now(timezone.utc).isoformat(),"teams":[],"leagues":[],"matches":[match]}
+        self.worker.next_refresh.clear()
+        with patch('darts_clubs.collect_season',return_value=fresh):self.worker.poll()
+        public=f"/sites/{self.club['slug']}/darts"
+        self.assertEqual(self.call("GET",public+"/season").json()["matches"][0]["id"],345)
+        self.assertEqual(self.call("GET",public+"/matches/345").json()["match"]["home"],"Erste")
+        self.call("GET",public+"/matches/999999",expected=404)
+        page=requests.get(self.origin+f"/vereine/{self.club['slug']}/darts")
+        self.assertEqual(page.status_code,200);self.assertIn('club-darts.js',page.text)
+        self.club=self.call("PUT",self.prefix,{"version":self.club["version"],"name":self.club["name"],"published":False}).json()
+        self.call("GET",public+"/season",expected=404)
+        self.assertEqual(requests.get(self.origin+f"/vereine/{self.club['slug']}/darts").status_code,404)
 
     def test_private_cache_csrf_logout_and_public_document_guards(self):
         self.assertEqual(self.owner.get(self.origin + "/api/v1/cms/session").headers["Cache-Control"], "no-store")

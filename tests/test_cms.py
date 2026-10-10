@@ -50,3 +50,11 @@ class CmsRulesTests(unittest.TestCase):
         self.assertNotIn("draft", public)
         self.assertNotIn("Privat", str(public))
         self.assertEqual(public["href"], "/vereine/verein/beitraege/7")
+
+    def test_team_assignments_and_legacy_defaults(self):
+        self.assertTrue(PostSave(title="Alt", body="Ohne neue Felder").show_home)
+        self.assertEqual(PostSave(title="Neu",body="Nachricht",team_keys=["A","B","A"]).team_keys,["A","B"])
+        for keys in (["../B"],["A' OR true --"]):
+            with self.assertRaises(ValidationError):PostSave(title="Neu",body="Nachricht",team_keys=keys)
+        with self.assertRaises(ValidationError):
+            ClubCreate(name="Verein",slug="verein",teams=[{"key":"A","name":"Team A"},{"key":"A","name":"Team B"}])

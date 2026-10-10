@@ -1546,7 +1546,7 @@ function initDarts() {
     const venueName=document.createElement('strong'); venueName.textContent=venue.name || 'Dorfgemeinschaftshaus Barver'; const address=document.createElement('span'); address.textContent=[venue.street,[venue.postalCode,venue.city].filter(Boolean).join(' ')].filter(Boolean).join(' · '); venueSection.append(venueName,address);
     if (venue.boards) { const boards=document.createElement('small'); boards.textContent=`${venue.boards} Boards an der Spielstätte`; venueSection.append(boards); }
     const filter=document.createElement('button'); filter.type='button'; filter.className='primary'; filter.textContent='Nur Spiele dieser Mannschaft anzeigen'; filter.addEventListener('click',()=>{ q('#teamDialog').close(); q('#seasonTeam').value=team.code; renderSeason(); q('#seasonMatches').scrollIntoView({behavior:'smooth',block:'start'}); }); venueSection.append(filter);
-    grid.append(schedule,squad,venueSection); target.replaceChildren(hero,...(teamPhoto?[teamPhoto]:[]),stats,grid);
+    grid.append(schedule,squad,venueSection);const news=window.DartsCmsNews?.teamSection(team.code);target.replaceChildren(hero,...(teamPhoto?[teamPhoto]:[]),stats,...(news?[news]:[]),grid);
   }
   function renderSeasonTeams() {
     const target=q('#seasonTeams');
