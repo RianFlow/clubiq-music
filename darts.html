@@ -9,16 +9,17 @@
   <link rel="icon" href="/pics/logo.png">
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
   <link rel="preload" href="/pics/sv-barver-darts-tight-512.webp" as="image" type="image/webp">
-  <link rel="stylesheet" href="/static/darts.css?v=20261009-live-compact2">
-  <link rel="stylesheet" href="/static/darts-broadcast.css?v=20261009-live-compact2">
+  <link rel="stylesheet" href="/static/darts.css?v=20261010-cms1">
+  <link rel="stylesheet" href="/static/darts-broadcast.css?v=20261010-cms1">
   <link rel="stylesheet" href="/static/darts-theme.css?v=20261005-tv1">
-  <script defer src="/static/darts-broadcast.js?v=20261009-live-compact2"></script>
+  <script defer src="/static/darts-broadcast.js?v=20261010-cms1"></script>
   <script defer src="/static/darts-social-icons.js?v=20261004-clear1"></script>
   <script defer src="/static/darts-experience.js?v=20261004-experience1"></script>
   <script defer src="/static/darts-usability.js?v=20261005-tv1"></script>
-  <script defer src="/static/darts-source-fallback.js?v=20261009-live-compact2"></script>
+  <script defer src="/static/darts-source-fallback.js?v=20261010-cms1"></script>
   <script defer src="/static/darts-player-data.js?v=20261006-training1"></script>
-  <script defer src="/static/darts.js?v=20261009-live-compact2"></script>
+  <script defer src="/static/darts.js?v=20261010-cms1"></script>
+  <script defer src="/static/darts-cms-news.js?v=20261010-cms1"></script>
 <link rel="stylesheet" href="/static/darts-typography.css?v=20261004-type1"><link rel="stylesheet" href="/static/darts-usability.css?v=20261005-tv1"></head>
 <body>
   <header class="darts-header">
@@ -99,6 +100,7 @@
       <div id="matchCenterGrid" class="match-center-grid"><p class="match-center-loading">3K-Spielplan wird geladen …</p></div>
       <aside class="club-training" aria-label="Trainingszeiten"><strong>Unser Training</strong><span>Dienstag & Donnerstag</span><time datetime="19:30">jeweils 19:30 Uhr</time></aside>
     </section>
+    <section id="clubNewsPanel" class="sports-panel club-news-panel" aria-labelledby="clubNewsHeading" hidden><div class="sports-panel-head"><div><p class="eyebrow">Aus dem Verein</p><h2 id="clubNewsHeading">Neuigkeiten</h2></div><a href="/vereine/barver">Alle Beiträge →</a></div><div id="clubNewsList" class="club-news-list"></div></section>
     <aside id="sponsorInline" class="sponsor-slot sponsor-slot-inline" data-placement="inline" aria-label="Werbepartner" hidden></aside>
     <p id="pageStatus" class="message" role="status" hidden></p>
     <section id="todayPanel" class="sports-panel" aria-labelledby="todayHeading" hidden>

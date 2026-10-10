@@ -349,6 +349,12 @@ body.tv-live .live-player-metrics dd { font-size:clamp(1.1rem,1.8vw,1.7rem); }
 .game-player-icons { display:inline-flex; vertical-align:middle; gap:3px; margin-right:5px; }
 .game-player-icons img { width:26px; height:26px; object-fit:cover; object-position:center top; border-radius:4px; }
 .game-player-icons img.is-logo { object-fit:contain; }
+.club-news-list { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; padding:18px; }
+.club-news-list article { display:grid; align-content:start; gap:10px; padding:18px; border:1px solid var(--line); border-radius:12px; }
+.club-news-list h3,.club-news-list p { margin:0; overflow-wrap:anywhere; }
+.club-news-list time { font-size:.75rem; opacity:.8; }
+.club-news-list a { font-weight:750; font-size:.85rem; }
+@media(max-width:650px) { .club-news-list { grid-template-columns:minmax(0,1fr); } }
 .player-profile-dialog { width:min(1080px,calc(100% - 24px)); }
 .player-profile-hero { position:relative; display:grid; grid-template-columns:minmax(0,1.15fr) minmax(250px,.85fr); align-items:stretch; min-height:300px; margin:14px 0 10px; overflow:hidden; color:white; background-color:#07110f; background-image:linear-gradient(125deg,rgba(15,72,59,.95),rgba(3,12,10,.98) 60%),repeating-linear-gradient(60deg,transparent 0 24px,rgba(75,177,150,.16) 25px 27px); border:1px solid #347366; border-radius:17px; }
 .player-profile-hero::after { position:absolute; inset:0; content:""; pointer-events:none; background:radial-gradient(circle at 82% 35%,rgba(45,162,130,.28),transparent 34%),linear-gradient(90deg,transparent 48%,rgba(240,217,145,.08)); }

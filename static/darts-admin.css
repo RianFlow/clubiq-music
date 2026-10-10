@@ -3,6 +3,7 @@
   --mint:#72dfc2; --gold:#f1d47c; --text:#f6f3e8; --muted:#a9bdb6; --danger:#ff9387;
   font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
 }
+.cms-shortcut { color:var(--mint); font-size:.8rem; font-weight:750; padding:10px 6px; }
 * { box-sizing:border-box; }
 [hidden] { display:none !important; }
 body { margin:0; min-height:100vh; overflow-x:hidden; color:var(--text); background:radial-gradient(circle at 80% 0,#174b3e 0,transparent 32rem),var(--bg); }

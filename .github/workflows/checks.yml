@@ -63,6 +63,7 @@ jobs:
           NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_darts_home_browser.cjs
           NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_darts_tournament_browser.cjs
           NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_darts_training_browser.cjs
+          NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_cms_browser.cjs
       - name: App mit Training und Push-Auswahl prüfen
         run: |
           npm ci --prefix mobile --no-audit --no-fund
@@ -111,3 +112,5 @@ jobs:
         run: docker compose run --rm --no-deps -e DARTS_TEST_POSTGRES=1 web python -m unittest discover -s tests -p test_darts_snapshots_postgres.py
       - name: Automatischen Darts-Datenhelfer mit PostgreSQL prüfen
         run: docker compose run --rm --no-deps -e DARTS_COLLECTOR_TEST_POSTGRES=1 web python -m unittest discover -s tests -p test_darts_collector_postgres.py
+      - name: Vereins-CMS und getrennte Redakteurszugänge mit PostgreSQL prüfen
+        run: docker compose run --rm --no-deps -e CMS_TEST_POSTGRES=1 web python -m unittest discover -s tests -p test_cms_postgres.py

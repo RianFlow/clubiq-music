@@ -40,6 +40,7 @@ from darts_push import barver_push_candidates, barver_push_event, push_payload, 
 from radio_directory import DirectoryUnavailable, get_station, search_stations
 from radio_logos import CACHE_SECONDS, FAILURE_SECONDS, cached_logo
 from music_library import duration_ms, register_library
+from darts_cms import create_router as create_cms_router
 
 load_dotenv()
 
@@ -613,6 +614,15 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="ClubIQ Music Voting API", lifespan=lifespan)
 app.include_router(darts_web_app_router)
+app.include_router(create_cms_router(
+    connect=lambda: db_connect(),
+    owner_credentials=lambda username, password: bool(ADMIN_PASSWORD and DARTS_ADMIN_USERNAME)
+        and secrets.compare_digest(username.encode(), DARTS_ADMIN_USERNAME.encode())
+        and secrets.compare_digest(password.encode(), ADMIN_PASSWORD.encode()),
+    owner_fingerprint=lambda: hashlib.sha256((DARTS_ADMIN_USERNAME + "\0" + ADMIN_PASSWORD).encode()).hexdigest(),
+    validate_image=lambda data: _validated_player_image(data),
+    owner_username=lambda: DARTS_ADMIN_USERNAME,
+))
 app.mount("/pics", StaticFiles(directory="pics"), name="pics")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
