@@ -4,6 +4,7 @@ import psycopg
 
 from db_config import connection_kwargs
 from soundboard_pack import seed_soundboard
+from darts_cms import CMS_SCHEMA_SQL
 
 
 SCHEMA_SQL = """
@@ -401,6 +402,8 @@ DO $$ BEGIN
     END IF;
 END $$;
 """
+
+SCHEMA_SQL += CMS_SCHEMA_SQL
 
 DEFAULTS_SQL = """
 INSERT INTO music_profiles (id, name, slug, active)
