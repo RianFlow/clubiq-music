@@ -3,3 +3,6 @@
 
 .club-game-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}.club-game-actions button{font-size:.8rem;padding:10px 14px}.club-board-player .remaining{display:block;color:var(--link)}.club-score-line strong{color:var(--link)}[data-theme=dark] .club-score-line strong,[data-theme=dark] .club-board-player .remaining,[data-theme=dark] .club-match-page .eyebrow{color:#a2e6cd}.club-board-player small{display:block}
 @media(max-width:650px){.match-page-heading{display:block}.match-page-heading>button{margin-top:12px}.club-game-actions button{font-size:.75rem;padding:10px 12px}}
+
+.club-board-player>div{min-width:0}.club-board-player strong{font-size:clamp(1.05rem,1.3vw,1.2rem);font-weight:800;line-height:1.3}.club-match-page.is-club-tv .club-board-player strong{font-size:clamp(1.3rem,1.65vw,1.6rem)}
+@media(max-width:650px){.club-board-player strong,.club-match-page.is-club-tv .club-board-player strong{font-size:1rem}}

@@ -1750,6 +1750,7 @@ function initDarts() {
         const awayPoints=document.createElement('strong'); awayPoints.textContent=liveRemaining(live.away?.remaining);
         const homeName=matchPlayerNode(live.home?.name || 'Heim',match.id,'home');
         const awayName=matchPlayerNode(live.away?.name || 'Gast',match.id,'away');
+        homeName.classList.add('native-player-name'); awayName.classList.add('native-player-name');
         const divider=document.createElement('em'); divider.textContent=':';
         homeLive.append(homePoints,homeName); awayLive.append(awayPoints,awayName); scoreline.append(homeLive,divider,awayLive);
         const facts=document.createElement('div'); facts.className='native-live-facts';
