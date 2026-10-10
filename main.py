@@ -41,6 +41,7 @@ from radio_directory import DirectoryUnavailable, get_station, search_stations
 from radio_logos import CACHE_SECONDS, FAILURE_SECONDS, cached_logo
 from music_library import duration_ms, register_library
 from darts_cms import create_router as create_cms_router
+from darts_clubs import ClubDartsWorker
 
 load_dotenv()
 
@@ -595,6 +596,8 @@ def warm_darts_trainings() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     scheduler = BackgroundScheduler()
+    scheduler.add_job(club_darts_worker.poll, "interval", seconds=60, max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(seconds=8))
+    scheduler.add_job(club_darts_worker.poll_live, "interval", seconds=15, max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(seconds=10))
     scheduler.add_job(close_expired_cycles, "interval", minutes=1)
     scheduler.add_job(collect_playback_history, "interval", seconds=30, max_instances=1, next_run_time=datetime.now(timezone.utc))
     scheduler.add_job(poll_darts_push_events, "interval", seconds=45, max_instances=1, next_run_time=datetime.now(timezone.utc))
@@ -614,6 +617,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="ClubIQ Music Voting API", lifespan=lifespan)
 app.include_router(darts_web_app_router)
+club_darts_worker = ClubDartsWorker(lambda: db_connect(), lambda: darts_live_hub.snapshot())
 app.include_router(create_cms_router(
     connect=lambda: db_connect(),
     owner_credentials=lambda username, password: bool(ADMIN_PASSWORD and DARTS_ADMIN_USERNAME)
@@ -622,6 +626,7 @@ app.include_router(create_cms_router(
     owner_fingerprint=lambda: hashlib.sha256((DARTS_ADMIN_USERNAME + "\0" + ADMIN_PASSWORD).encode()).hexdigest(),
     validate_image=lambda data: _validated_player_image(data),
     owner_username=lambda: DARTS_ADMIN_USERNAME,
+    darts_worker=club_darts_worker,
 ))
 app.mount("/pics", StaticFiles(directory="pics"), name="pics")
 app.mount("/static", StaticFiles(directory="static"), name="static")

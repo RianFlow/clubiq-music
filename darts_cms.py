@@ -9,6 +9,7 @@ import secrets
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from darts_clubs import CLUB_DARTS_SCHEMA, DartsSettings, preview_source
 from threading import Lock
 from uuid import UUID, uuid4
 
@@ -79,12 +80,20 @@ CREATE TABLE IF NOT EXISTS cms_post_revisions (
 INSERT INTO cms_clubs(slug,name,tagline,published)
 VALUES ('barver','SV Barver Darts','Vier Mannschaften. Ein Verein.',TRUE)
 ON CONFLICT(slug) DO NOTHING;
+ALTER TABLE cms_clubs ADD COLUMN IF NOT EXISTS teams JSONB;
+UPDATE cms_clubs SET teams=CASE WHEN slug='barver' THEN
+    '[{"key":"A","name":"Barver A"},{"key":"B","name":"Barver B"},{"key":"C","name":"Barver C"},{"key":"D","name":"Barver D"}]'::jsonb
+    ELSE '[]'::jsonb END WHERE teams IS NULL;
+ALTER TABLE cms_clubs ALTER COLUMN teams SET DEFAULT '[]'::jsonb;
+ALTER TABLE cms_clubs ALTER COLUMN teams SET NOT NULL;
 """
+
+CMS_SCHEMA_SQL += CLUB_DARTS_SCHEMA
 
 COOKIE = "clubiq_cms_session"
 ROOT = Path(__file__).resolve().parent
 VISIBLE = "published IS NOT NULL AND publish_at<=CURRENT_TIMESTAMP AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP)"
-CLUB_COLUMNS = "id,slug,name,tagline,about,contact,accent,logo_id,published,version"
+CLUB_COLUMNS = "id,slug,name,tagline,about,contact,accent,logo_id,published,version,teams,darts"
 POST_COLUMNS = "id,club_id,draft,published,publish_at,expires_at,version,published_version,updated_at"
 
 
@@ -97,6 +106,11 @@ class Login(StrictModel):
     password: str = Field(min_length=1, max_length=256)
 
 
+class ClubTeam(StrictModel):
+    key: str = Field(min_length=1, max_length=48, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
+    name: str = Field(min_length=2, max_length=80)
+
+
 class ClubFields(StrictModel):
     name: str = Field(min_length=2, max_length=100)
     tagline: str = Field(default="", max_length=160)
@@ -105,6 +119,15 @@ class ClubFields(StrictModel):
     accent: str = Field(default="#176b56", pattern=r"^#[0-9a-fA-F]{6}$")
     logo_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$")
     published: bool = False
+    teams: list[ClubTeam] | None = Field(default=None, max_length=30)
+
+    @field_validator("teams")
+    @classmethod
+    def unique_teams(cls, value):
+        if value is not None and (len({team.key for team in value}) != len(value)
+                                  or len({team.name.casefold() for team in value}) != len(value)):
+            raise ValueError("Jede Mannschaft braucht einen eigenen Namen und eine eigene Zuordnung.")
+        return value
 
 
 class ClubCreate(ClubFields):
@@ -120,6 +143,15 @@ class PostContent(StrictModel):
     summary: str = Field(default="", max_length=280)
     body: str = Field(min_length=2, max_length=20000)
     image_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$")
+    show_home: bool = True
+    team_keys: list[str] = Field(default_factory=list, max_length=30)
+
+    @field_validator("team_keys")
+    @classmethod
+    def valid_teams(cls, value):
+        if any(not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,47}", key) for key in value):
+            raise ValueError("Bitte eine gültige Mannschaft auswählen.")
+        return list(dict.fromkeys(value))
 
 
 class PostSave(PostContent):
@@ -128,6 +160,14 @@ class PostSave(PostContent):
 
 class Version(StrictModel):
     version: int = Field(ge=1)
+
+
+class DartsUpdate(DartsSettings):
+    version: int = Field(ge=1)
+
+
+class SourcePreview(StrictModel):
+    url: str = Field(max_length=300)
 
 
 class Publish(Version):
@@ -180,7 +220,7 @@ def password_matches(password, stored):
 
 
 def club_payload(row):
-    return dict(zip(("id", "slug", "name", "tagline", "about", "contact", "accent", "logoId", "published", "version"),
+    return dict(zip(("id", "slug", "name", "tagline", "about", "contact", "accent", "logoId", "published", "version", "teams", "darts"),
                     (*row[:7], str(row[7]) if row[7] else None, *row[8:])))
 
 
@@ -195,11 +235,12 @@ def public_post(row, slug):
     content = row[3]
     return {"id": row[0], "title": content["title"], "summary": content.get("summary", ""),
             "body": content["body"], "publishedAt": row[4].isoformat(),
+            "teamKeys": content.get("team_keys", []), "showHome": content.get("show_home", True),
             "image": f"/api/v1/cms/sites/{slug}/media/{content['image_id']}" if content.get("image_id") else None,
             "href": f"/vereine/{slug}/beitraege/{row[0]}"}
 
 
-def create_router(connect, owner_credentials, owner_fingerprint, validate_image, owner_username=lambda: ""):
+def create_router(connect, owner_credentials, owner_fingerprint, validate_image, owner_username=lambda: "", darts_worker=None):
     router = APIRouter()
     attempts = {}
     attempts_lock = Lock()
@@ -246,6 +287,13 @@ def create_router(connect, owner_credentials, owner_fingerprint, validate_image,
             if not cur.fetchone():
                 raise HTTPException(422, "Das Bild gehört nicht zu diesem Verein.")
 
+    def placement(current, content, publishing=False):
+        keys = {team["key"] for team in current[10]}
+        if not set(content.team_keys).issubset(keys):
+            raise HTTPException(422, "Eine ausgewählte Mannschaft gehört nicht zu diesem Verein.")
+        if publishing and not (content.show_home or content.team_keys):
+            raise HTTPException(422, "Bitte Startseite oder mindestens eine Mannschaft auswählen.")
+
     def locked_post(cur, club_id, post_id, version):
         cur.execute(f"SELECT {POST_COLUMNS} FROM cms_posts WHERE club_id=%s AND id=%s FOR UPDATE", (club_id, post_id))
         row = cur.fetchone()
@@ -273,6 +321,14 @@ def create_router(connect, owner_credentials, owner_fingerprint, validate_image,
                 if not cur.fetchone():
                     raise HTTPException(404, "Beitrag nicht gefunden.")
         return FileResponse(ROOT / "cms-site.html", headers={"Cache-Control": "no-store"})
+
+    @router.get("/vereine/{slug}/darts", include_in_schema=False)
+    def darts_document(slug: str):
+        with connect() as conn, conn.cursor() as cur:
+            row = club(cur, None, slug=slug)
+            if not row[11].get("enabled"):
+                raise HTTPException(404, "Die Spielseite ist noch nicht freigegeben.")
+        return FileResponse(ROOT / "club-darts.html", headers={"Cache-Control": "no-store"})
 
     @router.post("/api/v1/cms/login")
     def login(body: Login, request: Request, response: Response):
@@ -340,9 +396,10 @@ def create_router(connect, owner_credentials, owner_fingerprint, validate_image,
             raise HTTPException(422, "Bitte den Verein zuerst anlegen und danach ein Logo auswählen.")
         try:
             with connect() as conn, conn.cursor() as cur:
-                cur.execute(f"""INSERT INTO cms_clubs(slug,name,tagline,about,contact,accent,published)
-                                VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING {CLUB_COLUMNS}""",
-                            (body.slug, body.name, body.tagline, body.about, body.contact, body.accent, body.published))
+                cur.execute(f"""INSERT INTO cms_clubs(slug,name,tagline,about,contact,accent,published,teams)
+                                VALUES (%s,%s,%s,%s,%s,%s,%s,%s::jsonb) RETURNING {CLUB_COLUMNS}""",
+                            (body.slug, body.name, body.tagline, body.about, body.contact, body.accent, body.published,
+                             json.dumps([team.model_dump() for team in body.teams or []])))
                 return club_payload(cur.fetchone())
         except UniqueViolation:
             raise HTTPException(409, "Diese Vereinsadresse ist schon vergeben.") from None
@@ -354,10 +411,14 @@ def create_router(connect, owner_credentials, owner_fingerprint, validate_image,
             if not user["owner"] and body.published != current[8]:
                 raise HTTPException(403, "Die öffentliche Vereinsseite wird von der Administration freigegeben.")
             media(cur, club_id, body.logo_id)
+            teams = [team.model_dump() for team in body.teams] if body.teams is not None else current[10]
+            if not {team["key"] for team in current[10]}.issubset({team["key"] for team in teams}):
+                raise HTTPException(422, "Bestehende Mannschaften bleiben erhalten, damit ihre Beiträge zugeordnet bleiben.")
             cur.execute(f"""UPDATE cms_clubs SET name=%s,tagline=%s,about=%s,contact=%s,accent=%s,logo_id=%s::uuid,
-                            published=%s,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=%s AND version=%s
+                            published=%s,teams=%s::jsonb,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=%s AND version=%s
                             RETURNING {CLUB_COLUMNS}""",
-                        (body.name, body.tagline, body.about, body.contact, body.accent, body.logo_id, body.published, club_id, body.version))
+                        (body.name, body.tagline, body.about, body.contact, body.accent, body.logo_id, body.published,
+                         json.dumps(teams), club_id, body.version))
             row = cur.fetchone()
             if not row:
                 raise HTTPException(409, "Die Vereinsangaben wurden inzwischen geändert. Bitte neu laden.")
@@ -370,10 +431,49 @@ def create_router(connect, owner_credentials, owner_fingerprint, validate_image,
             cur.execute(f"SELECT {POST_COLUMNS} FROM cms_posts WHERE club_id=%s ORDER BY updated_at DESC,id DESC LIMIT 200", (club_id,))
             return {"posts": [post_payload(row) for row in cur.fetchall()]}
 
+    @router.post("/api/v1/cms/clubs/{club_id}/darts/preview")
+    def source_preview(club_id: int, body: SourcePreview, user=Depends(subject)):
+        with connect() as conn, conn.cursor() as cur:
+            club(cur, club_id, user)
+        try:
+            return preview_source(body.url)
+        except Exception:
+            raise HTTPException(422, "Der Liga-Link konnte nicht geprüft werden. Bitte den 3K-Spielplan-Link und die Verbindung prüfen.") from None
+
+    @router.put("/api/v1/cms/clubs/{club_id}/darts")
+    def darts_settings(club_id: int, body: DartsUpdate, user=Depends(subject)):
+        config = body.model_dump(exclude={"version"})
+        with connect() as conn, conn.cursor() as cur:
+            current = club(cur, club_id, user)
+        if body.version != current[9]:
+            raise HTTPException(409, "Die Einrichtung wurde inzwischen geändert. Bitte neu laden.")
+        keys = {team["key"] for team in current[10]}
+        if any(item.team_key not in keys for league in body.leagues for item in league.assignments):
+            raise HTTPException(422, "Bitte die Mannschaft zuerst für diesen Verein anlegen.")
+        if body.enabled and not user["owner"] and not current[11].get("enabled"):
+            raise HTTPException(403, "Die neue Spielseite wird von der Administration aktiviert.")
+        for league in body.leagues:
+            previous = next((entry for entry in current[11].get("leagues", []) if entry["url"] == league.url), None)
+            if previous and previous.get("assignments") == [item.model_dump() for item in league.assignments]:
+                continue
+            try:
+                allowed = {team["id"] for team in preview_source(league.url)["teams"]}
+            except Exception:
+                raise HTTPException(422, "Die 3K-Zuordnung konnte gerade nicht bestätigt werden. Die bisherige Einrichtung bleibt erhalten.") from None
+            if any(item.participant_id not in allowed for item in league.assignments):
+                raise HTTPException(422, "Die ausgewählte 3K-Mannschaft gehört nicht zu dieser Liga.")
+        with connect() as conn, conn.cursor() as cur:
+            cur.execute(f"UPDATE cms_clubs SET darts=%s::jsonb,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=%s AND version=%s RETURNING {CLUB_COLUMNS}", (json.dumps(config),club_id,body.version))
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(409, "Die Einrichtung wurde inzwischen geändert. Bitte neu laden.")
+        return club_payload(row)
+
     def save_post(club_id, post_id, body, user):
         draft = PostContent(**body.model_dump(exclude={"version"})).model_dump()
         with connect() as conn, conn.cursor() as cur:
-            club(cur, club_id, user)
+            current = club(cur, club_id, user)
+            placement(current, body)
             media(cur, club_id, body.image_id)
             if post_id is None:
                 if body.version:
@@ -398,9 +498,9 @@ def create_router(connect, owner_credentials, owner_fingerprint, validate_image,
     @router.post("/api/v1/cms/clubs/{club_id}/posts/{post_id}/publish")
     def publish_post(club_id: int, post_id: int, body: Publish, user=Depends(subject)):
         with connect() as conn, conn.cursor() as cur:
-            club(cur, club_id, user)
+            current = club(cur, club_id, user)
             row = locked_post(cur, club_id, post_id, body.version)
-            PostContent(**row[2])
+            placement(current, PostContent(**row[2]), publishing=True)
             media(cur, club_id, row[2].get("image_id"))
             cur.execute(f"""UPDATE cms_posts SET published=draft,publish_at=%s,expires_at=%s,version=version+1,
                             published_version=version+1,updated_at=CURRENT_TIMESTAMP WHERE club_id=%s AND id=%s RETURNING {POST_COLUMNS}""",
@@ -513,16 +613,46 @@ def create_router(connect, owner_credentials, owner_fingerprint, validate_image,
         with connect() as conn, conn.cursor() as cur:
             row = club(cur, None, slug=slug)
         value = club_payload(row)
-        return {key: value[key] for key in ("slug", "name", "tagline", "about", "contact", "accent")} | {
+        return {key: value[key] for key in ("slug", "name", "tagline", "about", "contact", "accent", "teams")} | {"dartsEnabled":value["darts"].get("enabled",False),
             "logo": f"/api/v1/cms/sites/{slug}/media/{row[7]}" if row[7] else "/pics/sv-barver-darts-tight-512.webp" if slug == "barver" else None}
 
     @router.get("/api/v1/cms/sites/{slug}/posts")
-    def site_posts(slug: str, response: Response, limit: int = Query(default=30, ge=1, le=100)):
+    def site_posts(slug: str, response: Response, limit: int = Query(default=30, ge=1, le=100),
+                   team: str | None = Query(default=None, max_length=48, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")):
         private(response)
         with connect() as conn, conn.cursor() as cur:
             row = club(cur, None, slug=slug)
-            cur.execute(f"SELECT {POST_COLUMNS} FROM cms_posts WHERE club_id=%s AND {VISIBLE} ORDER BY publish_at DESC,id DESC LIMIT %s", (row[0], limit))
+            if team is not None and team not in {item["key"] for item in row[10]}:
+                raise HTTPException(404, "Mannschaft nicht gefunden.")
+            scope = "published->'team_keys' ? %s" if team else "COALESCE(published->>'show_home','true')='true'"
+            parameters = (row[0], team, limit) if team else (row[0], limit)
+            cur.execute(f"SELECT {POST_COLUMNS} FROM cms_posts WHERE club_id=%s AND {VISIBLE} AND {scope} ORDER BY publish_at DESC,id DESC LIMIT %s", parameters)
             return {"posts": [public_post(post, slug) for post in cur.fetchall()]}
+
+    def darts_club(slug):
+        with connect() as conn, conn.cursor() as cur:
+            row = club(cur, None, slug=slug)
+        if not row[11].get("enabled") or darts_worker is None:
+            raise HTTPException(404, "Die Spielseite ist noch nicht freigegeben.")
+        return row
+
+    @router.get("/api/v1/cms/sites/{slug}/darts/season")
+    def club_season(slug: str, response: Response):
+        private(response); row = darts_club(slug)
+        return darts_worker.season(row[0], slug, row[11])
+
+    @router.get("/api/v1/cms/sites/{slug}/darts/live")
+    def club_live(slug: str, response: Response):
+        private(response); row = darts_club(slug)
+        return darts_worker.live_snapshot(row[0], slug, row[11])
+
+    @router.get("/api/v1/cms/sites/{slug}/darts/matches/{match_id}")
+    def club_report(slug: str, match_id: int, response: Response):
+        private(response); row = darts_club(slug)
+        try:
+            return darts_worker.report(row[0], slug, row[11], match_id)
+        except ValueError:
+            raise HTTPException(404, "Diese Begegnung gehört nicht zur Spielseite dieses Vereins.") from None
 
     @router.get("/api/v1/cms/sites/{slug}/posts/{post_id}")
     def site_post(slug: str, post_id: int, response: Response):
