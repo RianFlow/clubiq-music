@@ -44,6 +44,9 @@ const server=http.createServer((req,res)=>{
   try{
     const context=await browser.newContext({viewport:{width:1440,height:1000},serviceWorkers:'block'});
     await context.route('https://*.3k-darts.com/**',route=>route.abort());
+    // The Web-App uses absolute portrait URLs. Exercise the real fallback without
+    // depending on the live image server or racing the background data refresh.
+    await context.route('https://barverdarts.clubiq.party/pics/players/**',route=>route.fulfill({status:404,body:'Fixture portrait unavailable'}));
     const page=await context.newPage(),errors=[];page.on('pageerror',e=>{errors.push(e.message);console.error('Page error:',e.message);});
     await page.goto(`http://127.0.0.1:${server.address().port}/darts`);
     try{await page.locator('#todayGrid .today-live-game').waitFor({timeout:10000});}catch(e){console.error('Live state:',await page.locator('#todayPanel').innerText(),'streams',streams.size);throw e;}
@@ -142,7 +145,7 @@ const server=http.createServer((req,res)=>{
     await page.locator('#appLiveStrip .live-chip').click();
     await page.getByRole('button',{name:/Verkleinern: Marvin Schwenker gegen Max Lowak/}).waitFor();
     const appAvatar=page.locator('.compact-board .game-player-icons img');await appAvatar.waitFor();
-    await appAvatar.evaluate(img=>img.dispatchEvent(new Event('error')));
+    await page.waitForFunction(()=>{const image=document.querySelector('.compact-board .game-player-icons img');return image?.getAttribute('src')==='crest.webp'&&image.naturalWidth>0;});
     assert.equal(await appAvatar.getAttribute('src'),'crest.webp','the Web-App uses its cached crest when a portrait fails');
     assert.equal(await page.locator('.compact-board .fold p').first().isVisible(),true,'expanded app board shows the additional live values');
     await page.getByRole('button',{name:/Verkleinern: Marvin Schwenker gegen Max Lowak/}).click();
