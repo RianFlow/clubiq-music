@@ -16,6 +16,7 @@ const season={teams:[{id:100,code:'D',name:'SV Barver Darts D',league:{key:'demo
         if(url.pathname==='/api/v1/darts/players/1/photo')return route.fulfill({status:200,contentType:'image/webp',body:await fs.readFile(path.join(dist,'crest.webp'))});
         if(url.pathname==='/api/v1/darts/players/2/photo')return route.fulfill({status:404,body:''});
         if(url.pathname.startsWith('/api/')){if(url.pathname.endsWith('/player-profiles'))await profilesReady;const body=url.pathname.endsWith('/season')?season:url.pathname.endsWith('/player-profiles')?profiles():url.pathname.endsWith('/live')?{groups:[]}:url.pathname.endsWith('/trainings')?{events:[]}:{available:false,items:[]};return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});}
+        if(url.pathname.startsWith('/pics/teams/'))return route.fulfill({status:200,contentType:'image/webp',body:await fs.readFile(path.resolve(__dirname,'../..','.'+url.pathname))});
         const name=url.pathname.slice(5)||'index.html',type={html:'text/html',js:'text/javascript',css:'text/css',webp:'image/webp',png:'image/png',webmanifest:'application/manifest+json'}[name.split('.').pop()];return route.fulfill({status:200,contentType:type,body:await fs.readFile(path.join(dist,name))});
       });
       const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));await page.goto('https://barverdarts.clubiq.party/app/',{waitUntil:'domcontentloaded'});
@@ -23,6 +24,7 @@ const season={teams:[{id:100,code:'D',name:'SV Barver Darts D',league:{key:'demo
       await page.getByRole('button',{name:'Demo Kapitän, Profil öffnen',exact:true}).waitFor();
       assert.equal(await page.locator('#detail details[data-panel="roster-D"]').evaluate(n=>n.open),true);
       assert.match(await page.locator('.team-metrics').innerText(),/5:1/);assert.match(await page.locator('#detail').innerText(),/Vereinshaus/);
+      await page.waitForFunction(()=>document.querySelector('#detail .team-photo img')?.naturalWidth===2000);
       await page.getByRole('button',{name:'Demo Kapitän, Profil öffnen',exact:true}).click();
       releaseProfiles();await page.waitForFunction(()=>document.querySelector('.player-photo')?.src.includes('/players/1/photo?v=12')&&document.querySelector('.player-photo').complete,{},{timeout:10000}).catch(async e=>{console.error(JSON.stringify({width,dialog:await page.locator('#detail').innerText(),images:await page.locator('#detail img').evaluateAll(nodes=>nodes.map(n=>({src:n.src,complete:n.complete,width:n.naturalWidth}))),errors}));throw e;});
       assert.match(await page.locator('#detail').innerText(),/Rechtshänder/);assert.match(await page.locator('#detail').innerText(),/23 g/);
