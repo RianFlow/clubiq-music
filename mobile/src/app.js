@@ -3,7 +3,7 @@ import {App} from '@capacitor/app';
 import {Browser} from '@capacitor/browser';
 import {Preferences} from '@capacitor/preferences';
 import {PushNotifications} from '@capacitor/push-notifications';
-import {API_ORIGIN,TYPES,apiUrl,publicLink,cleanPreferences,matchesFor,sections,roleRank,notificationTarget,trainingNotificationTarget,liveBoardView,playerPortraits,matchLocation,matchSide,routeUrl,calendarEvent,calendarFile} from './model.js';
+import {API_ORIGIN,TYPES,apiUrl,publicLink,cleanPreferences,matchesFor,sections,roleRank,notificationTarget,trainingNotificationTarget,liveBoardView,playerPortraits,profileImagePath,matchLocation,matchSide,routeUrl,calendarEvent,calendarFile} from './model.js';
 import {createTraining} from './training.js';
 import {createNativePush} from './native-push.js';
 import {createPushTransport,deviceSecret} from './push-transport.js';
@@ -14,7 +14,7 @@ const webApp=__WEB_APP__;let webRegistration=null,installPrompt=null,applyWebUpd
 let state={season:{matches:[],teams:[]},live:{groups:[]},highlights:{items:[]},profiles:{players:{}}},cacheTimes={},failures={},preferences=cleanPreferences(),view='home',team='',busy=false,foreground=true;
 const training=createTraining({node,button,get,read,store,render:()=>{if(view==='training')render();},onSettings:()=>{navigate('settings');settingsPage='selection';render();}});
 training.setPreferenceLabel(()=>preferences.training?'Trainingsmeldungen: ausgewählt':'Trainingsmeldungen einstellen');
-let detailSequence=0,toastTimer,selectedMatch=null;
+let detailSequence=0,toastTimer,selectedMatch=null,activePlayer=null;
 let appearance='system',settingsPage='',onboardingDone=false,detailTeam='',teamScroll=0,detailBack=null;
 const Calendar=registerPlugin('BarverCalendar'),scrollPositions={},openPanels=new Set();
 const systemTheme=window.matchMedia('(prefers-color-scheme: dark)');
@@ -214,9 +214,9 @@ function render(){
 async function refresh(onlyLive=false){
   if(busy||!foreground)return;busy=true;q('#refresh').disabled=true;
   const jobs=onlyLive?['live']:['season','live','highlights','profiles'];
-  await Promise.all(jobs.map(async key=>{try{const payload=await get('/api/v1/darts/'+(key==='profiles'?'player-profiles':key));if(!payload||typeof payload!=='object')throw new Error('Ungültige Daten');if(key==='season'&&payload.degraded&&!state.season.degraded&&((state.season.matches||[]).length||(state.season.leagues||[]).some(l=>(l.standings||[]).length)))throw new Error('Teilstand ersetzt keine vollständigen gespeicherten Sportdaten');state[key]=payload;cacheTimes[key]=Date.now();failures[key]=false;await store('snapshot-'+key,{payload,savedAt:cacheTimes[key]});render();updateMatchLive();}catch(_){failures[key]=true;}}));busy=false;q('#refresh').disabled=false;render();updateMatchLive();if(!onlyLive&&selectedMatch)loadMatchReport(selectedMatch);
+  await Promise.all(jobs.map(async key=>{try{const payload=await get('/api/v1/darts/'+(key==='profiles'?'player-profiles':key));if(!payload||typeof payload!=='object')throw new Error('Ungültige Daten');if(key==='season'&&payload.degraded&&!state.season.degraded&&((state.season.matches||[]).length||(state.season.leagues||[]).some(l=>(l.standings||[]).length)))throw new Error('Teilstand ersetzt keine vollständigen gespeicherten Sportdaten');state[key]=payload;cacheTimes[key]=Date.now();failures[key]=false;await store('snapshot-'+key,{payload,savedAt:cacheTimes[key]});render();updateMatchLive();if(key==='season'||key==='profiles')updateTeamDetail();}catch(_){failures[key]=true;}}));busy=false;q('#refresh').disabled=false;render();updateMatchLive();if(!onlyLive&&selectedMatch)loadMatchReport(selectedMatch);
 }
-function dialog(title,back=null){detailBack=back;selectedMatch=null;const root=q('#detailContent');root.replaceChildren();if(back)root.append(button('‹ Zurück zum Team',back,'menu-back'));root.append(node('h2',title));if(!q('#detail').open)q('#detail').showModal();return root;}
+function dialog(title,back=null){detailBack=back;selectedMatch=null;activePlayer=null;const root=q('#detailContent');root.replaceChildren();if(back)root.append(button('‹ Zurück zum Team',back,'menu-back'));root.append(node('h2',title));if(!q('#detail').open)q('#detail').showModal();return root;}
 function updateMatchLive(){
   const detail=selectedMatch;if(!detail||!q('#detail').open)return;
   const match=matchesFor(state.season,state.live).find(m=>m.id===detail.id);
@@ -270,14 +270,52 @@ function openMatch(id){
   selectedMatch={id,ticket,live,report,label,score,loading:false,loaded:false};updateMatchLive();loadMatchReport(selectedMatch);refresh(true);
   if(webApp)root.append(button('Im TV-Modus verfolgen',()=>openTv(m?.barverTeam),'card more-matches'));
 }
+function profilePhoto(profile,name,cls=''){
+  const path=profileImagePath(profile.image),img=node('img',undefined,cls);
+  img.src=path?API_ORIGIN+path:'crest.webp';img.alt=path?'Foto von '+name:'SV Barver Darts';img.classList.toggle('is-logo',!path);
+  img.addEventListener('error',()=>{img.src='crest.webp';img.alt='SV Barver Darts';img.classList.add('is-logo');},{once:true});return img;
+}
+function teamMetrics(parent,selected,league){
+  const row=(league?.standings||[]).find(r=>r.id===selected?.id||r.name===selected?.name),metrics=node('dl',undefined,'team-metrics');
+  for(const [title,value] of [['Platz',row?.rank??selected?.rank??'–'],['Punkte',row?.pointsFor==null?'–':`${row.pointsFor}:${row.pointsAgainst??'–'}`],['Spiele',row?.played??'–']]){const item=node('div');item.append(node('dt',title),node('dd',value));metrics.append(item);}parent.append(metrics);
+}
 function openTeam(code,restore=false){
   detailTeam=code;
-  ++detailSequence;const selected=(state.season.teams||[]).find(t=>t.code===code),root=dialog('SV Barver Darts '+code);root.append(node('p',selected?.league?.name||'Mannschaftsdaten werden geladen.','muted'));const roster=[...(selected?.roster||[])].sort((a,b)=>roleRank(a)-roleRank(b)||String(a.name).localeCompare(String(b.name),'de'));
-  const league=(state.season.leagues||[]).find(l=>(l.league?.key||l.key)===selected?.league?.key);if(league)standings(root,league);const rosterRoot=collapsible(root,'Kader · '+roster.length+' Spieler','roster-'+code,()=>{});for(const member of roster){const profile=state.profiles.players?.[String(member.id)]||{},card=button('',()=>{teamScroll=q('#detail').scrollTop;openPlayer(member,profile,code);},'card member');const imagePath=profile.image||'';if(/^\/(pics\/players\/[^?#]+\.webp|api\/v1\/darts\/players\/\d+\/photo)$/.test(imagePath)){const img=node('img');img.src=API_ORIGIN+imagePath;img.alt='';img.loading='lazy';card.append(img);}const copy=node('div');copy.append(node('strong',member.name),node('small',[profile.alias,member.role].filter(Boolean).join(' · ')));card.append(copy);rosterRoot.append(card);}if(!roster.length)rosterRoot.append(node('p','Kader noch nicht verfügbar.','muted'));const grouped=sections(matchesFor(state.season,state.live,code));if(grouped.live.length)list(root,'Jetzt live',grouped.live,8);if(grouped.today.length)list(root,'Heute',grouped.today,4);list(root,'Demnächst',grouped.next,4);collapsible(root,'Letzte Ergebnisse','team-results-'+code,body=>list(body,'Ergebnisse',grouped.results,Infinity));q('#detail').scrollTop=restore?teamScroll:0;
+  ++detailSequence;const selected=(state.season.teams||[]).find(t=>t.code===code),root=dialog('SV Barver Darts '+code);
+  const league=(state.season.leagues||[]).find(l=>(l.league?.key||l.key)===selected?.league?.key);
+  root.append(node('p',selected?.league?.name||'Mannschaftsdaten werden geladen.','muted'));teamMetrics(root,selected,league);
+  const venue=matchLocation({homeVenue:selected?.venue});if(venue)root.append(node('p',venue,'muted venue'));
+  root.append(button('Mannschaft aktualisieren',()=>refresh(),'detail-refresh'));
+  const roster=[...(selected?.roster||[])].sort((a,b)=>roleRank(a)-roleRank(b)||String(a.name).localeCompare(String(b.name),'de'));
+  if(!restore)openPanels.add('roster-'+code);
+  const rosterRoot=collapsible(root,'Kader · '+roster.length+' Spieler','roster-'+code,()=>{});
+  for(const member of roster){
+    const profile=state.profiles.players?.[String(member.id)]||{},card=button('',()=>{teamScroll=q('#detail').scrollTop;openPlayer(member,state.profiles.players?.[String(member.id)]||{},code);},'card member');
+    card.dataset.memberId=String(member.id);card.setAttribute('aria-label',member.name+', Profil öffnen');card.append(profilePhoto(profile,member.name));
+    const copy=node('div');copy.append(node('strong',member.name),node('small',[profile.alias,member.role].filter(Boolean).join(' · ')),node('span','Profil öffnen →','member-link'));card.append(copy);rosterRoot.append(card);
+  }
+  if(!roster.length)rosterRoot.append(node('p',failures.season?'Kader gerade nicht erreichbar. Bitte erneut aktualisieren.':'Kader noch nicht verfügbar.','muted'));
+  const grouped=sections(matchesFor(state.season,state.live,code));if(grouped.live.length)list(root,'Jetzt live',grouped.live,8);if(grouped.today.length)list(root,'Heute',grouped.today,4);
+  list(root,'Demnächst',grouped.next.filter(m=>!grouped.today.some(t=>t.id===m.id)),4);
+  if(league)collapsible(root,'Ligatabelle','team-table-'+code,body=>standings(body,league));
+  collapsible(root,'Letzte Ergebnisse','team-results-'+code,body=>list(body,'Ergebnisse',grouped.results,Infinity));q('#detail').scrollTop=restore?teamScroll:0;
 }
 function openPlayer(member,profile,code){
   detailTeam=code;
-  ++detailSequence;const root=dialog(member.name,()=>openTeam(code,true));q('#detail').scrollTop=0;if(profile.alias)root.append(node('p','„'+profile.alias+'“'));for(const [key,title]of [['darts','Darts'],['weightGrams','Gewicht'],['favoritePdcPlayer','Lieblingsspieler'],['favoriteFinish','Lieblingsfinish'],['finishRoute','Weg zum Finish'],['walkOnSong','Einlaufmusik']])if(profile.personal?.[key])root.append(node('h3',title),node('p',String(profile.personal[key])+(key==='weightGrams'?' g':'')));if(!Object.keys(profile.personal||{}).length)root.append(node('p','Persönliche Angaben werden noch ergänzt.','muted'));
+  ++detailSequence;const root=dialog(member.name,()=>openTeam(code,true));activePlayer={member,code};q('#detail').scrollTop=0;
+  const hero=node('section',undefined,'player-hero');hero.append(profilePhoto(profile,member.name,'player-photo'));const copy=node('div');copy.append(node('strong','Barver '+code),node('p',member.role||profile.role||'Spieler'));if(profile.alias)copy.append(node('p','„'+profile.alias+'“','player-alias'));hero.append(copy);root.append(hero);
+  root.append(button('Profil aktualisieren',()=>refresh(),'detail-refresh'));
+  const personal=node('dl',undefined,'player-personal');
+  for(const [key,title]of [['throwingHand','Wurfhand'],['darts','Darts'],['weightGrams','Gewicht'],['favoritePdcPlayer','Lieblingsspieler'],['favoriteFinish','Lieblingsfinish'],['finishRoute','Weg zum Finish'],['walkOnSong','Einlaufmusik']]){
+    const value=profile.personal?.[key];if(value!==undefined&&value!==null&&value!==''){const entry=node('div'),display=key==='throwingHand'?({left:'Linkshänder',right:'Rechtshänder'})[value]:String(value)+(key==='weightGrams'?' g':'');if(display){entry.append(node('dt',title),node('dd',display));personal.append(entry);}}
+  }
+  if(personal.childElementCount)root.append(node('h3','Persönliche Angaben'),personal);else root.append(node('p','Persönliche Angaben werden noch ergänzt.','muted'));
+}
+function updateTeamDetail(){
+  if(!q('#detail').open||!detailTeam||selectedMatch)return;
+  const scroll=q('#detail').scrollTop,focused=document.activeElement?.dataset?.memberId,player=activePlayer;
+  if(player)openPlayer(player.member,state.profiles.players?.[String(player.member.id)]||{},player.code);else{teamScroll=scroll;openTeam(detailTeam,true);}
+  q('#detail').scrollTop=scroll;if(focused)q(`#detail [data-member-id="${focused}"]`)?.focus({preventScroll:true});
 }
 function openNotification(data){const trainingId=trainingNotificationTarget(data);if(trainingId){if(q('#detail').open)q('#detail').close();view='training';training.select(trainingId);render();}else{const id=notificationTarget(data);if(id)openMatch(id);}}
 function rememberPush(n){const id=String(n.data?.eventId||n.id||'');if(id&&pushHistory.some(h=>h.id===id))return;pushHistory.unshift({id,title:String(n.title||'Barver Darts').slice(0,200),body:String(n.body||'').slice(0,600),data:{matchId:notificationTarget(n.data),...(trainingNotificationTarget(n.data)?{scope:'training',trainingId:trainingNotificationTarget(n.data)}:{})},at:Number(n.at)||Date.now()});pushHistory=pushHistory.slice(0,50);store('push-history',pushHistory);if(view==='settings')render();}

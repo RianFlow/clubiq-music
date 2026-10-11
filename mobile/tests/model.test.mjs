@@ -1,6 +1,11 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {apiUrl,publicLink,cleanPreferences,activeBoards,matchesFor,sections,roleRank,notificationTarget,liveBoardView,playerPortraits,matchLocation,matchSide,routeUrl,calendarEvent,calendarFile} from '../src/model.js';
+import {apiUrl,publicLink,cleanPreferences,activeBoards,matchesFor,sections,roleRank,notificationTarget,liveBoardView,playerPortraits,profileImagePath,matchLocation,matchSide,routeUrl,calendarEvent,calendarFile} from '../src/model.js';
+
+test('profile photos accept current versioned uploads while rejecting unrelated URLs',()=>{
+  for(const path of ['/api/v1/darts/players/89025/photo?v=1791723833','/pics/players/ralf-cutout.webp?v=20261011','/api/v1/darts/players/1/photo'])assert.equal(profileImagePath(path),path);
+  for(const path of ['https://example.com/photo.webp','//example.com/photo.webp','/api/v1/darts/admin/players/1/photo','/pics/players/../logo.webp','/api/v1/darts/players/1/photo?v=1&redirect=other'])assert.equal(profileImagePath(path),'');
+});
 test('Barver game portraits retain real photos and use the crest for missing, unsafe or ambiguous images',()=>{
   const profiles=[{name:'Max Lowak',team:'B',image:'/pics/players/max-lowak-cutout.webp'}];
   const pair=playerPortraits('M. Lowak & René Lange','SV Barver Darts B',profiles);

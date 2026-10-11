@@ -42,6 +42,10 @@ export function liveBoardView(board,now=Date.now(),unavailable=false){
     throwing:!stale&&board.currentPlayerIndex===index,
   }))};
 }
+export function profileImagePath(value){
+  const path=String(value||'');
+  return /^\/pics\/players\/[a-z0-9][a-z0-9._-]*\.(?:avif|jpe?g|png|webp)(?:\?v=\d+)?$/i.test(path)||/^\/api\/v1\/darts\/players\/\d{1,12}\/photo(?:\?v=\d+)?$/i.test(path)?path:'';
+}
 export function playerPortraits(name,team,profiles=[]){
   const code=/^SV\s+Barver\s+Darts\s+([A-D])$/i.exec(String(team||''))?.[1]?.toUpperCase();
   if(!code)return [];
@@ -52,8 +56,7 @@ export function playerPortraits(name,team,profiles=[]){
     let matches=candidates.filter(p=>key(p.name)===key(part));
     const initial=key(part).match(/^([a-z])\.\s*(.+)$/);
     if(!matches.length&&initial)matches=candidates.filter(p=>{const parts=key(p.name).split(' ');return parts[0]?.[0]===initial[1]&&parts.slice(1).join(' ')===initial[2];});
-    const profile=matches.length===1?matches[0]:null,path=String(profile?.image||'');
-    const safe=/^\/pics\/players\/[a-z0-9][a-z0-9._-]*\.(?:avif|jpe?g|png|webp)(?:\?v=\d+)?$/i.test(path)||/^\/api\/v1\/darts\/players\/\d{1,12}\/photo(?:\?v=\d+)?$/i.test(path);
+    const profile=matches.length===1?matches[0]:null,path=profileImagePath(profile?.image),safe=!!path;
     const displayName=profile?.name||part;
     if(!result.some(p=>key(p.name)===key(displayName)))result.push({name:displayName,image:safe?path:'/pics/sv-barver-darts-tight-512.webp',fallback:!safe});
   }
