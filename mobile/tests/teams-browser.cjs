@@ -1,12 +1,12 @@
 // Local fixtures only: delayed profiles, versioned photos and missing-image fallback.
 const assert=require('node:assert/strict'),fs=require('node:fs/promises'),path=require('node:path');
 const {chromium}=require('playwright');
-const dist=path.resolve(__dirname,'../web-dist'),errors=[],writes=[];
+const dist=path.resolve(__dirname,'../web-dist'),errors=[];
 let releaseProfiles,profilesReady=new Promise(resolve=>releaseProfiles=resolve),photoVersion='12';
 const profiles=()=>({players:{'1':{name:'Demo Kapitän',team:'D',image:'/api/v1/darts/players/1/photo?v='+photoVersion,alias:'Treffer',personal:{throwingHand:'right',weightGrams:23}},'2':{name:'Demo Gast',team:'D',image:'/api/v1/darts/players/2/photo?v=9'}}});
 const season={teams:[{id:100,code:'D',name:'SV Barver Darts D',league:{key:'demo',name:'Demo-Liga'},rank:2,venue:{name:'Vereinshaus',street:'Dartweg 1',city:'Barver'},roster:[{id:1,name:'Demo Kapitän',role:'Kapitän'},{id:2,name:'Demo Gast',role:'Spieler'},{id:3,name:'Ohne Foto',role:'Spieler'}]}],matches:[],leagues:[{league:{key:'demo',name:'Demo-Liga'},standings:[{id:100,name:'SV Barver Darts D',rank:2,pointsFor:5,pointsAgainst:1,played:3,barver:true}]}]};
 (async()=>{
-  const browser=await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL||'msedge'});
+  const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHANNEL?{channel:process.env.PLAYWRIGHT_CHANNEL}:{})});
   try{
     for(const width of [320,390,1280]){
       const context=await browser.newContext({viewport:{width,height:900},serviceWorkers:'block'});
@@ -39,6 +39,6 @@ const season={teams:[{id:100,code:'D',name:'SV Barver Darts D',league:{key:'demo
       assert.equal(await page.locator('details[data-panel="roster-D"]').evaluate(n=>n.open),false,'refresh preserves collapsed roster');
       await context.close();photoVersion='12';
     }
-    assert.deepEqual(errors,[]);assert.deepEqual(writes,[]);console.log('Team checks passed: delayed profile refresh, versioned images, fallback, player details, back navigation, collapsed-state preservation, phone/desktop in both themes.');
+    assert.deepEqual(errors,[]);console.log('Team checks passed: delayed profile refresh, versioned images, fallback, player details, back navigation, collapsed-state preservation, phone/desktop in both themes.');
   }finally{await browser.close();}
 })().catch(e=>{console.error(e.stack);releaseProfiles();process.exitCode=1;});
