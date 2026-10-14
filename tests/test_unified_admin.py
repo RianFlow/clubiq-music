@@ -32,6 +32,12 @@ def connection(row):
     return connect
 
 
+class LocalSession(requests.Session):
+    def request(self, *args, **kwargs):
+        kwargs.setdefault('timeout', 5)
+        return super().request(*args, **kwargs)
+
+
 class UnifiedAdminTests(unittest.TestCase):
     def test_http_shared_login_migration_and_private_cache_policy(self):
         with patch.object(main, 'ADMIN_PASSWORD', 'test-password'), patch.object(main, 'DARTS_ADMIN_USERNAME', 'owner'):
@@ -46,7 +52,7 @@ class UnifiedAdminTests(unittest.TestCase):
                     if server.started:break
                     time.sleep(.01)
                 self.assertTrue(server.started)
-                client=requests.Session()
+                client=LocalSession()
                 client.cookies.set(COOKIE,'a'*64,domain='127.0.0.1',path='/api/v1/cms')
                 route='/api/v1/darts/admin/verify'
                 self.assertEqual(client.get(origin+route).status_code,401)

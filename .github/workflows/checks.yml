@@ -102,7 +102,10 @@ jobs:
       - name: Web-Image bauen
         run: docker compose build web
       - name: Sicherheits- und UI-Verträge prüfen
-        run: docker compose run --rm --no-deps web python -m unittest discover -s tests
+        timeout-minutes: 5
+        # Unit tests must not try the absent database or read production snapshots.
+        # Real persistence is checked in the following isolated PostgreSQL steps.
+        run: docker compose run --rm --no-deps -e DB_PASSWORD= -e DARTS_COLLECTOR_READ_ENABLED=0 web python -m unittest discover -s tests -v
       - name: Soundboard-Migration mit PostgreSQL prüfen
         run: |
           docker compose up -d --wait db
