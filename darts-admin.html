@@ -8,9 +8,11 @@
   <title>ClubIQ · Dartsverwaltung</title>
   <link rel="icon" href="/pics/logo.png">
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
-  <link rel="stylesheet" href="/static/darts-admin.css?v=20261010-cms1">
+  <link rel="stylesheet" href="/static/darts-admin.css?v=20261014-admin1">
   <script defer src="/static/darts-social-icons.js?v=20261004-clear1"></script>
-  <script defer src="/static/darts-admin.js?v=20261004-experience1"></script>
+  <script defer src="/static/darts-admin.js?v=20261014-admin1"></script>
+  <script defer src="/static/darts-admin-embedded.js?v=20261014-admin1"></script>
+  <link rel="stylesheet" href="/static/darts-admin-workspace.css?v=20261014-admin1">
 <link rel="stylesheet" href="/static/darts-typography.css?v=20261004-type1"></head>
 <body>
   <header class="admin-header">
@@ -84,6 +86,7 @@
         </form>
         </div>
       </section>
+      <section id="trainingAdminView" hidden><div class="admin-intro"><div><p>Gefundene Trainings und ihren Datenstand prüfen.</p></div></div><section class="editor-card"><p id="trainingAdminStatus" role="status">Trainings werden geladen …</p><div class="form-actions"><button id="refreshAdminTrainings" type="button">Trainings suchen</button><a href="/training" target="_blank" rel="noopener">Trainingsseite öffnen ↗</a></div><p class="training-help">Die automatische Suche läuft auf dem Server. Eine Anmeldung in der 3K-App kann bereits bestehen, bevor ein Training in der öffentlichen Vereinsliste erscheint. Ein fehlender Termin bedeutet deshalb nicht automatisch eine Verbindungsstörung.</p><div id="trainingAdminList" class="training-catalog"></div></section></section>
       <section id="tournamentAdminView" hidden>
         <div class="admin-intro"><div><p class="eyebrow">Live & TV</p><h1>Turnier auswählen</h1><p>Der aktive Turnierlink gilt für alle Besucher. Veranstaltungsbanner werden davon unabhängig verwaltet.</p></div></div>
         <form id="tournamentForm" class="editor-card">

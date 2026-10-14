@@ -240,6 +240,34 @@ def public_post(row, slug):
             "href": f"/vereine/{slug}/beitraege/{row[0]}"}
 
 
+def session_subject(request, connect, owner_fingerprint):
+    """Validate the same CMS session for both administration surfaces."""
+    private_headers = {"Cache-Control": "no-store"}
+    if request.method not in ("GET", "HEAD", "OPTIONS") and request.headers.get("X-CMS-Request") != "1":
+        raise HTTPException(403, "Bitte die Verwaltung erneut öffnen.", headers=private_headers)
+    token = request.cookies.get(COOKIE, "")
+    if not re.fullmatch(r"[a-f0-9]{64}", token):
+        raise HTTPException(401, "Bitte anmelden.", headers=private_headers)
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("""SELECT s.user_id,s.owner_fingerprint,u.club_id,u.active,u.username
+                       FROM cms_sessions s LEFT JOIN cms_users u ON u.id=s.user_id
+                       WHERE s.token_hash=%s AND s.expires_at>CURRENT_TIMESTAMP""",
+                    (hashlib.sha256(token.encode()).hexdigest(),))
+        row = cur.fetchone()
+    if row and row[0] is None and row[1] and hmac.compare_digest(row[1], owner_fingerprint()):
+        return {"owner": True, "clubId": None, "username": "Administrator"}
+    if row and row[0] is not None and row[3]:
+        return {"owner": False, "clubId": row[2], "username": row[4]}
+    raise HTTPException(401, "Die Anmeldung ist abgelaufen. Bitte erneut anmelden.", headers=private_headers)
+
+
+def session_cookie(response, request, token):
+    # Migrate existing sessions without leaving a second, narrower cookie behind.
+    response.delete_cookie(COOKIE, path="/api/v1/cms")
+    response.set_cookie(COOKIE, token, max_age=8 * 3600, httponly=True, samesite="strict",
+                        secure=request.url.hostname not in ("localhost", "127.0.0.1", "testserver"), path="/api/v1")
+
+
 def create_router(connect, owner_credentials, owner_fingerprint, validate_image, owner_username=lambda: "", darts_worker=None):
     router = APIRouter()
     attempts = {}
@@ -251,22 +279,7 @@ def create_router(connect, owner_credentials, owner_fingerprint, validate_image,
 
     def subject(request: Request, response: Response):
         private(response)
-        if request.method not in ("GET", "HEAD", "OPTIONS") and request.headers.get("X-CMS-Request") != "1":
-            raise HTTPException(403, "Bitte die Verwaltung erneut öffnen.", headers={"Cache-Control": "no-store"})
-        token = request.cookies.get(COOKIE, "")
-        if not re.fullmatch(r"[a-f0-9]{64}", token):
-            raise HTTPException(401, "Bitte anmelden.", headers={"Cache-Control": "no-store"})
-        with connect() as conn, conn.cursor() as cur:
-            cur.execute("""SELECT s.user_id,s.owner_fingerprint,u.club_id,u.active,u.username
-                           FROM cms_sessions s LEFT JOIN cms_users u ON u.id=s.user_id
-                           WHERE s.token_hash=%s AND s.expires_at>CURRENT_TIMESTAMP""",
-                        (hashlib.sha256(token.encode()).hexdigest(),))
-            row = cur.fetchone()
-        if row and row[0] is None and row[1] and hmac.compare_digest(row[1], owner_fingerprint()):
-            return {"owner": True, "clubId": None, "username": "Administrator"}
-        if row and row[0] is not None and row[3]:
-            return {"owner": False, "clubId": row[2], "username": row[4]}
-        raise HTTPException(401, "Die Anmeldung ist abgelaufen. Bitte erneut anmelden.", headers={"Cache-Control": "no-store"})
+        return session_subject(request, connect, owner_fingerprint)
 
     def owner(user):
         if not user["owner"]:
@@ -362,8 +375,7 @@ def create_router(connect, owner_credentials, owner_fingerprint, validate_image,
                         (hashlib.sha256(token.encode()).hexdigest(), user_id, fingerprint, datetime.now(timezone.utc) + timedelta(hours=8)))
         with attempts_lock:
             attempts.pop(key, None)
-        response.set_cookie(COOKIE, token, max_age=8 * 3600, httponly=True, samesite="strict",
-                            secure=request.url.hostname not in ("localhost", "127.0.0.1", "testserver"), path="/api/v1/cms")
+        session_cookie(response, request, token)
         return {"ok": True}
 
     @router.delete("/api/v1/cms/session")
@@ -376,10 +388,12 @@ def create_router(connect, owner_credentials, owner_fingerprint, validate_image,
             with connect() as conn, conn.cursor() as cur:
                 cur.execute("DELETE FROM cms_sessions WHERE token_hash=%s", (hashlib.sha256(token.encode()).hexdigest(),))
         response.delete_cookie(COOKIE, path="/api/v1/cms")
+        response.delete_cookie(COOKIE, path="/api/v1")
         return {"ok": True}
 
     @router.get("/api/v1/cms/session")
-    def session(user=Depends(subject)):
+    def session(request: Request, response: Response, user=Depends(subject)):
+        session_cookie(response, request, request.cookies[COOKIE])
         return user
 
     @router.get("/api/v1/cms/clubs")
