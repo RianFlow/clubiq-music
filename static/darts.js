@@ -989,7 +989,7 @@ function initDarts() {
   }
   function renderHomeTeam(matches){
     const target=q('#homeTeamOverview');target.replaceChildren();const team=teamByCode(favorite);
-    q('#homeTeamHeading').textContent=team?team.name:'Mein Verein';
+    q('#homeTeamHeading').textContent=team?team.name:'Meine Mannschaft';
     if(!team){const copy=document.createElement('p');copy.textContent=favorite==='all'?'Wähle deine Mannschaft. Ihre Termine, Ergebnisse und der Tabellenplatz erscheinen dann hier.':'Mannschaftsdaten werden geladen …';target.append(copy);const choices=document.createElement('div');choices.className='home-team-choices';for(const code of ['A','B','C','D']){const button=document.createElement('button');button.type='button';button.textContent=`Barver ${code}`;button.addEventListener('click',()=>selectFavorite(code));choices.append(button);}target.append(choices);return;}
     const next=[...matches].filter(match=>(match.barverTeams||[barverTeam(match)]).includes(favorite)&&['upcoming','live'].includes(match.kind)).sort((a,b)=>Date.parse(a.plannedAt)-Date.parse(b.plannedAt))[0];
     const last=[...matches].filter(match=>match.kind==='final'&&(match.barverTeams||[barverTeam(match)]).includes(favorite)).sort((a,b)=>Date.parse(b.plannedAt||b.updatedAt||0)-Date.parse(a.plannedAt||a.updatedAt||0))[0];
@@ -1023,7 +1023,6 @@ function initDarts() {
     target.replaceChildren();
     for(const item of items){const card=document.createElement('article');card.className='appointment-card';const type=document.createElement('small');type.textContent={match:'Mannschaftsspiel',training:'Training',event:'Veranstaltung'}[item.kind];const title=document.createElement('h3');title.textContent=item.title;const date=document.createElement('time');date.dateTime=item.start;date.textContent=new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',weekday:'short',day:'2-digit',month:'2-digit',...(item.allDay?{}:{hour:'2-digit',minute:'2-digit'})}).format(new Date(item.start))+(item.allDay?' · ganztägig':' Uhr');const location=document.createElement('p');location.textContent=item.location||'Spielort noch nicht hinterlegt';const actions=document.createElement('div');actions.className='appointment-actions';actions.append(calendarButton(item));if(item.location){const route=document.createElement('a');route.href=`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(item.location)}`;route.target='_blank';route.rel='noopener noreferrer';route.textContent='Route öffnen';actions.append(route);}if(item.match){const open=document.createElement('button');open.type='button';open.textContent='Spiel ansehen';open.addEventListener('click',()=>openMatch(item.match.id));actions.append(open);}else if(item.kind==='training'){const open=document.createElement('button');open.type='button';open.textContent='Trainingsbereich öffnen';open.addEventListener('click',()=>setSection('training'));actions.append(open);}else if(item.href){const open=document.createElement('a');open.href=item.href;open.target='_blank';open.rel='noopener noreferrer';open.textContent='Mehr erfahren';actions.append(open);}card.append(type,title,date,location,actions);target.append(card);}
     q('#nextAppointmentsNote').textContent=favorite==='all'?'Alle Mannschaften und der Verein':`Barver ${favorite} und der Verein`;
-    const summary=q('#myTeamSummary');summary.replaceChildren();const team=teamByCode(favorite);if(team){const heading=document.createElement('h3');heading.textContent=team.name;const rank=document.createElement('p');rank.textContent=team.rank?`Tabellenplatz ${team.rank}`:'Tabellenplatz noch nicht verfügbar';summary.append(heading,rank);const next=items.find(i=>i.kind==='match');if(next){const label=document.createElement('p');label.textContent='Nächstes Spiel';summary.append(label,makeProfileMatch(next.match,favorite));}const recent=[...matches.values()].filter(m=>m.kind==='final'&&(m.barverTeams||[barverTeam(m)]).includes(favorite)).sort((a,b)=>Date.parse(b.plannedAt||b.updatedAt||0)-Date.parse(a.plannedAt||a.updatedAt||0))[0];if(recent){const label=document.createElement('p');label.textContent='Letztes Ergebnis';summary.append(label,makeProfileMatch(recent,favorite));}const open=document.createElement('button');open.type='button';open.textContent='Mannschaft öffnen';open.addEventListener('click',()=>openTeamByCode(favorite));summary.append(open);}else{const text=document.createElement('p');text.textContent=favorite==='all'?'Wähle deine Mannschaft, um ihre Termine und Ergebnisse zuerst zu sehen.':'Die Mannschaftsdaten werden geladen …';summary.append(text);}
   }
   let profileReturnMatch=null;
   function matchPlayerNode(name,matchId,side) {
@@ -1988,7 +1987,7 @@ function initDarts() {
   }
   function openJoin(){setSection('join');renderJoin();loadSeason().then(renderJoin);}
   q('#joinView').addEventListener('click',openJoin);q('#joinTeaserButton').addEventListener('click',openJoin);
-  function focusSection(){const ids={today:'homeTeamHeading',teams:'seasonHeading',league:'leagueHeading',ranking:'rankingHeading',tv:'tvScheduleHeading',join:'joinHeading',members:'membersHeading',training:'trainingHeading',cup:'cupHeading'};const heading=q(`#${ids[currentSection]||'homeTeamHeading'}`);if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});heading.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth'});}}
+  function focusSection(){const ids={today:'matchCenterHeading',teams:'seasonHeading',league:'leagueHeading',ranking:'rankingHeading',tv:'tvScheduleHeading',join:'joinHeading',members:'membersHeading',training:'trainingHeading',cup:'cupHeading'};const heading=q(`#${ids[currentSection]||'nextAppointmentsHeading'}`);if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});heading.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth'});}}
   const mobileTargets={today:'todayView',teams:'gridView',league:'leagueView'};
   for(const button of document.querySelectorAll('[data-mobile-section]'))button.addEventListener('click',()=>{const section=button.dataset.mobileSection;if(section==='more')q('#mobileMenuDialog').showModal();else{q(`#${mobileTargets[section]}`).click();focusSection();}});
   q('#closeMobileMenu').addEventListener('click',()=>q('#mobileMenuDialog').close());
@@ -2231,8 +2230,7 @@ function initDarts() {
   const tvDate=value=>new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',weekday:'short',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(value))+' Uhr';
   function tvScheduleEvents(){return (tvScheduleData?.events||[]).filter(item=>{try{const url=new URL(item.url);return Date.parse(item.start)>Date.now()&&url.protocol==='https:'&&url.hostname==='www.sport1.de'&&url.pathname.startsWith('/tv-video/stream/');}catch(_){return false;}}).sort((a,b)=>Date.parse(a.start)-Date.parse(b.start)).slice(0,12);}
   function renderTvSchedule(){
-    const events=tvScheduleEvents(),next=events[0],fragment=document.createDocumentFragment();
-    q('#tvTeaserHeading').textContent=next?next.title:'Wann läuft wieder Darts?';q('#tvTeaserCopy').textContent=next?`${tvDate(next.start)} · SPORT1 · Livestream`:tvScheduleData?.available?'Noch kein weiterer Livestream veröffentlicht.':'Kommende Livestreams und Anbieterprogramme.';
+    const events=tvScheduleEvents(),fragment=document.createDocumentFragment();
     for(const item of events){const card=document.createElement('article');card.className='tv-schedule-card';const date=document.createElement('time');date.dateTime=item.start;date.textContent=tvDate(item.start);const title=document.createElement('h2');title.textContent=item.title;const provider=document.createElement('span');provider.className='tv-provider';provider.textContent='SPORT1 · Livestream';const link=document.createElement('a');link.href=item.url;link.target='_blank';link.rel='noopener noreferrer';link.className='external';link.textContent='Zum Livestream ↗';card.append(date,title,provider,link);fragment.append(card);}
     if(!events.length){const empty=document.createElement('p');empty.className='tv-schedule-empty';empty.textContent=tvScheduleData?.available?'SPORT1 hat hier noch keinen weiteren Darts-Livestream veröffentlicht. Schau auch in die Anbieterprogramme unten.':'Die Termine konnten gerade nicht geladen werden. Du kannst die Anbieterprogramme unten direkt öffnen.';fragment.append(empty);}
     q('#tvScheduleList').replaceChildren(fragment);
@@ -2243,24 +2241,24 @@ function initDarts() {
     tvScheduleLoading=true;q('#reloadTvSchedule').disabled=true;
     try{const response=await fetch('/api/v1/darts/tv',{headers:{Accept:'application/json'}});if(!response.ok)throw new Error();tvScheduleData=await response.json();tvScheduleLoadedAt=Date.now();}catch(_){if(tvScheduleData)tvScheduleData={...tvScheduleData,stale:true};else tvScheduleData={available:false,events:[]};}finally{renderTvSchedule();tvScheduleLoading=false;q('#reloadTvSchedule').disabled=false;}
   }
-  q('#tvScheduleView').addEventListener('click',()=>{setSection('tv');loadTvSchedule();});q('#tvTeaserButton').addEventListener('click',()=>{q('#tvScheduleView').click();focusSection();});q('#reloadTvSchedule').addEventListener('click',()=>loadTvSchedule(true));
-  window.setInterval(()=>{renderTvSchedule();if(!document.hidden)loadTvSchedule();},60000);
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden){renderTvSchedule();loadTvSchedule();}});
+  q('#tvScheduleView').addEventListener('click',()=>{setSection('tv');loadTvSchedule();});q('#reloadTvSchedule').addEventListener('click',()=>loadTvSchedule(true));
+  window.setInterval(()=>{if(!document.hidden&&currentSection==='tv'){renderTvSchedule();loadTvSchedule();}},60000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&currentSection==='tv'){renderTvSchedule();loadTvSchedule();}});
   const requestedSection=new URLSearchParams(location.search).get('view');
   let currentSection='today',sectionNavigationReady=false;
   function setSection(section) {
     if(section==='training'){location.assign('/training');return;}
-    currentSection=section;if(sectionNavigationReady){const url=new URL(location.href);if(section==='today')url.searchParams.delete('view');else url.searchParams.set('view',section);history.replaceState(null,'',url);}window.scrollTo({top:0,behavior:'instant'});
+    currentSection=section;q('#personalSettings').open=false;if(sectionNavigationReady){const url=new URL(location.href);if(section==='today')url.searchParams.delete('view');else url.searchParams.set('view',section);history.replaceState(null,'',url);}window.scrollTo({top:0,behavior:'instant'});
     const teams = section === 'teams';
     grid.hidden = true; q('.intro').hidden = !teams;
     q('#layoutControls').hidden = true;
     q('#seasonPanel').hidden = !teams;
     q('#activityPanel').hidden = section !== 'activity';
     q('#trainingPanel').hidden = section !== 'training';
-    q('#tvSchedulePanel').hidden=section!=='tv';q('#tvScheduleTeaser').hidden=section!=='today';q('#tvScheduleView').setAttribute('aria-pressed',String(section==='tv'));
+    q('#tvSchedulePanel').hidden=section!=='tv';q('#tvScheduleView').setAttribute('aria-pressed',String(section==='tv'));
     q('#rankingPanel').hidden = section !== 'ranking';
     q('#rankingView').setAttribute('aria-pressed',String(section==='ranking'));
-    q('#todayPanel').hidden = section !== 'today';q('#nextAppointments').hidden=section!=='today';q('#homeTeamPanel').hidden=section!=='today';q('#joinTeaser').hidden=section!=='today';q('#joinPanel').hidden=section!=='join';
+    q('#todayPanel').hidden = section !== 'today';q('#homeTeamsPanel').hidden=section!=='today';q('#nextAppointments').hidden=section!=='today';q('#joinTeaser').hidden=section!=='today';q('#joinPanel').hidden=section!=='join';
     for(const button of document.querySelectorAll('[data-mobile-section]'))button.setAttribute('aria-pressed',String(button.dataset.mobileSection===section||(button.dataset.mobileSection==='more'&&!['today','teams','league'].includes(section))));
     q('#leaguePanel').hidden = section !== 'league';
     q('#cupPanel').hidden = section !== 'cup';
@@ -2305,9 +2303,9 @@ function initDarts() {
   q('#seasonTeam').addEventListener('change',renderSeason);
   q('#seasonStatus').addEventListener('click',event=>{ const button=event.target.closest('button[data-status]'); if (!button) return; seasonStatus=button.dataset.status; renderSeason(); });
   q('#reloadSeason').addEventListener('click',()=>loadSeason(true));
-  q('#favoriteTeam').value=favorite;q('#myFavoriteTeam').value=favorite;q('#homeTeam').value=favorite;
-  function selectFavorite(value){favorite=value;try{localStorage.setItem(favoriteKey,favorite);}catch(_){}q('#favoriteTeam').value=favorite;q('#myFavoriteTeam').value=favorite;q('#homeTeam').value=favorite;renderTicker(tickerData);}
-  q('#myFavoriteTeam').addEventListener('change',()=>selectFavorite(q('#myFavoriteTeam').value));window.setInterval(renderExperience,60000);
+  q('#favoriteTeam').value=favorite;q('#homeTeam').value=favorite;
+  function selectFavorite(value){favorite=value;try{localStorage.setItem(favoriteKey,favorite);}catch(_){}q('#favoriteTeam').value=favorite;q('#homeTeam').value=favorite;renderTicker(tickerData);}
+  window.setInterval(renderExperience,60000);
   q('#favoriteTeam').addEventListener('change',()=>selectFavorite(q('#favoriteTeam').value));
   q('#tvTeamControls').addEventListener('click',event=>{
     const button=event.target.closest('button[data-tv-team]'); if(!button) return;
@@ -2412,11 +2410,9 @@ function initDarts() {
   }
   applyLayout();
   setSection('today');
-  loadTvSchedule();
   q('#todayView').textContent='Startseite';
   q('#todayGrid').before(q('#nextAppointments'));
-  q('#todayGrid').after(q('.match-center'));
-  q('.match-center').after(q('#clubEventBanner'));
+  q('#clubNewsPanel').after(q('#clubEventBanner'));
   q('#trainingPanel').append(q('.club-training'));
   q('#scheduleDetails').after(q('#sponsorInline'));
   q('#todayGrid').classList.add('featured-live');
