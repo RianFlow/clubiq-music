@@ -7,12 +7,13 @@ function applyAdminTheme(theme) {
 }
 applyAdminTheme(document.documentElement.dataset.theme==='dark'?'dark':'light');
 $('#adminThemeToggle').addEventListener('click',()=>applyAdminTheme(document.documentElement.dataset.theme==='dark'?'light':'dark'));
-const state = { username: sessionStorage.getItem('clubiq_darts_admin_username') || '', password: sessionStorage.getItem('clubiq_darts_admin') || '', players: [], selected: null, pendingPhoto: null, previewUrl: '', sponsors: [], selectedSponsor: null, pendingSponsorLogo: null, events: [], selectedEvent: null, pendingEventImage: null, eventImageObjectUrl: '', socialLinks: [], selectedSocial: null };
-state.cookieMode=new URLSearchParams(location.search).get('embedded')==='1';
+const embeddedCookieMode=new URLSearchParams(location.search).get('embedded')==='1';
+const state = { username: embeddedCookieMode?'':sessionStorage.getItem('clubiq_darts_admin_username') || '', password: embeddedCookieMode?'':sessionStorage.getItem('clubiq_darts_admin') || '', players: [], selected: null, pendingPhoto: null, previewUrl: '', sponsors: [], selectedSponsor: null, pendingSponsorLogo: null, events: [], selectedEvent: null, pendingEventImage: null, eventImageObjectUrl: '', socialLinks: [], selectedSocial: null };
+state.cookieMode=embeddedCookieMode;
 if(state.cookieMode){
   document.documentElement.dataset.embedded='true';
   state.username='';state.password='';
-  sessionStorage.removeItem('clubiq_darts_admin');sessionStorage.removeItem('clubiq_darts_admin_username');
+  try{sessionStorage.removeItem('clubiq_darts_admin');sessionStorage.removeItem('clubiq_darts_admin_username');}catch(_){}
 }
 
 async function api(path, options = {}) {
@@ -317,7 +318,8 @@ async function loadProtectedEventImage(item){
   if(!item?.id||!item.hasImage)return;
   const selectedId=item.id;
   try{
-    const response=await fetch(`/api/v1/darts/admin/events/${selectedId}/image`,{headers:{'X-Admin-Password':state.password,'X-Admin-Username':state.username},cache:'no-store'});
+    const headers=state.cookieMode?{'X-CMS-Request':'1'}:{'X-Admin-Password':state.password,'X-Admin-Username':state.username};
+    const response=await fetch(`/api/v1/darts/admin/events/${selectedId}/image`,{headers,credentials:'same-origin',cache:'no-store'});
     if(!response.ok)throw new Error('Banner-Vorschau nicht verfügbar.');
     const url=URL.createObjectURL(await response.blob());
     if(state.selectedEvent?.id!==selectedId){URL.revokeObjectURL(url);return;}

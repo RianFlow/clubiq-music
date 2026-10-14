@@ -1,5 +1,6 @@
 (() => {
   'use strict';
+  try{sessionStorage.removeItem('clubiq_darts_admin');sessionStorage.removeItem('clubiq_darts_admin_username');}catch(_){}
   const q=s=>document.querySelector(s), state={me:null,clubs:[],club:null,posts:[],media:[],users:[],selected:null,view:'overview',dirty:false,clubDirty:false,dartsDirty:false,busy:false,generation:0};
   const workspace=window.ClubAdminWorkspace;
   const el=(tag,text,cls)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node;};
@@ -27,7 +28,7 @@
   document.addEventListener('input',()=>queueMicrotask(updateWorkspaceHint));document.addEventListener('change',()=>queueMicrotask(updateWorkspaceHint));window.addEventListener('clubiq-admin-change',updateWorkspaceHint);
   window.addEventListener('clubiq-admin-auth-required',()=>{q('#login').hidden=false;status('#loginStatus','Bitte erneut anmelden. Deine Eingaben bleiben erhalten.');q('#loginForm input[name=username]').focus();});
   function showView(view,team=''){
-    if(!viewTitles[view]||(workspace.views.has(view)&&!barverAccess())||(view==='users'&&!state.me?.owner))view='overview';
+    if(!Object.hasOwn(viewTitles,view)||(workspace.views.has(view)&&!barverAccess())||(view==='users'&&!state.me?.owner))view='overview';
     state.view=view;const panel=workspace.views.has(view)?'barver':view;
     document.querySelectorAll('[data-panel]').forEach(node=>node.hidden=node.dataset.panel!==panel);
     document.querySelectorAll('[data-view]').forEach(node=>{if(node.dataset.view===view)node.setAttribute('aria-current','page');else node.removeAttribute('aria-current');});

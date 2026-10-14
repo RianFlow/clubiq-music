@@ -659,8 +659,9 @@ async def security_headers(request: Request, call_next):
     if request.url.path == "/cms":
         frame_sources = "'self'"
     ancestors = "'self'" if embedded_admin else "'none'"
+    image_sources = "'self' data: blob:" if embedded_admin else "'self' data:"
     response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+        f"default-src 'self'; img-src {image_sources}; style-src 'self' 'unsafe-inline'; "
         f"script-src 'self'; connect-src {connect_sources}; frame-src {frame_sources}; "
         f"base-uri 'none'; frame-ancestors {ancestors}"
     )

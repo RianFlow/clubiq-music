@@ -4,6 +4,11 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from fastapi import HTTPException
+import requests
+import socket
+import threading
+import time
+import uvicorn
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -28,6 +33,43 @@ def connection(row):
 
 
 class UnifiedAdminTests(unittest.TestCase):
+    def test_http_shared_login_migration_and_private_cache_policy(self):
+        with patch.object(main, 'ADMIN_PASSWORD', 'test-password'), patch.object(main, 'DARTS_ADMIN_USERNAME', 'owner'):
+            connect = connection((None, main.darts_owner_fingerprint(), None, None, None))
+            with patch.object(main, 'db_connect', connect):
+                sock=socket.socket();sock.bind(('127.0.0.1',0))
+                origin='http://127.0.0.1:'+str(sock.getsockname()[1])
+                server=uvicorn.Server(uvicorn.Config(main.app,log_level='error',lifespan='off'))
+                thread=threading.Thread(target=server.run,kwargs={'sockets':[sock]},daemon=True);thread.start()
+                self.addCleanup(lambda:(setattr(server,'should_exit',True),thread.join(timeout=5)))
+                for _ in range(200):
+                    if server.started:break
+                    time.sleep(.01)
+                self.assertTrue(server.started)
+                client=requests.Session()
+                client.cookies.set(COOKIE,'a'*64,domain='127.0.0.1',path='/api/v1/cms')
+                route='/api/v1/darts/admin/verify'
+                self.assertEqual(client.get(origin+route).status_code,401)
+                self.assertEqual(client.get(origin+'/api/v1/cms/session').status_code,200)
+                response=client.get(origin+route)
+                self.assertEqual(response.status_code,200)
+                self.assertEqual(response.headers['cache-control'],'no-store')
+                self.assertEqual({cookie.path for cookie in client.cookies if cookie.name==COOKIE},{'/api/v1'})
+                self.assertEqual(client.post(origin+'/api/v1/darts/admin/players',json={}).status_code,403)
+                self.assertEqual(client.post(origin+'/api/v1/darts/admin/players',json={},headers={'X-CMS-Request':'1'}).status_code,422)
+                cursor=connect.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value
+                cursor.fetchone.return_value=(8,None,1,True,'redaktion')
+                self.assertEqual(client.get(origin+route).status_code,403)
+                cursor.fetchone.return_value=None
+                self.assertEqual(client.get(origin+route).status_code,401)
+                redirect=client.get(origin+'/darts-admin',allow_redirects=False)
+                self.assertEqual(redirect.status_code,303)
+                self.assertEqual(redirect.headers['location'],'/cms?view=players')
+                embedded=client.get(origin+'/darts-admin?embedded=1')
+                self.assertEqual(embedded.status_code,200)
+                self.assertEqual(embedded.headers['x-frame-options'],'SAMEORIGIN')
+                client.close()
+
     def test_owner_cookie_authorizes_existing_admin_routes_without_password_headers(self):
         with patch.object(main, 'ADMIN_PASSWORD', 'test-password'), patch.object(main, 'DARTS_ADMIN_USERNAME', 'owner'):
             connect = connection((None, main.darts_owner_fingerprint(), None, None, None))

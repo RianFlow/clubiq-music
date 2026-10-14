@@ -9,6 +9,10 @@ const fixtureSeason={teams:[{code:'A',roster:[{id:101,name:'Testspieler Eins',ro
 function response(res,status,data){res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(data));}
 const server=http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost'),p=url.pathname;
+  res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src 'self'; frame-ancestors 'self'");
+  if(process.env.CMS_PREVIEW==='1'&&p==='/preview'){
+    res.writeHead(303,{'Set-Cookie':'cms_fixture=owner; HttpOnly; SameSite=Strict; Path=/','Location':'/cms'}).end();return;
+  }
   if(p==='/api/v1/darts/season')return response(res,200,fixtureSeason);
   if(p==='/api/v1/darts/trainings')return response(res,200,{updatedAt:new Date().toISOString(),stale:false,events:[{id:32751,name:'Training 06.10.2026',date:'2026-10-06T17:30:00Z',status:'FINISH'}]});
   if(p.startsWith('/api/v1/darts/admin/')){
@@ -19,7 +23,8 @@ const server=http.createServer(async(req,res)=>{
     if(p.endsWith('/verify'))return response(res,200,{status:'ok'});
     if(p.endsWith('/players')&&req.method==='GET')return response(res,200,fixtureProfiles);
     if(p.endsWith('/sponsors'))return response(res,200,{sponsors:[]});
-    if(p.endsWith('/events'))return response(res,200,{events:[]});
+    if(p.endsWith('/events'))return response(res,200,{events:[{id:22,title:'Testveranstaltung',active:false,hasImage:true,image:'/api/v1/darts/admin/events/22/image'}]});
+    if(p.endsWith('/events/22/image')){res.writeHead(200,{'Content-Type':'image/png'}).end(fs.readFileSync(path.join(root,'pics/logo.png')));return;}
     if(p.endsWith('/social-links'))return response(res,200,{links:[]});
     if(p.endsWith('/tournament'))return response(res,200,{event:{name:'Vereinsturnier',date:'2026-10-23T17:00:00Z'},source:'https://portal.3k-darts.com/frontend/events/5/event/32680/participants'});
     if(p.endsWith('/roster-cache')){req.resume();return response(res,200,{status:'success'});}
@@ -47,7 +52,8 @@ const server=http.createServer(async(req,res)=>{
   const file=p==='/cms'?'/cms.html':p==='/darts-admin'?'/darts-admin.html':p.startsWith('/vereine/')?'/cms-site.html':p;
   const target=path.resolve(root,'.'+file);if(!target.startsWith(root+path.sep)){res.writeHead(403).end();return;}fs.readFile(target,(error,data)=>{res.writeHead(error?404:200,{'Content-Type':({'.html':'text/html','.js':'text/javascript','.css':'text/css','.webp':'image/webp','.png':'image/png'})[path.extname(target)]||'application/octet-stream'}).end(error?'Not found':data);});
 });
-(async()=>{
+module.exports={server};
+if(require.main===module)(async()=>{
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+server.address().port;
   const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHANNEL?{channel:process.env.PLAYWRIGHT_CHANNEL}:{})});
   try{const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];page.on('pageerror',error=>errors.push(error.message));let rejectNextDialog=false;page.on('dialog',dialog=>{if(rejectNextDialog){rejectNextDialog=false;dialog.dismiss();}else dialog.accept();});
@@ -56,6 +62,8 @@ const server=http.createServer(async(req,res)=>{
     await page.getByRole('button',{name:'Spielerprofile',exact:true}).click();
     const embedded=page.frameLocator('#dartsWorkspace');
     await embedded.locator('#profileForm').waitFor();
+    await page.getByRole('button',{name:'Veranstaltungen & Banner',exact:true}).click();await embedded.getByRole('button',{name:/Testveranstaltung/}).click();await embedded.locator('#eventImagePreview img').waitFor();await page.waitForFunction(()=>{const image=document.querySelector('#dartsWorkspace').contentDocument.querySelector('#eventImagePreview img');return image?.complete&&image.naturalWidth>0;});
+    await page.getByRole('button',{name:'Spielerprofile',exact:true}).click();await embedded.locator('#playersAdminView').waitFor();
     if(process.env.CMS_PLAYER_SCREENSHOT)await page.screenshot({path:process.env.CMS_PLAYER_SCREENSHOT});
     assert.equal(await page.evaluate(()=>sessionStorage.length),0,'shared login stores no passwords');
     await embedded.locator('#alias').fill('Vorbereiteter Spitzname');await page.locator('#workspaceUnsaved').waitFor();
