@@ -12,7 +12,7 @@ const matches=[
 if(process.argv.includes('--quiet'))for(const match of matches)if(match.kind==='live'){match.kind='upcoming';delete match.score;}
 const teams=['A','B','C','D'].map((code,i)=>({code,rank:i+2,rankSource:'3k-placement',name:`SV Barver Darts ${code}`,league:{name:code==='D'?'Kreisklasse 11':'Kreisligen 04'},record:{},matches:matches.filter(m=>m.barverTeam===code),roster:[{id:89027+i,name:code==='A'?'Jannik Kläning':`Demo-Spieler ${code}`,role:'Kapitän'}],venue:{name:'Testspielstätte',street:'Teststraße 1',postalCode:'49453',city:'Barver'}}));
 teams[1].roster=[{id:89029,name:'Patrick Lammers',role:'Kapitän'}];
-let fail=false,tvEmpty=false,fallbackEnabled=false,futureMode=false,centerFailure=false,centerTableFailure=false;
+let fail=false,tvEmpty=false,fallbackEnabled=false,futureMode=false,centerFailure=false,centerTableFailure=false,newsEmpty=false,tvRequests=0;
 const server=http.createServer((req,res)=>{
   const url=new URL(req.url,'http://localhost'),p=url.pathname;
   if(p.startsWith('/api/')) {
@@ -21,6 +21,10 @@ const server=http.createServer((req,res)=>{
     if(p==='/api/v1/darts/presence') data={online:7,windowSeconds:120,demo:true};
     if(p.endsWith('/tournament'))data={event:{id:30458,name:'DBD 9. Runde',date:day(-2)},participants:[],groups:[],matches:[],scheduleReady:false,updatedAt:now()};
     if(p.endsWith('/ticker')) data={items:matches,updatedAt:now(),stale:false};
+    if(p.endsWith('/tv'))tvRequests++;
+    if(p==='/api/v1/cms/sites/barver')data={name:'SV Barver Darts',accent:'#176b56',teams:[]};
+    if(p==='/api/v1/cms/sites/barver/posts/1')data={title:'Neues aus Barver',summary:'Neuigkeiten aus dem Verein.',body:'Ein Beitrag aus dem Verein.',publishedAt:now()};
+    if(p==='/api/v1/cms/sites/barver/posts')data={posts:newsEmpty||url.searchParams.has('team')?[]:[{title:'Neues aus Barver',summary:'Die aktuellen Neuigkeiten aus unserem Verein.',publishedAt:now(),href:'/vereine/barver/beitraege/1'}]};
     if(p.endsWith('/tv'))data={available:true,stale:false,updatedAt:now(),events:tvEmpty?[]:[{title:'Testturnier · Runde 2',start:day(1),url:'https://www.sport1.de/tv-video/stream/test__1'},{title:'Schon vorbei',start:day(-1),url:'https://www.sport1.de/tv-video/stream/past__2'},{title:'Falscher Anbieterlink',start:day(2),url:'https://example.com/'}]};
     if(p.endsWith('/ranking')) data={name:'DBD Rangliste 2026',updatedAt:now(),plannedEvents:[{name:'DBD-Rangliste in Barver',date:day(3).slice(0,10),city:'Barver',confirmed:false}],events:[{id:32680,name:'DBD 10. Runde',rated:false,start:day(1),city:'Drebber',sourceUrl:'https://portal.3k-darts.com/frontend/events/5/event/32680/participants'},{id:30458,name:'DBD 9. Runde',rated:true,start:day(-2),city:'Diepholz',sourceUrl:'https://portal.3k-darts.com/frontend/events/5/event/30458/participants'}],rows:[{rank:3,name:'Jannik Kläning',points:122,appearances:6,average:20.3,rounds:[{id:30458,points:0,rated:true}]},{rank:1,name:'<script>Test</script>',points:128,appearances:7,average:18.3,rounds:[]},...Array.from({length:20},(_,i)=>({rank:i+4,name:`Demo-Gast ${i+1}`,points:40-i,appearances:3,average:10,rounds:[]}))]};
     if(p.endsWith('/season')) data={matches,teams,updatedAt:now(),specialEvents:[{id:500,name:'Bezirkspokal',badge:'POKAL',matchCount:1}]};
@@ -37,7 +41,7 @@ const server=http.createServer((req,res)=>{
     if(p.endsWith('/player-profiles')) {data=JSON.parse(fs.readFileSync(path.join(root,'static/darts-players.json'),'utf8'));data.players['89029'].personal.throwingHand='right';}
     res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(data));return;
   }
-  const file=path.resolve(root,`.${p==='/'||p==='/darts'?'/darts.html':p==='/turnier'?'/turnier.html':p}`);
+  const file=path.resolve(root,`.${p==='/'||p==='/darts'?'/darts.html':p==='/turnier'?'/turnier.html':p.startsWith('/vereine/')?'/cms-site.html':p}`);
   if(!file.startsWith(root+path.sep)) {res.writeHead(403);res.end();return;}
   fs.readFile(file,(error,body)=>{
     const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.webp':'image/webp','.json':'application/json','.svg':'image/svg+xml'};
@@ -73,7 +77,45 @@ const server=http.createServer((req,res)=>{
       await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({groups:[{groupKey:'901',connected:false,stale:true,finished:false,lastSuccess:day(-1),meta:{id:901,home:'SV Barver Darts A',away:'Gäste',barverTeams:['A']},matches:[{id:999,active:true,finished:false,teamScoreHome:1,teamScoreGuest:1,home:{name:'Alt',points:320,legs:0},guest:{name:'Alt',points:501,legs:0},lastUpdateNs:Date.now()*1e6}]}]})});
     });
     const page=await context.newPage(),errors=[];page.on('pageerror',e=>{errors.push(e.message);console.error('Page error:',e.message);});
+    async function openMyDarts(){
+      if(await page.locator('#personalSettings').evaluate(node=>node.open))return;
+      if(await page.locator('#moreNavigation summary').isVisible()){
+        await page.locator('#moreNavigation summary').click();await page.click('#personalSettingsToggle');
+      }else{await page.click('[data-mobile-section=more]');await page.click('[data-menu-target=personalSettingsToggle]');}
+    }
+    async function chooseFavorite(value){await openMyDarts();await page.selectOption('#favoriteTeam',value);}
     await page.goto(`${origin}/darts`);
+    await page.locator('#clubNewsList h3').getByText('Neues aus Barver',{exact:true}).waitFor();
+    assert.equal(await page.locator('main > section').first().getAttribute('id'),'homeTeamsPanel');
+    assert.equal(await page.locator('#homeTeamPanel').isVisible(),false,'club overview starts inside closed My Darts');
+    assert.equal(await page.locator('#personalSettings #homeTeamPanel').count(),1);
+    assert.equal(await page.locator('#tvScheduleTeaser').count(),0,'TV service does not occupy the homepage');
+    assert.equal(tvRequests,0,'TV schedule loads when opened from More');
+    const newsLink=page.locator('#clubNewsList a').first();
+    assert.equal(await newsLink.getAttribute('target'),'_blank');assert.equal(await newsLink.getAttribute('rel'),'noopener');
+    await page.locator('#homeTeamsPanel .match-center-card').first().waitFor();
+    assert.equal(await page.locator('#homeTeamsPanel .match-center-card').count(),4);
+    await page.setViewportSize({width:390,height:844});
+    const cards=await page.locator('#homeTeamsPanel .match-center-card').evaluateAll(nodes=>nodes.map(node=>{const r=node.getBoundingClientRect();return{x:r.x,y:r.y,right:r.right,bottom:r.bottom};}));
+    assert(cards[0].right<=cards[1].x&&cards[2].right<=cards[3].x,'mobile team cards form two separate columns');
+    assert(cards[0].bottom<=cards[2].y&&cards[1].bottom<=cards[3].y,'mobile team cards never overlap');
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+    await page.setViewportSize({width:1440,height:1080});
+
+    await page.locator('#homeTeamsPanel').waitFor();
+    for(const theme of ['dark','light']){
+      if(await page.getAttribute('html','data-theme')!==theme)await page.locator('#themeToggle').click();
+      const articlePromise=page.waitForEvent('popup');await newsLink.click();const article=await articlePromise;
+      await article.getByRole('heading',{name:'Neues aus Barver'}).waitFor();assert.equal(await article.evaluate(()=>window.opener),null);
+      assert.equal(await article.getAttribute('html','data-theme'),theme,'article inherits '+theme);
+      assert.equal(new URL(article.url()).searchParams.get('theme'),theme);
+      assert.equal(new URL(page.url()).pathname,'/darts','reading a post preserves the match page');await article.close();
+    }
+    // An explicit appearance still works when the browser blocks preferences.
+    const noStorage=await browser.newContext({colorScheme:'light'});await noStorage.addInitScript(()=>Object.defineProperty(window,'localStorage',{get(){throw Error('blocked');}}));
+    const reader=await noStorage.newPage();await reader.goto(`${origin}/vereine/barver/beitraege/1?theme=dark`);await reader.locator('#siteArticle h1').waitFor();assert.equal(await reader.getAttribute('html','data-theme'),'dark');await noStorage.close();
+
+
     assert.equal(await page.locator('#scheduleDetails').evaluate(n=>n.open),false);await page.locator('#scheduleDetails').evaluate(n=>n.open=true);
     await page.getByText('7 online · Demo',{exact:true}).waitFor();
     await page.evaluate(()=>document.fonts.ready);
@@ -112,7 +154,7 @@ const server=http.createServer((req,res)=>{
     }
     assert.equal(await page.locator('#todayGrid .today-game').count(),1);
     assert.equal(await page.locator('#homeSchedule > section').count(),3);
-    await page.selectOption('#favoriteTeam','D');
+    await chooseFavorite('D');
     assert.match(await page.locator('#todayGrid').innerText(),/BARVER D/);
     assert.equal(await page.locator('#homeFilters').evaluate(node=>node.open),false);
     await page.locator('#homeFilters summary').click();
@@ -132,7 +174,7 @@ const server=http.createServer((req,res)=>{
     await page.locator('#moreNavigation summary').click();await page.click('#personalSettingsToggle');
     await page.locator('#pushPlayers input[value="Jannik Kläning"]').waitFor();
     await page.waitForFunction(()=>document.querySelectorAll('#notificationHistory article').length===5);assert.equal(await page.locator('#notificationHistory article').last().locator('strong').innerText(),'Meldung 5');assert.equal(await page.locator('#socialPromoBanner').count(),0);assert.equal(await page.locator('#socialLinks a').count(),2);
-    await page.selectOption('#myFavoriteTeam','A');assert.equal(await page.inputValue('#favoriteTeam'),'A');assert.match(await page.locator('#myTeamSummary').innerText(),/SV Barver Darts A/);
+    await chooseFavorite('A');assert.equal(await page.locator('#personalSettings #favoriteTeam').count(),1);assert.equal(await page.locator('#myTeamSummary').count(),0);assert.match(await page.locator('#homeTeamHeading').innerText(),/SV Barver Darts A/);
     for(const input of await page.locator('#pushTeams input').all()) await input.uncheck();
     await page.locator('#pushPlayers input[value="Jannik Kläning"]').check();
     await page.locator('#pushTypes input[value="leg"]').uncheck();
@@ -143,7 +185,7 @@ const server=http.createServer((req,res)=>{
     await page.locator('#moreNavigation summary').click();await page.click('#personalSettingsToggle');
     await page.locator('#pushPlayers input[value="Jannik Kläning"]').waitFor();
     assert.equal(await page.locator('#pushPlayers input[value="Jannik Kläning"]').isChecked(),true);
-    assert.equal(await page.inputValue('#myFavoriteTeam'),'A');assert.equal(await page.inputValue('#favoriteTeam'),'A');assert.match(await page.locator('#nextAppointmentsNote').innerText(),/Barver A/);
+    assert.equal(await page.inputValue('#favoriteTeam'),'A');assert.match(await page.locator('#nextAppointmentsNote').innerText(),/Barver A/);
     assert.equal(await page.locator('#pushTeams input:checked').count(),0);
     assert.equal(await page.locator('#pushTypes input[value="leg"]').isChecked(),false);
     await page.locator('#personalSettings summary').click();
@@ -264,20 +306,20 @@ const server=http.createServer((req,res)=>{
     const planned=page.locator('#rankingEvents details').first();assert.match(await planned.innerText(),/Vorläufig/);assert.match(await planned.innerText(),/Voraussichtlich/);assert.match(await planned.innerText(),/Termin noch nicht bestätigt/);assert.doesNotMatch(await planned.innerText(),/00:00/);assert.equal(await planned.locator('a,button').count(),0);
     assert.equal(await page.locator('#rankingEvents a[href="/turnier?event=32680"]').count(),1);assert.equal(await page.locator('#rankingEvents details').nth(1).locator('.calendar-button').count(),1);
     await page.selectOption('#rankingRound','32680');assert.equal(await page.locator('#rankingRows tr td').last().innerText(),'–');assert.match(await page.locator('#rankingRows').innerText(),/122/);
-    await page.click('#todayView');await page.selectOption('#favoriteTeam','C');assert.match(await page.locator('#homeTeamHeading').innerText(),/Barver Darts C/);assert.match(await page.locator('#homeTeamOverview .result-win').innerText(),/Sieg/);
-    await page.selectOption('#favoriteTeam','B');assert.equal(await page.locator('#homeTeamOverview .home-team-rank').innerText(),'3');assert.match(await page.locator('#homeTeamOverview').innerText(),/Teststraße 1/);
+    await page.click('#todayView');await chooseFavorite('C');assert.match(await page.locator('#homeTeamHeading').innerText(),/Barver Darts C/);assert.match(await page.locator('#homeTeamOverview .result-win').innerText(),/Sieg/);
+    await chooseFavorite('B');assert.equal(await page.locator('#homeTeamOverview .home-team-rank').innerText(),'3');assert.match(await page.locator('#homeTeamOverview').innerText(),/Teststraße 1/);
     matches[2].kind='final';matches[2].score='8:4';await page.evaluate(()=>window.dispatchEvent(new Event('online')));await page.locator('#homeTeamOverview .new-result-badge').waitFor();assert.match(await page.locator('#homeTeamOverview .result-win').innerText(),/Sieg/);
     await page.click('#fullscreen');await page.selectOption('#tvTeamChoice','D');await page.locator('#tvLauncherForm button[type=submit]').click();await page.waitForFunction(()=>document.body.classList.contains('tv-live'));assert.equal(await page.locator('#homeTeamPanel').isVisible(),false);assert.equal(await page.locator('#todayGrid').getAttribute('data-live-count'),'1');await page.evaluate(()=>document.exitFullscreen());await page.waitForFunction(()=>!document.body.classList.contains('tv-live'));
     await page.setViewportSize({width:390,height:844});await page.click('[data-mobile-section=teams]');assert.equal(await page.locator('#seasonPanel').isVisible(),true);assert.equal(await page.locator('[data-mobile-section=teams]').getAttribute('aria-pressed'),'true');
     await page.click('[data-mobile-section=league]');assert.equal(await page.locator('#leaguePanel').isVisible(),true);await page.click('[data-mobile-section=more]');assert.equal(await page.locator('#mobileMenuDialog').isVisible(),true);await page.keyboard.press('Escape');assert.equal(await page.locator('#mobileMenuDialog').isVisible(),false);
     await page.click('[data-mobile-section=more]');await page.click('[data-menu-target=joinView]');assert.equal(await page.locator('#joinPanel').isVisible(),true);assert.match(await page.locator('#joinAddress').innerText(),/Teststraße 1/);assert.match(await page.locator('#joinRoute').getAttribute('href'),/Teststra/);assert.match(await page.locator('#joinPanel .primary-action').getAttribute('href'),/mailto:allgemein@sportverein-barver.de/);
     await page.click('[data-mobile-section=more]');await page.click('[data-menu-target=rankingView]');assert.equal(await page.locator('#rankingPanel').isVisible(),true);assert.equal(await page.locator('#rankingEvents details[open]').count(),2);await page.locator('#rankingEvents summary').last().click();assert.equal(await page.locator('#rankingEvents details[open]').count(),3);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'ranking mobile overflow');
-    assert.match(page.url(),/view=ranking/);await page.reload();await page.locator('#rankingRows tr').first().waitFor();assert.equal(await page.locator('#rankingPanel').isVisible(),true);await page.click('[data-mobile-section=today]');assert.equal(await page.inputValue('#favoriteTeam'),'B');assert.equal(await page.locator('#homeTeamPanel').isVisible(),true);await page.click('#joinTeaserButton');assert.equal(await page.locator('#joinPanel').isVisible(),true);
-    await page.click('[data-mobile-section=today]');await page.locator('#tvTeaserHeading').getByText('Testturnier · Runde 2',{exact:true}).waitFor();await page.click('#tvTeaserButton');assert.equal(await page.locator('#tvSchedulePanel').isVisible(),true);assert.equal(await page.locator('.tv-schedule-card').count(),1);assert.match(await page.locator('.tv-schedule-card').innerText(),/SPORT1 · Livestream/);assert.equal(await page.locator('.tv-schedule-card a').getAttribute('href'),'https://www.sport1.de/tv-video/stream/test__1');assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'TV service mobile overflow');assert.match(page.url(),/view=tv/);await page.reload();await page.locator('.tv-schedule-card').waitFor();assert.equal(await page.locator('#tvSchedulePanel').isVisible(),true);
+    assert.match(page.url(),/view=ranking/);await page.reload();await page.locator('#rankingRows tr').first().waitFor();assert.equal(await page.locator('#rankingPanel').isVisible(),true);await page.click('[data-mobile-section=today]');assert.equal(await page.inputValue('#favoriteTeam'),'B');assert.equal(await page.locator('#homeTeamPanel').isVisible(),false);await page.click('#joinTeaserButton');assert.equal(await page.locator('#joinPanel').isVisible(),true);
+    await page.click('[data-mobile-section=today]');await page.click('[data-mobile-section=more]');await page.click('[data-menu-target=tvScheduleView]');await page.locator('.tv-schedule-card').waitFor();assert.equal(await page.locator('#clubNewsPanel').isVisible(),false);assert.equal(await page.locator('#tvSchedulePanel').isVisible(),true);assert.equal(await page.locator('.tv-schedule-card').count(),1);assert.match(await page.locator('.tv-schedule-card').innerText(),/SPORT1 · Livestream/);assert.equal(await page.locator('.tv-schedule-card a').getAttribute('href'),'https://www.sport1.de/tv-video/stream/test__1');assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'TV service mobile overflow');assert.match(page.url(),/view=tv/);await page.reload();await page.locator('.tv-schedule-card').waitFor();assert.equal(await page.locator('#tvSchedulePanel').isVisible(),true);
     tvEmpty=true;await page.click('#reloadTvSchedule');await page.locator('.tv-schedule-empty').waitFor();assert.match(await page.locator('.tv-schedule-empty').innerText(),/keinen weiteren/);assert.equal(await page.locator('.tv-schedule-card').count(),0);tvEmpty=false;await page.click('#reloadTvSchedule');await page.locator('.tv-schedule-card').waitFor();fail=true;await page.click('#reloadTvSchedule');await page.waitForFunction(()=>!document.querySelector('#reloadTvSchedule').disabled);assert.match(await page.locator('#tvScheduleStatus').innerText(),/zuletzt geprüfte/);assert.equal(await page.locator('.tv-schedule-card').count(),1);fail=false;
     await page.screenshot({path:path.join(root,'outputs/darts-tv-service-mobile.png')});await page.click('[data-mobile-section=more]');await page.click('[data-menu-target=tvScheduleView]');assert.equal(await page.locator('#tvSchedulePanel').isVisible(),true);
     await page.click('[data-mobile-section=more]');await page.click('[data-menu-target=fullscreen]');assert.equal(await page.locator('#tvLauncher').isVisible(),true);await page.locator('input[name=tvType][value=tournament]').check();assert.equal(await page.locator('#tvTournamentField').isVisible(),true);await page.selectOption('#tvTournamentChoice','30458');await page.locator('#tvLauncherForm button[type=submit]').click();await page.waitForURL('**/turnier?tv=1&event=30458');await page.getByRole('heading',{name:'DBD 9. Runde',exact:true}).waitFor();assert.equal(await page.locator('body').evaluate(n=>n.classList.contains('tv')),true);
-    await page.goto(`${origin}/darts`);await page.click('[data-mobile-section=today]');await page.selectOption('#favoriteTeam','all');
+    await page.goto(`${origin}/darts`);await page.click('[data-mobile-section=today]');await chooseFavorite('all');
     fail=true;fallbackEnabled=true;await page.reload();
     await page.getByText('Alternative 3K-Verbindung aktiv',{exact:true}).waitFor();
     assert.match(await page.locator('#todayGrid').innerText(),/121/);
@@ -402,6 +444,9 @@ const server=http.createServer((req,res)=>{
     assert.doesNotMatch(await playerPage.locator('.player-performance-note').innerText(),/letzter gespeicherter Stand/);
     await playerPage.setViewportSize({width:390,height:844});assert.equal(await playerPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'player profile mobile overflow');
     await playerPage.screenshot({path:path.join(root,'outputs/darts-player-recovery-mobile.png')});await playerContext.close();
+    newsEmpty=true;await page.goto(`${origin}/darts`);await page.locator('#nextAppointmentsList .appointment-card').first().waitFor();
+    assert.equal(await page.locator('#clubNewsPanel').isVisible(),false,'no blank news panel without published posts');
+    assert.equal(await page.locator('#homeTeamPanel').isVisible(),false);
     assert.deepEqual(errors,[]);
     console.log('Browser: homepage, two boards, favorites, filters, saved player/type preferences, reconnect, mobile OK');
   } finally {await browser.close();server.close();}
