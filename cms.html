@@ -3,27 +3,44 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#176b56">
-  <title>ClubIQ · Vereins-CMS</title>
+  <title>ClubIQ · Vereinsverwaltung</title>
   <link rel="icon" href="/pics/logo.png">
   <link rel="stylesheet" href="/static/darts-typography.css?v=20261004-type1">
-  <link rel="stylesheet" href="/static/cms.css?v=20261010-cms2">
-  <script defer src="/static/cms.js?v=20261010-cms2"></script>
+  <link rel="stylesheet" href="/static/cms.css?v=20261014-admin1">
+  <script defer src="/static/cms-darts-workspace.js?v=20261014-admin1"></script>
+  <script defer src="/static/cms.js?v=20261014-admin1"></script>
 </head>
 <body>
   <a class="skip-link" href="#content">Zum Inhalt</a>
-  <header class="cms-header"><a class="cms-brand" href="/cms"><span class="brand-mark" aria-hidden="true">C</span><span>ClubIQ <b>Vereins-CMS</b></span></a><div class="header-actions"><button id="themeToggle" class="quiet" type="button" aria-label="Dunkle Darstellung aktivieren">Dunkel</button><button id="logout" class="quiet" type="button" hidden>Abmelden</button></div></header>
+  <header class="cms-header"><a class="cms-brand" href="/cms"><span class="brand-mark" aria-hidden="true">C</span><span>ClubIQ <b>Vereinsverwaltung</b></span></a><div class="header-actions"><button id="themeToggle" class="quiet" type="button" aria-label="Dunkle Darstellung aktivieren">Dunkel</button><button id="logout" class="quiet" type="button" hidden>Abmelden</button></div></header>
   <main id="content">
     <section id="login" class="login-card surface"><p class="eyebrow">Dein Verein. Deine Inhalte.</p><h1>Willkommen in der Verwaltung</h1><p class="muted">Spiele und Mannschaften einrichten, Beiträge schreiben und die Vereinsseite gestalten.</p><form id="loginForm"><label>Benutzername<input name="username" autocomplete="username" required maxlength="100"></label><label>Passwort<input name="password" type="password" autocomplete="current-password" required maxlength="256"></label><button type="submit">Anmelden</button><p id="loginStatus" class="status" role="status" hidden></p></form></section>
     <div id="workspace" class="workspace" hidden>
-      <aside class="sidebar"><label>Verein<select id="clubChoice" aria-label="Verein auswählen"></select></label><button id="newClub" class="quiet" type="button" hidden>+ Verein hinzufügen</button><nav aria-label="CMS-Bereiche"><button type="button" data-view="overview" aria-current="page">Übersicht</button><button type="button" data-view="posts">Beiträge</button><button type="button" data-view="darts">Darts-Seite</button><button type="button" data-view="media">Bilder & Logos</button><button type="button" data-view="settings">Vereinsseite</button><button type="button" data-view="users" id="usersNav" hidden>Zugänge</button></nav><a id="publicSite" class="sidebar-link" target="_blank" rel="noopener" hidden>Vereinsseite ansehen ↗</a><a id="dartsAdmin" class="sidebar-link" href="/darts-admin" hidden>Darts-Verwaltung ↗</a><p class="sidebar-note">Inhalte und Bilder gehören immer zum ausgewählten Verein.</p></aside>
+      <aside class="sidebar"><label>Verein<select id="clubChoice" aria-label="Verein auswählen"></select></label><button id="newClub" class="quiet" type="button" hidden>+ Verein hinzufügen</button><nav aria-label="Verwaltungsbereiche">
+<button type="button" data-view="overview" aria-current="page">Übersicht</button>
+<button type="button" data-view="teams">Mannschaften</button>
+<button type="button" data-view="players" data-barver-only hidden>Spielerprofile</button>
+<button type="button" data-view="training" data-barver-only hidden>Training</button>
+<button type="button" data-view="tournament" data-barver-only hidden>Turniere &amp; TV</button>
+<button type="button" data-view="posts">Beiträge</button>
+<button type="button" data-view="events" data-barver-only hidden>Veranstaltungen &amp; Banner</button>
+<button type="button" data-view="sponsors" data-barver-only hidden>Sponsoren</button>
+<button type="button" data-view="social" data-barver-only hidden>Vereinskanäle</button>
+<button type="button" data-view="media">Bilder &amp; Logos</button>
+<button type="button" data-view="darts">Spiele &amp; Tabellen</button>
+<button type="button" data-view="settings">Vereinsseite</button>
+<button type="button" data-view="users" id="usersNav" hidden>Zugänge</button>
+</nav><label class="mobile-admin-nav">Bereich<select id="mobileView" aria-label="Verwaltungsbereich wählen"><option value="overview">Übersicht</option><option value="teams">Mannschaften</option><option value="players" data-barver-only hidden>Spielerprofile</option><option value="training" data-barver-only hidden>Training</option><option value="tournament" data-barver-only hidden>Turniere &amp; TV</option><option value="posts">Beiträge</option><option value="events" data-barver-only hidden>Veranstaltungen &amp; Banner</option><option value="sponsors" data-barver-only hidden>Sponsoren</option><option value="social" data-barver-only hidden>Vereinskanäle</option><option value="media">Bilder &amp; Logos</option><option value="darts">Spiele &amp; Tabellen</option><option value="settings">Vereinsseite</option><option value="users" id="mobileUsersOption" hidden>Zugänge</option></select></label><a id="publicSite" class="sidebar-link" target="_blank" rel="noopener" hidden>Vereinsseite ansehen ↗</a><p class="sidebar-note">Inhalte und Bilder gehören immer zum ausgewählten Verein.</p></aside>
       <div class="workspace-content">
-        <div class="page-heading"><div><p class="eyebrow" id="clubLabel"></p><h1 id="pageTitle">Übersicht</h1></div><span id="sessionLabel" class="muted"></span></div>
+        <div class="page-heading"><div><p class="eyebrow" id="clubLabel"></p><h1 id="pageTitle">Übersicht</h1></div><span id="sessionLabel" class="muted"></span></div><p id="workspaceUnsaved" class="unsaved-notice" role="status" hidden>Ungespeicherte Änderungen</p>
         <p id="globalStatus" class="status" role="status" hidden></p>
         <section id="overviewView" data-panel="overview">
-          <div class="welcome surface"><p class="eyebrow">Alles an einem Ort</p><h2>Was möchtest du heute veröffentlichen?</h2><p class="muted">Beginne mit einem Beitrag oder aktualisiere die Angaben deines Vereins.</p><button type="button" id="overviewNewPost">+ Beitrag schreiben</button></div>
+          <div class="welcome surface"><p class="eyebrow">Alles an einem Ort</p><h2>Was möchtest du heute erledigen?</h2><p class="muted">Verwalte Mannschaften, Beiträge und die Website deines Vereins an einem Ort.</p><div class="quick-actions"><button type="button" id="overviewNewPost">+ Beitrag schreiben</button><button type="button" class="quiet" data-open="players" data-barver-only hidden>Spielerprofil bearbeiten</button><button type="button" class="quiet" data-open="training" data-barver-only hidden>Training prüfen</button></div></div>
           <div class="metrics" id="metrics"></div>
-          <div class="overview-grid"><section class="surface"><h2>Zuletzt bearbeitet</h2><div id="recentPosts"></div></section><section class="surface"><h2>Deine Vereinsseite</h2><p id="siteStatus" class="muted"></p><button type="button" data-open="settings" class="quiet">Vereinsseite bearbeiten</button><div id="barverModules" hidden><hr><h3>Dartsbereiche</h3><p class="muted">Spielerprofile, Sponsoren, Veranstaltungen, Turniere und Vereinskanäle findest du weiterhin in der Darts-Verwaltung.</p><a class="button quiet" href="/darts-admin">Darts-Verwaltung öffnen</a></div></section></div>
+          <div class="overview-grid"><section class="surface"><h2>Zuletzt bearbeitet</h2><div id="recentPosts"></div></section><section class="surface"><h2>Deine Vereinsseite</h2><p id="siteStatus" class="muted"></p><button type="button" data-open="settings" class="quiet">Vereinsseite bearbeiten</button><div id="barverModules" hidden><hr><h3>Deine Vereinswebsite</h3><p class="muted">Spielerprofile, Training, Turniere, Sponsoren und Banner findest du direkt im Menü.</p><a class="button quiet" href="/darts" target="_blank" rel="noopener">Barver-Website ansehen ↗</a></div></section></div>
         </section>
+        <section data-panel="teams" hidden><div class="surface"><div class="editor-heading"><div><h2>Deine Mannschaften</h2><p class="muted">Spieler und Beiträge rund um eine Mannschaft verwalten.</p></div><button type="button" data-open="settings" class="quiet">Mannschaften bearbeiten</button></div><div id="adminTeams" class="admin-team-grid"></div></div></section>
+<section data-panel="barver" hidden><p id="dartsWorkspaceStatus" class="status" role="status" hidden></p><button id="retryDartsWorkspace" type="button" class="quiet" hidden>Erneut versuchen</button><iframe id="dartsWorkspace" class="darts-workspace" title="Darts-Verwaltung" referrerpolicy="same-origin"></iframe></section>
         <section data-panel="posts" hidden>
           <div class="editor-layout"><aside class="surface post-browser"><button type="button" id="newPost">+ Neuer Beitrag</button><label>Beiträge suchen<input type="search" id="postSearch" placeholder="Titel suchen"></label><div id="postList" class="post-list"></div></aside>
             <div><div id="postEmpty" class="surface empty"><h2>Deine nächsten Neuigkeiten</h2><p>Wähle einen Beitrag aus oder schreibe einen neuen.</p></div>

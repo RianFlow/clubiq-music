@@ -66,14 +66,39 @@ CMS-Ligaänderungen betreffen die neue Vereins-Spielseite.
 - Bilder sind nur öffentlich abrufbar, wenn die öffentliche Vereinsseite sie als
   Logo oder ein aktuell veröffentlichter Beitrag sie verwendet. Entwürfe und
   Bilder anderer Vereine sind über öffentliche Endpunkte nicht abrufbar.
-- Die Darts-Verwaltung bleibt für Barver mit dem bestehenden Zugang verfügbar.
-  Neue Redakteurszugänge erhalten dadurch keinen Zugriff auf ihre Funktionen.
+- Die Website-Verwaltung unter `/cms` ist der gemeinsame Einstieg. Der bisherige
+  Link `/darts-admin` führt direkt zu den Spielerprofilen in dieser Verwaltung.
+  Barvers Spielerprofile, Training, Turniere, Sponsoren, Veranstaltungen und
+  Vereinskanäle sind für die Administration im gemeinsamen Menü erreichbar.
+  Neue Redakteurszugänge erhalten dadurch keinen Zugriff auf diese Funktionen.
 
 Neue Passwörter werden mit zufälligem Salt und PBKDF2-SHA256 gespeichert.
 Anmeldungen verwenden kurzlebige, serverseitige Sitzungen mit HttpOnly- und
-SameSite-Cookie. Das CMS speichert kein Passwort im Browser. Passwortänderungen,
+SameSite-Cookie. Die Sitzung gilt unter `/api/v1` und wird vor jedem geschützten
+Abruf erneut geprüft. Bestehende Sitzungen mit dem alten Cookiepfad werden beim
+Öffnen der Verwaltung übernommen. Schreibzugriffe mit Sitzung benötigen zusätzlich
+den Verwaltungsheader; ein Vereinsredakteur kann auch mit gültiger Sitzung keine
+globalen Barver-Daten bearbeiten. Bestehende Verwaltungs-API-Zugriffe mit den
+bisherigen Zugangsdaten funktionieren weiterhin. Das CMS speichert kein Passwort
+im Browser. Passwortänderungen,
 Deaktivierung und Abmeldung beenden die betroffenen Sitzungen. Änderungen am
 bestehenden Verwaltungszugang machen dessen CMS-Sitzungen ungültig.
+
+## Gemeinsame Bedienung
+
+Die Mannschaftsübersicht führt direkt zu den passenden Spielerprofilen oder zu
+einem neuen Mannschaftsbeitrag. Bereichswechsel erhalten ungespeicherte Eingaben.
+Vor Vereinswechsel, Abmeldung oder Verlassen wird auf offene Änderungen hingewiesen.
+Auf dem Handy ersetzt eine Bereichsauswahl die lange Navigation. Hell-/Dunkelmodus
+gilt auch in den eingebundenen Bearbeitungsformularen. Die bestehenden Formulare
+werden intern auf derselben Herkunft eingebunden; nur dieser Bearbeitungsbereich
+erlaubt gleichherkunftige Frames. Öffentliche Seiten bleiben gegen Einbettung geschützt.
+
+Unter **Training** zeigt die Verwaltung den zuletzt erfolgreich abgefragten
+Katalog, den Status der einzelnen Trainings und den Hinweis, ob ein heutiger
+Termin gefunden wurde. **Trainings suchen** prüft die öffentliche Quelle erneut.
+Eine App-Anmeldung kann bereits bestehen, bevor der Termin in der öffentlichen
+3K-Vereinsliste auftaucht. Die Übersicht erzeugt keine Trainings oder Anmeldungen.
 
 ## Serverbetrieb und Prüfung
 

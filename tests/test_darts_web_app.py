@@ -15,10 +15,18 @@ class TestClient:
     def request(self, method, path):
         from urllib.parse import unquote
         messages = []
-        async def receive(): return {"type": "http.request", "body": b"", "more_body": False}
+        received = False
+        async def receive():
+            nonlocal received
+            if not received:
+                received = True
+                return {"type": "http.request", "body": b"", "more_body": False}
+            # Real ASGI servers wait for a disconnect after the request body.
+            # Repeating an immediately ready request starves file streaming.
+            await asyncio.Future()
         async def send(message): messages.append(message)
         scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": method, "scheme": "http", "path": unquote(path), "raw_path": path.encode(), "query_string": b"", "root_path": "", "headers": [], "server": ("test", 80), "client": ("test", 123)}
-        asyncio.run(self.app(scope, receive, send))
+        asyncio.run(asyncio.wait_for(self.app(scope, receive, send), timeout=5))
         start = next(m for m in messages if m["type"] == "http.response.start")
         return SimpleNamespace(status_code=start["status"], headers={k.decode(): v.decode() for k, v in start["headers"]})
 import darts_web_app

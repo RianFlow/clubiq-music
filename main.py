@@ -40,7 +40,7 @@ from darts_push import barver_push_candidates, barver_push_event, push_payload, 
 from radio_directory import DirectoryUnavailable, get_station, search_stations
 from radio_logos import CACHE_SECONDS, FAILURE_SECONDS, cached_logo
 from music_library import duration_ms, register_library
-from darts_cms import create_router as create_cms_router
+from darts_cms import create_router as create_cms_router, session_subject
 from darts_clubs import ClubDartsWorker
 
 load_dotenv()
@@ -275,10 +275,19 @@ def require_admin(x_admin_password: str | None = Header(default=None)) -> None:
         raise HTTPException(status_code=401, detail="Verwaltungskennwort ungültig.")
 
 
+def darts_owner_fingerprint():
+    return hashlib.sha256((DARTS_ADMIN_USERNAME + "\0" + ADMIN_PASSWORD).encode()).hexdigest()
+
+
 def require_darts_admin(x_admin_password: str | None = Header(default=None),
-                        x_admin_username: str | None = Header(default=None)) -> None:
+                        x_admin_username: str | None = Header(default=None), request: Request = None) -> None:
     if not ADMIN_PASSWORD or not DARTS_ADMIN_USERNAME:
         raise HTTPException(status_code=503, detail="Der Verwaltungszugang ist nicht eingerichtet.")
+    if not x_admin_password and not x_admin_username and request is not None:
+        user = session_subject(request, db_connect, darts_owner_fingerprint)
+        if not user["owner"]:
+            raise HTTPException(403, "Diese Funktion ist der Administration vorbehalten.", headers={"Cache-Control": "no-store"})
+        return
     username_ok = secrets.compare_digest((x_admin_username or "").encode(), DARTS_ADMIN_USERNAME.encode())
     password_ok = secrets.compare_digest((x_admin_password or "").encode(), ADMIN_PASSWORD.encode())
     if not username_ok or not password_ok:
@@ -623,7 +632,7 @@ app.include_router(create_cms_router(
     owner_credentials=lambda username, password: bool(ADMIN_PASSWORD and DARTS_ADMIN_USERNAME)
         and secrets.compare_digest(username.encode(), DARTS_ADMIN_USERNAME.encode())
         and secrets.compare_digest(password.encode(), ADMIN_PASSWORD.encode()),
-    owner_fingerprint=lambda: hashlib.sha256((DARTS_ADMIN_USERNAME + "\0" + ADMIN_PASSWORD).encode()).hexdigest(),
+    owner_fingerprint=darts_owner_fingerprint,
     validate_image=lambda data: _validated_player_image(data),
     owner_username=lambda: DARTS_ADMIN_USERNAME,
     darts_worker=club_darts_worker,
@@ -646,14 +655,21 @@ async def security_headers(request: Request, call_next):
     if request.url.path in {"/darts", "/training", "/turnier"} or is_darts_host(request):
         frame_sources = "https://portal.3k-darts.com https://live.3k-darts.com"
         connect_sources += " https://backend-ddv.3k-darts.com https://backend4.3k-darts.com https://live.3k-darts.com"
+    embedded_admin = request.url.path == "/darts-admin" and request.query_params.get("embedded") == "1"
+    if request.url.path == "/cms":
+        frame_sources = "'self'"
+    ancestors = "'self'" if embedded_admin else "'none'"
+    image_sources = "'self' data: blob:" if embedded_admin else "'self' data:"
     response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+        f"default-src 'self'; img-src {image_sources}; style-src 'self' 'unsafe-inline'; "
         f"script-src 'self'; connect-src {connect_sources}; frame-src {frame_sources}; "
-        "base-uri 'none'; frame-ancestors 'none'"
+        f"base-uri 'none'; frame-ancestors {ancestors}"
     )
     response.headers["Referrer-Policy"] = "same-origin"
     response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN" if embedded_admin else "DENY"
+    if request.url.path.startswith(("/api/v1/cms", "/api/v1/darts/admin/")):
+        response.headers["Cache-Control"] = "no-store"
     return response
 
 
@@ -901,7 +917,9 @@ def darts_display():
 
 
 @app.get("/darts-admin")
-def darts_admin_display():
+def darts_admin_display(embedded: bool = False):
+    if not embedded:
+        return Response(status_code=303, headers={"Location": "/cms?view=players", "Cache-Control": "no-store"})
     return FileResponse(
         "darts-admin.html",
         headers={"Cache-Control": "no-store, max-age=0"},

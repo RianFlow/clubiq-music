@@ -1,0 +1,13 @@
+/* The parent CMS supplies the header and navigation. */
+:root[data-embedded=true] body{min-height:0;background:transparent}
+:root[data-embedded=true] :is(.admin-header,.admin-tabs,#loginPanel){display:none!important}
+:root[data-embedded=true] main{width:100%;margin:0;padding:0 0 12px}
+:root[data-embedded=true] .admin-intro{margin-bottom:16px;gap:12px;align-items:center}
+:root[data-embedded=true] .admin-intro :is(h1,.eyebrow){display:none}
+:root[data-embedded=true] .admin-intro p{margin-bottom:0;font-size:.9rem;line-height:1.6}
+:root[data-embedded=true] .admin-layout{grid-template-columns:minmax(200px,250px) minmax(0,1fr);gap:18px}
+:root[data-embedded=true] .player-browser{position:static;max-height:620px;box-shadow:none}
+:root[data-embedded=true] :is(.editor-card,.player-browser){border-radius:16px;box-shadow:none}
+:root[data-embedded=true] .form-actions{position:static}
+.training-catalog{display:grid;gap:10px;margin-top:20px}.training-catalog article{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;border:1px solid var(--line);border-radius:12px;padding:14px}.training-catalog article div{display:grid;gap:5px}.training-catalog small{color:var(--muted)}.training-catalog a{color:var(--mint);font-weight:700}.training-help{line-height:1.6;color:var(--muted)}
+@media(max-width:720px){:root[data-embedded=true] .admin-layout{grid-template-columns:minmax(0,1fr)}:root[data-embedded=true] .player-browser{max-height:280px}:root[data-embedded=true] .editor-card{padding:18px}:root[data-embedded=true] .admin-intro{display:grid}.training-catalog article{align-items:flex-start;flex-direction:column}}

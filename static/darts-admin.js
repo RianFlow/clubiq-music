@@ -7,18 +7,27 @@ function applyAdminTheme(theme) {
 }
 applyAdminTheme(document.documentElement.dataset.theme==='dark'?'dark':'light');
 $('#adminThemeToggle').addEventListener('click',()=>applyAdminTheme(document.documentElement.dataset.theme==='dark'?'light':'dark'));
-const state = { username: sessionStorage.getItem('clubiq_darts_admin_username') || '', password: sessionStorage.getItem('clubiq_darts_admin') || '', players: [], selected: null, pendingPhoto: null, previewUrl: '', sponsors: [], selectedSponsor: null, pendingSponsorLogo: null, events: [], selectedEvent: null, pendingEventImage: null, eventImageObjectUrl: '', socialLinks: [], selectedSocial: null };
+const embeddedCookieMode=new URLSearchParams(location.search).get('embedded')==='1';
+const state = { username: embeddedCookieMode?'':sessionStorage.getItem('clubiq_darts_admin_username') || '', password: embeddedCookieMode?'':sessionStorage.getItem('clubiq_darts_admin') || '', players: [], selected: null, pendingPhoto: null, previewUrl: '', sponsors: [], selectedSponsor: null, pendingSponsorLogo: null, events: [], selectedEvent: null, pendingEventImage: null, eventImageObjectUrl: '', socialLinks: [], selectedSocial: null };
+state.cookieMode=embeddedCookieMode;
+if(state.cookieMode){
+  document.documentElement.dataset.embedded='true';
+  state.username='';state.password='';
+  try{sessionStorage.removeItem('clubiq_darts_admin');sessionStorage.removeItem('clubiq_darts_admin_username');}catch(_){}
+}
 
 async function api(path, options = {}) {
   const headers = new Headers(options.headers || {});
-  headers.set('X-Admin-Password', state.password);
-  headers.set('X-Admin-Username', state.username);
+  if(state.cookieMode)headers.set('X-CMS-Request','1');
+  else {headers.set('X-Admin-Password', state.password);headers.set('X-Admin-Username', state.username);}
   if (options.body && !(options.body instanceof FormData)) headers.set('Content-Type', 'application/json');
-  const response = await fetch(path, {...options, headers, cache:'no-store'});
+  const response = await fetch(path, {...options, headers, credentials:'same-origin', cache:'no-store'});
   if (!response.ok) {
     let message = 'Die Anfrage konnte nicht ausgeführt werden.';
     try { message = (await response.json()).detail || message; } catch (_) {}
-    const error = new Error(message); error.status = response.status; throw error;
+    const error = new Error(message); error.status = response.status;
+    if(error.status===401&&state.cookieMode)parent.postMessage({type:'clubiq-admin-auth-required'},location.origin);
+    throw error;
   }
   const type = response.headers.get('content-type') || '';
   return type.includes('application/json') ? response.json() : null;
@@ -290,10 +299,10 @@ async function deleteSponsorLogo() {
   catch(error){status.textContent=error.message;}
 }
 function showAdminView(view) {
-  for (const name of ['players','sponsors','events','social','tournament']) {
+  for (const name of ['players','sponsors','events','social','tournament','training']) {
     const visible=view===name;
-    $(`#${name}AdminView`).hidden=!visible;
-    $(`#${name}AdminTab`).classList.toggle('active',visible);
+    if($(`#${name}AdminView`))$(`#${name}AdminView`).hidden=!visible;
+    if($(`#${name}AdminTab`))$(`#${name}AdminTab`).classList.toggle('active',visible);
   }
 }
 
@@ -309,7 +318,8 @@ async function loadProtectedEventImage(item){
   if(!item?.id||!item.hasImage)return;
   const selectedId=item.id;
   try{
-    const response=await fetch(`/api/v1/darts/admin/events/${selectedId}/image`,{headers:{'X-Admin-Password':state.password,'X-Admin-Username':state.username},cache:'no-store'});
+    const headers=state.cookieMode?{'X-CMS-Request':'1'}:{'X-Admin-Password':state.password,'X-Admin-Username':state.username};
+    const response=await fetch(`/api/v1/darts/admin/events/${selectedId}/image`,{headers,credentials:'same-origin',cache:'no-store'});
     if(!response.ok)throw new Error('Banner-Vorschau nicht verfügbar.');
     const url=URL.createObjectURL(await response.blob());
     if(state.selectedEvent?.id!==selectedId){URL.revokeObjectURL(url);return;}
@@ -382,8 +392,7 @@ async function openAdmin(password, username = state.username) {
   state.username=clean(username);
   state.password=password;
   await api('/api/v1/darts/admin/verify');
-  sessionStorage.setItem('clubiq_darts_admin',password);
-  sessionStorage.setItem('clubiq_darts_admin_username',state.username);
+  if(!state.cookieMode){sessionStorage.setItem('clubiq_darts_admin',password);sessionStorage.setItem('clubiq_darts_admin_username',state.username);}
   $('#adminPassword').value='';
   $('#loginPanel').hidden=true; $('#adminPanel').hidden=false; $('#logout').hidden=false;
   const results=await Promise.allSettled([loadData(),loadSponsors(),loadEvents(),loadSocial(),loadTournament()]);

@@ -14,7 +14,7 @@ import psycopg
 from psycopg import sql
 import requests
 import uvicorn
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
 from db_config import connection_kwargs
 from darts_cms import CMS_SCHEMA_SQL, create_router
@@ -41,6 +41,10 @@ class CmsPostgresTests(unittest.TestCase):
         app = FastAPI()
         app.include_router(create_router(connect, lambda user, pwd: user == "owner" and pwd == "owner-test-password",
                                          lambda: hashlib.sha256(b"owner-test-password").hexdigest(), image, lambda: "owner", darts_worker=cls.worker))
+        from main import require_darts_admin
+        @app.api_route('/api/v1/darts/admin/verify', methods=['GET', 'POST'], dependencies=[Depends(require_darts_admin)])
+        def shared_admin_probe():
+            return {'ok': True}
         sock = socket.socket()
         sock.bind(("127.0.0.1", 0))
         cls.origin = f"http://127.0.0.1:{sock.getsockname()[1]}"
@@ -81,6 +85,32 @@ class CmsPostgresTests(unittest.TestCase):
 
     def make_public(self):
         self.club = self.call("PUT", self.prefix, {"version": self.club["version"], "name": self.club["name"], "published": True}).json()
+
+    def test_shared_admin_cookie_scope_migration_csrf_and_editor_boundary(self):
+        import main
+        from darts_cms import COOKIE
+        fingerprint = hashlib.sha256(b'owner-test-password').hexdigest()
+        with patch.object(main, 'ADMIN_PASSWORD', 'owner-test-password'), patch.object(main, 'DARTS_ADMIN_USERNAME', 'owner'), patch.object(main, 'db_connect', self.connect), patch.object(main, 'darts_owner_fingerprint', lambda:fingerprint):
+            route = self.origin + '/api/v1/darts/admin/verify'
+            self.assertEqual(self.owner.get(route).status_code, 200)
+            self.assertEqual(self.owner.post(route).status_code, 200)
+            csrf = requests.Session();csrf.cookies.update(self.owner.cookies)
+            self.assertEqual(csrf.post(route).status_code, 403)
+            token = self.owner.cookies.get(COOKIE)
+            old = requests.Session();old.headers['X-CMS-Request']='1'
+            old.cookies.set(COOKIE, token, domain='127.0.0.1', path='/api/v1/cms')
+            self.assertEqual(old.get(route).status_code, 401)
+            self.assertEqual(old.get(self.origin+'/api/v1/cms/session').status_code, 200)
+            self.assertEqual(old.get(route).status_code, 200)
+            self.assertEqual({cookie.path for cookie in old.cookies if cookie.name==COOKIE}, {'/api/v1'})
+            username='editor-'+uuid4().hex[:12]
+            self.call('POST', self.prefix+'/users', {'username':username,'password':'editor-test-password'})
+            editor=requests.Session();editor.headers['X-CMS-Request']='1'
+            self.assertEqual(editor.post(self.origin+'/api/v1/cms/login', json={'username':username,'password':'editor-test-password'}).status_code,200)
+            self.assertEqual(editor.get(route).status_code,403)
+            self.assertEqual(editor.post(route).status_code,403)
+            self.call('DELETE','/session')
+            self.assertEqual(self.owner.get(route).status_code,401)
 
     def post(self, title="Erste Fassung", image_id=None):
         return self.call("POST", self.prefix + "/posts", {"title": title, "summary": "Kurze Nachricht", "body": "Absatz eins.\n\nAbsatz zwei.", "image_id": image_id}).json()
