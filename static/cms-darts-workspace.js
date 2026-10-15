@@ -2,12 +2,12 @@
 (() => {
   'use strict';
   const frame=document.querySelector('#dartsWorkspace'), note=document.querySelector('#dartsWorkspaceStatus');
-  const views=new Set(['players','sponsors','events','social','tournament','training']);
+  const views=new Set(['players','sponsors','events','notices','social','tournament','training']);
   let allowed=false, ready=false, wanted=null, timer=null;
   const send=message=>frame.contentWindow?.postMessage(message,location.origin);
   function open(view,team='') {
     if(!allowed||!views.has(view))return;
-    wanted={view,team};frame.title={players:'Spielerprofile',sponsors:'Sponsoren',events:'Veranstaltungen & Banner',social:'Vereinskanäle',tournament:'Turniere & TV',training:'Training'}[view];
+    wanted={view,team};frame.title={players:'Spielerprofile',sponsors:'Sponsoren',events:'Veranstaltungen & Banner',notices:'Spiel- & Terminhinweise',social:'Vereinskanäle',tournament:'Turniere & TV',training:'Training'}[view];
     if(ready){send({type:'clubiq-admin-open',...wanted,theme:document.documentElement.dataset.theme});return;}
     note.textContent='Verwaltung wird geladen …';note.hidden=false;
     if(!frame.hasAttribute('src')){

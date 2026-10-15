@@ -56,7 +56,7 @@
     if(event.origin!==location.origin||event.source!==parent)return;
     const message=event.data;
     if(message?.type==='clubiq-admin-theme'||message?.type==='clubiq-admin-open')applyAdminTheme(message.theme==='dark'?'dark':'light');
-    if(message?.type==='clubiq-admin-open'&&['players','sponsors','events','social','tournament','training'].includes(message.view)){
+    if(message?.type==='clubiq-admin-open'&&['players','sponsors','events','notices','social','tournament','training'].includes(message.view)){
       showAdminView(message.view);
       if(message.view==='players'&&/^[A-D]$/.test(message.team||'')){$('#teamFilter').value=message.team;renderPlayerList();}
       if(message.view==='training'&&!trainingLoaded)loadTrainings();

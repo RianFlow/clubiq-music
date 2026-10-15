@@ -127,7 +127,7 @@ Live-Werte, Tabellen, Spielberichte, TV-Modus und letzte verfügbare Daten.
 
 ## Umfang dieser Version
 
-Für Barver gibt es unter **Veranstaltungen & Banner → Hinweise zu Spielen & Terminen**
+Für Barver gibt es unter **Spiel- & Terminhinweise**
 einen Hinweis pro Begegnung, Trainingstag oder Vereinstermin. Termin auswählen,
 Text eingeben, Ablaufdatum festlegen und „Hinweis speichern“ wählen. Die Vorlagen
 „Spiel verlegt“ und „Spielort geändert“ lassen sich ergänzen. Datum und Spielort

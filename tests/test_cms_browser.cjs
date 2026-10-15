@@ -64,9 +64,11 @@ if(require.main===module)(async()=>{
     const embedded=page.frameLocator('#dartsWorkspace');
     await embedded.locator('#profileForm').waitFor();
     await page.getByRole('button',{name:'Veranstaltungen & Banner',exact:true}).click();await embedded.getByRole('button',{name:/Testveranstaltung/}).click();await embedded.locator('#eventImagePreview img').waitFor();await page.waitForFunction(()=>{const image=document.querySelector('#dartsWorkspace').contentDocument.querySelector('#eventImagePreview img');return image?.complete&&image.naturalWidth>0;});
+    assert.equal(await embedded.locator('#noticeForm').isVisible(),false,'appointment notices have their own section');
+    await page.getByRole('button',{name:'Spiel- & Terminhinweise',exact:true}).click();await embedded.locator('#noticesAdminView').waitFor();
     await embedded.locator('#noticeTarget').selectOption({index:1});await embedded.locator('#noticeMessage').fill('Training findet heute an einem anderen Ort statt');
     await page.locator('#workspaceUnsaved').waitFor();
-    await page.getByRole('button',{name:'Beiträge',exact:true}).click();await page.getByRole('button',{name:'Veranstaltungen & Banner',exact:true}).click();
+    await page.getByRole('button',{name:'Beiträge',exact:true}).click();await page.getByRole('button',{name:'Spiel- & Terminhinweise',exact:true}).click();
     assert.equal(await embedded.locator('#noticeMessage').inputValue(),'Training findet heute an einem anderen Ort statt','notice draft survives section changes');
     rejectNextDialog=true;await page.locator('#clubChoice').selectOption('2');assert.equal(await page.locator('#clubChoice').inputValue(),'1','notice participates in unsaved edits warning');
     await embedded.locator('#noticeMessage').fill('');await embedded.locator('#noticeTarget').selectOption('');

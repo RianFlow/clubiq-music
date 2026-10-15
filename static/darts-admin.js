@@ -301,7 +301,7 @@ async function deleteSponsorLogo() {
   catch(error){status.textContent=error.message;}
 }
 function showAdminView(view) {
-  for (const name of ['players','sponsors','events','social','tournament','training']) {
+  for (const name of ['players','sponsors','events','notices','social','tournament','training']) {
     const visible=view===name;
     if($(`#${name}AdminView`))$(`#${name}AdminView`).hidden=!visible;
     if($(`#${name}AdminTab`))$(`#${name}AdminTab`).classList.toggle('active',visible);
@@ -405,6 +405,7 @@ async function openAdmin(password, username = state.username) {
 
 $('#playersAdminTab').addEventListener('click',()=>showAdminView('players'));
 $('#sponsorsAdminTab').addEventListener('click',()=>showAdminView('sponsors'));
+$('#noticesAdminTab').addEventListener('click',()=>showAdminView('notices'));
 $('#eventsAdminTab').addEventListener('click',()=>showAdminView('events'));
 $('#socialAdminTab').addEventListener('click',()=>showAdminView('social'));
 $('#tournamentAdminTab').addEventListener('click',()=>showAdminView('tournament'));
