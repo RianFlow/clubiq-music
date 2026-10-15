@@ -10,9 +10,11 @@
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
   <link rel="stylesheet" href="/static/darts-admin.css?v=20261014-admin1">
   <script defer src="/static/darts-social-icons.js?v=20261004-clear1"></script>
-  <script defer src="/static/darts-admin.js?v=20261014-admin1"></script>
-  <script defer src="/static/darts-admin-embedded.js?v=20261014-admin1"></script>
-  <link rel="stylesheet" href="/static/darts-admin-workspace.css?v=20261014-admin1">
+  <script defer src="/static/darts-experience.js?v=20261004-clear1"></script>
+  <script defer src="/static/darts-admin.js?v=20261015-notices"></script>
+  <script defer src="/static/darts-admin-notices.js?v=20261015-notices"></script>
+  <script defer src="/static/darts-admin-embedded.js?v=20261015-notices"></script>
+  <link rel="stylesheet" href="/static/darts-admin-workspace.css?v=20261015-notices">
 <link rel="stylesheet" href="/static/darts-typography.css?v=20261004-type1"></head>
 <body>
   <header class="admin-header">
@@ -100,6 +102,20 @@
         </form>
       </section>
       <section id="eventsAdminView" hidden>
+        <form id="noticeForm" class="editor-card appointment-notice-editor">
+          <h2>Hinweise zu Spielen & Terminen</h2>
+          <p>Zum Beispiel bei einer Verlegung oder einem geänderten Spielort. Der Hinweis erscheint direkt am passenden Termin auf der Startseite.</p>
+          <label>Spiel oder Termin<select id="noticeTarget" required><option value="">Termine werden geladen …</option></select></label>
+          <fieldset id="noticeFields" disabled>
+            <label>Hinweistext<textarea id="noticeMessage" maxlength="240" rows="2" required placeholder="Achtung: Spiel verlegt auf Samstag, 18 Uhr."></textarea></label>
+            <div id="noticeQuickTexts" class="form-actions"><button type="button" class="secondary" data-notice-text="Achtung: Spiel verlegt">Spiel verlegt</button><button type="button" class="secondary" data-notice-text="Achtung: Spielort geändert">Spielort geändert</button></div>
+            <p id="noticePreview" class="appointment-notice-preview" hidden></p>
+            <label>Hinweis ausblenden ab<input id="noticeExpiresAt" type="datetime-local" required><small>Danach verschwindet der Hinweis automatisch. Die Zeit wird in deiner Ortszeit angezeigt.</small></label>
+            <label class="publish-switch"><input id="noticeActive" type="checkbox" checked><span><strong>Hinweis veröffentlichen</strong><small>Datum und Ort aus 3K bleiben bestehen. Schreibe die Änderung bitte in den Hinweistext.</small></span></label>
+            <div class="form-actions"><button id="saveNotice" type="submit">Hinweis speichern</button><button id="deleteNotice" type="button" class="secondary danger" disabled>Hinweis entfernen</button></div>
+          </fieldset>
+          <p id="noticeStatus" role="status">Hinweise werden geladen …</p>
+        </form>
         <div class="admin-intro"><div><p class="eyebrow">Termine & Banner</p><h1>Veranstaltungen</h1><p>Termine und Veranstaltungsbanner als Entwurf vorbereiten und gezielt veröffentlichen.</p></div><span id="eventDataStatus" role="status">Veranstaltungen werden geladen …</span></div>
         <div class="admin-layout content-admin-layout">
           <aside class="player-browser"><button id="newEvent" type="button">+ Veranstaltung anlegen</button><label>Veranstaltung suchen<input id="eventSearch" type="search" placeholder="Titel oder Ort" autocomplete="off"></label><div id="eventList" class="player-list"></div></aside>

@@ -127,6 +127,17 @@ Live-Werte, Tabellen, Spielberichte, TV-Modus und letzte verfügbare Daten.
 
 ## Umfang dieser Version
 
+Für Barver gibt es unter **Veranstaltungen & Banner → Hinweise zu Spielen & Terminen**
+einen Hinweis pro Begegnung, Trainingstag oder Vereinstermin. Termin auswählen,
+Text eingeben, Ablaufdatum festlegen und „Hinweis speichern“ wählen. Die Vorlagen
+„Spiel verlegt“ und „Spielort geändert“ lassen sich ergänzen. Datum und Spielort
+aus 3K werden dadurch nicht überschrieben; die Änderung steht im Hinweistext.
+Aktive Hinweise erscheinen auf der Startseite direkt an den passenden Karten,
+auch bei „Unsere Mannschaften“. Die Seite gleicht sie jede Minute und bei der
+Rückkehr zum geöffneten Tab ab. Abgelaufene Hinweise werden serverseitig nicht
+mehr ausgeliefert und auch im Browser ausgeblendet. Ein laufender PC ist dafür
+nicht nötig. Nur die Administration darf diese Hinweise verwalten.
+
 Die allgemeine Version enthält eine konfigurierbare Liga-Spielseite, Vereinsseiten,
 Mannschaftsbeiträge, Medien, Vorschau, Veröffentlichungszeiträume, Änderungsverlauf
 und getrennte Redakteurszugänge. Die bestehende Barver-Seite mit Spielerprofilen,

@@ -1,17 +1,19 @@
 // Local fixture server + real-browser regression. No production writes or 3K calls.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
-const root=path.resolve(__dirname,'..'); let saved=null,savedSponsor=null,savedEvent=null,savedSocial=null,eventHasImage=false;
+const root=path.resolve(__dirname,'..'); let notices=[],savedNotice=null; let saved=null,savedSponsor=null,savedEvent=null,savedSocial=null,eventHasImage=false;
 const profiles={players:[
   {playerId:89029,alias:'Peddy',published:true,stored:false,image:'/pics/players/patrick-lammers-cutout.webp',personal:{darts:'95K von Aspinall',favoriteFinish:'D16'}},
   {playerId:89017,alias:'',published:false,stored:true,personal:{}},
 ]};
-const season={teams:[{code:'B',roster:[{id:89029,name:'Patrick Lammers',role:'Kapitän'},{id:89017,name:'Justin Albrecht',role:'Spieler'}]}]};
+const season={matches:[{id:701,kind:'upcoming',home:'SV Barver Darts B',away:'Testverein',plannedAt:new Date(Date.now()+86400000).toISOString()}],teams:[{code:'B',roster:[{id:89029,name:'Patrick Lammers',role:'Kapitän'},{id:89017,name:'Justin Albrecht',role:'Spieler'}]}]};
 const sponsors={sponsors:[{id:1,name:'Muster Hauptpartner',type:'main',href:'https://example.com/',teams:[],placements:['footer','tv'],eventName:'',eventMatchIds:[],startsAt:null,endsAt:null,priority:100,active:true,hasLogo:false}]};
 const events={events:[]},socialLinks={links:[]};
 const server=http.createServer((req,res)=>{
   const url=new URL(req.url,'http://localhost'),p=url.pathname;
   if(p.startsWith('/api/')) {
     if((req.headers['x-admin-password']!=='secret'||req.headers['x-admin-username']!=='admin') && p!=='/api/v1/darts/season'){res.writeHead(401,{'Content-Type':'application/json'});res.end('{"detail":"Verwaltungskennwort ungültig."}');return;}
+    if(p==='/api/v1/darts/admin/appointment-notices'){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({notices}));return;}
+    if(p.startsWith('/api/v1/darts/admin/appointment-notices/')){const target=p.split('/').pop();let body='';req.on('data',part=>body+=part);req.on('end',()=>{if(req.method==='DELETE')notices=notices.filter(n=>n.target!==target);else{savedNotice=JSON.parse(body);notices=[{target,title:savedNotice.title,message:savedNotice.message,expiresAt:savedNotice.expires_at,active:savedNotice.active}];}res.writeHead(200,{'Content-Type':'application/json'});res.end('{"status":"success"}');});return;}
     if(p==='/api/v1/darts/admin/verify'){res.writeHead(200,{'Content-Type':'application/json'});res.end('{"status":"ok"}');return;}
     if(p==='/api/v1/darts/admin/players'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(profiles));return;}
     if(p==='/api/v1/darts/admin/sponsors'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(sponsors));return;}
@@ -53,6 +55,17 @@ const server=http.createServer((req,res)=>{
     await page.fill('#sponsorPriority','120');await page.click('#sponsorForm button[type="submit"]');await page.getByText('Sponsor gespeichert.').waitFor();assert.equal(savedSponsor.priority,120);assert.equal(savedSponsor.sponsor_type,'main');
     await page.click('#eventsAdminTab');await page.click('#newEvent');await page.fill('#eventCalendarDate','2026-10-24');await page.fill('#eventTitle','Sommerturnier');await page.fill('#eventKicker','SV Barver');await page.fill('#eventDescription','Offenes Dartturnier für alle.');await page.fill('#eventDate','Samstag, 15. August');await page.fill('#eventLocation','Sporthalle Barver');await page.fill('#eventHref','https://example.org/turnier');await page.fill('#eventButtonLabel','Jetzt anmelden');await page.fill('#eventPriority','7');await page.fill('#eventStartsAt','2026-08-15T14:30');await page.fill('#eventEndsAt','2026-08-15T22:00');await page.check('#eventActive');await page.setInputFiles('#eventImage',path.join(root,'pics/logo.png'));await page.getByText(/Banner vorbereitet/).waitFor();await page.click('#eventForm button[type="submit"]');await page.getByText('Veranstaltung gespeichert.').waitFor();assert.equal(savedEvent.title,'Sommerturnier');assert.equal(savedEvent.calendar_date,'2026-10-24');assert.equal(await page.inputValue('#eventCalendarDate'),'2026-10-24');assert.equal(savedEvent.description,'Offenes Dartturnier für alle.');assert.equal(savedEvent.website,'https://example.org/turnier');assert.equal(savedEvent.active,true);assert.equal(savedEvent.starts_at,'2026-08-15T12:30:00.000Z');await page.locator('#eventImagePreview img[src^="blob:"]').waitFor();
     await page.click('#socialAdminTab');await page.click('#newSocial');await page.selectOption('#socialPlatform','instagram');await page.fill('#socialLabel','SV Barver auf Instagram');await page.fill('#socialHref','https://instagram.com/svbarver');await page.fill('#socialPriority','4');await page.fill('#socialTeaser','Neueste Vereinsinfos');assert.equal(await page.isChecked('#socialShowInBanner'),true);assert.equal(await page.locator('#socialForm .social-icon-preview svg').count(),1);await page.click('#socialForm button[type="submit"]');await page.getByText('Link gespeichert.').waitFor();assert.equal(savedSocial.website,'https://instagram.com/svbarver');assert.equal(savedSocial.active,true);assert.equal(savedSocial.teaser,'Neueste Vereinsinfos');assert.equal(savedSocial.show_in_banner,true);
+    await page.click('#eventsAdminTab');await page.selectOption('#noticeTarget','match-701');
+    await page.getByRole('button',{name:'Spielort geändert',exact:true}).click();await page.fill('#noticeMessage','Achtung: Spielort geändert – Sporthalle Barver');
+    await page.fill('#noticeExpiresAt','2026-11-01T22:00');await page.click('#saveNotice');await page.getByText(/Hinweis gespeichert/).waitFor();
+    assert.equal(savedNotice.message,'Achtung: Spielort geändert – Sporthalle Barver');assert.equal(savedNotice.expires_at,'2026-11-01T21:00:00.000Z');assert.equal(savedNotice.active,true);
+    assert.equal(await page.locator('#noticePreview').innerText(),savedNotice.message);
+    await page.fill('#noticeMessage','Noch nicht gespeichert');page.once('dialog',dialog=>dialog.dismiss());
+    await page.selectOption('#noticeTarget',{index:2});assert.equal(await page.inputValue('#noticeTarget'),'match-701');assert.equal(await page.inputValue('#noticeMessage'),'Noch nicht gespeichert');
+    await page.fill('#noticeMessage',savedNotice.message);
+    await page.uncheck('#noticeActive');await page.click('#saveNotice');await page.getByText(/Hinweis gespeichert/).waitFor();assert.equal(savedNotice.active,false);
+    for(const theme of ['light','dark']){await page.evaluate(t=>applyAdminTheme(t),theme);await page.locator('#noticeForm').screenshot({path:path.join(root,`outputs/appointment-notice-admin-${theme}.png`)});}
+    page.once('dialog',dialog=>dialog.accept());await page.click('#deleteNotice');await page.getByText('Hinweis entfernt.',{exact:true}).waitFor();assert.equal(notices.length,0);
     for(const theme of ['light','dark']) {
       if(await page.evaluate(()=>document.documentElement.dataset.theme)!==theme)await page.click('#adminThemeToggle');
       await page.evaluate(()=>window.scrollTo(0,0));

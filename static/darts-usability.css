@@ -109,3 +109,7 @@ body.tv-live :is(.home-team-panel,.join-teaser,.mobile-navigation){display:none}
 body.tv-live .tv-schedule-teaser{display:none}
 @media(max-width:900px){.tv-schedule-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){.tv-schedule-teaser{padding:18px;flex-wrap:wrap;gap:12px}.tv-schedule-teaser button{margin-left:54px}.tv-schedule-teaser h2{font-size:1rem}:root body:not(.tv-live) #tvSchedulePanel{padding:20px}.tv-schedule-head{flex-direction:column;gap:4px}.tv-schedule-list{grid-template-columns:1fr}.tv-schedule-card{padding:20px}}
+/* Appointment warnings share the existing amber accent with readable theme colours. */
+.appointment-notice{display:block!important;margin:10px 0 4px!important;padding:9px 11px;border:1px solid #806727;border-left:4px solid #f2c75c;border-radius:8px;background:#3d321b;color:#ffe5a2!important;font-size:.85rem!important;font-weight:700;line-height:1.45!important;overflow-wrap:anywhere;grid-column:1/-1}
+:root[data-theme=light] .appointment-notice{background:#fff3ce;color:#573c0d!important;border-color:#c4a24c}
+.match-center-card .appointment-notice{margin-bottom:0!important;text-transform:none;letter-spacing:normal}
