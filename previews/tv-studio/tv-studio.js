@@ -14,7 +14,7 @@
   ];
   let scene='live', boardCount=2, profileIndex=0, profilePaused=false, profileRemaining=8000;
   let profileDeadline=0, profileTimer=null, controlsTimer=null, momentTimer=null, pinned=false;
-  let legWon=false,doubleWon=false;
+  let legWon=false,singleWon=false,doubleWon=false;
   const escape = value => String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const number = value => value.toLocaleString('de-DE',{maximumFractionDigits:1,minimumFractionDigits:1});
   const announce = value => {q('#announcer').textContent=value;};
@@ -27,6 +27,7 @@
 
   function liveMarkup() {
     const displayed=boards.map(board=>{
+      if(board.number==='01'&&singleWon)return {...board,finished:true,throwing:null,home:{...board.home,legs:3,points:0,darts:21},away:{...board.away,points:58}};
       if(board.number==='01'&&legWon)return {...board,home:{...board.home,legs:2,points:501,darts:0,last:0},away:{...board.away,points:501,darts:0,last:0}};
       if(board.number==='02'&&doubleWon)return {...board,finished:true,throwing:null,home:{...board.home,legs:3,points:0,darts:21},away:{...board.away,points:58}};
       return board;
@@ -44,7 +45,8 @@
   }
 
   function resultMarkup() {
-    return `<section class="result-scene"><p class="eyebrow">GEMEINSAM GEHOLT.</p><h1>Mannschaftssieg für Barver B</h1><strong class="final-score">7 : 5</strong><p>SV Barver Darts B gegen DC Brenndorf E<br>Beispiel-Endstand · vielen Dank fürs Mitfiebern!</p><img class="team-photo" src="/pics/teams/barver-b-team-cutout.webp?v=20260927-2" alt="Die Mannschaft von Barver B"></section>`;
+    const confetti=Array.from({length:18},(_,i)=>`<span style="--left:${3+i*5.5}%;--delay:${(i%6)*.09}s;--drift:${i%2?-38:38}px;--turn:${i%2?170:-145}deg"></span>`).join('');
+    return `<section class="result-scene celebrating"><div class="victory-confetti" aria-hidden="true">${confetti}</div><div class="victory-emblem" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M21 10h22v14c0 12-5 18-11 18s-11-6-11-18V10Zm0 6H11v6c0 9 5 13 13 13m19-19h10v6c0 9-5 13-13 13M32 42v10m-12 4h24M25 52h14"/></svg></div><p class="eyebrow">GEMEINSAM GEHOLT.</p><h1>Mannschaftssieg für Barver B</h1><strong class="final-score">7 : 5</strong><p>SV Barver Darts B gegen DC Brenndorf E<br>Beispiel-Endstand · vielen Dank fürs Mitfiebern!</p><img class="team-photo" src="/pics/teams/barver-b-team-cutout.webp?v=20260927-2" alt="Die Mannschaft von Barver B"></section>`;
   }
 
   function clearProfileTimer() {clearTimeout(profileTimer);profileTimer=null;}
@@ -73,7 +75,8 @@
     q('#profileControls').hidden=scene!=='profile';
     q('#profileControls').innerHTML=scene==='profile'?`<span>SPIELERPRÄSENTATION</span><button id="previousProfile"${profileIndex===0?' disabled':''}>← Zurück</button><button id="pauseProfile" aria-pressed="${profilePaused}">${profilePaused?'Fortsetzen':'Pause'}</button><button id="nextProfile">${profileIndex===players.length-1?'Zum Spiel':'Weiter →'}</button><small>${profileIndex+1} / ${players.length} · 8 Sekunden</small>`:'';
     for(const button of document.querySelectorAll('[data-scene]'))button.setAttribute('aria-pressed',String(button.dataset.scene===scene));
-    q('#homeScore').textContent=scene==='result'?'7':doubleWon?'6':'5';q('#awayScore').textContent=scene==='result'?'5':'3';
+    q('#homeScore').textContent=scene==='result'?'7':singleWon||doubleWon?'6':'5';q('#awayScore').textContent=scene==='result'?'5':'3';
+    q('.scorebar').classList.toggle('team-won',scene==='result');
     q('#matchState').innerHTML='<i></i> '+({live:'BEISPIELSPIEL',profile:'KADERPRÄSENTATION',break:'SPIELPAUSE',result:'BEISPIEL-ENDSTAND'}[scene]);
     q('#footerLabel').textContent={live:'AM BOARD',profile:'UNSER TEAM',break:'SPIELPAUSE',result:'GEMEINSAM'}[scene];
     q('#footerCopy').textContent={live:'Zwei Boards. Eine Mannschaft. Gemeinsam für Barver.',profile:'Lerne die Menschen hinter unserer Mannschaft kennen.',break:'Gleich wieder am Board. Zeit für unsere Mannschaft und Partner.',result:'Für jeden Dart. Für jedes Leg. Für unseren Verein.'}[scene];
@@ -83,39 +86,51 @@
     if(scene==='break')q('.watch-card img').addEventListener('error',()=>q('.watch-card').classList.add('qrless'),{once:true});
   }
   function setScene(next) {
-    clearProfileTimer();clearTimeout(momentTimer);q('#moment').hidden=true;scene=next;profileIndex=0;profilePaused=false;profileRemaining=8000;legWon=false;doubleWon=false;renderScene();window.scrollTo({top:0,behavior:'instant'});
+    clearProfileTimer();clearTimeout(momentTimer);q('#moment').hidden=true;scene=next;profileIndex=0;profilePaused=false;profileRemaining=8000;legWon=false;singleWon=false;doubleWon=false;renderScene();window.scrollTo({top:0,behavior:'instant'});
     announce({live:'Beispielspiel mit laufenden Boards',profile:'Spielerprofile, jeweils acht Sekunden',break:'Pausenbildschirm',result:'Beispiel für einen Mannschaftssieg'}[scene]);
+    if(next==='result'){q('#stage').focus({preventScroll:true});hideControls();}
   }
   function showMoment(type) {
-    if(scene!=='live')setScene('live');
-    clearTimeout(momentTimer);
-    if(type==='leg')legWon=true;else doubleWon=true;
+    setScene('live');
+    if(type==='leg')legWon=true;else if(type==='single')singleWon=true;else doubleWon=true;
     renderScene();
-    const double=type==='double',selected=double?[players[1],players[2]]:[players[0]],host=q('#moment');
-    host.className='moment'+(double?' double':'');
-    host.innerHTML=(double?`<div class="moment-portraits">${selected.map(p=>`<img src="${p.image}" alt="Vereinsfoto von ${escape(p.name)}">`).join('')}</div>`:'')+`<div><p class="eyebrow">${double?'DOPPEL GEWONNEN':'LEG GEWONNEN'} · BEISPIEL</p><strong>${double?'Max Lowak & René Lange':'Robin Tiedemann'}</strong><p>${double?'3 : 2 · Ein weiterer Punkt für unsere Mannschaft.':'2 : 1 in den Legs · weiter geht’s am Board.'}</p></div>`;
-    host.hidden=false;momentTimer=setTimeout(()=>{host.hidden=true;},double?5500:3500);
+    const double=type==='double',partie=type!=='leg',selected=double?[players[1],players[2]]:[players[0]],host=q('#moment');
+    host.className='moment'+(partie?' won '+type:'');
+    const score=double?'3 : 2':partie?'3 : 1':'2 : 1';
+    host.innerHTML=(partie?`<div class="moment-portraits">${selected.map(p=>`<img src="${p.image}" alt="Vereinsfoto von ${escape(p.name)}">`).join('')}</div><div class="moment-check" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></div>`:'')+`<div><p class="eyebrow">${double?'DOPPEL GEWONNEN':partie?'EINZEL GEWONNEN':'LEG GEWONNEN'} · BEISPIEL</p><strong>${double?'Max Lowak & René Lange':'Robin Tiedemann'}</strong><p><b>${score}</b> · ${partie?'Partie beendet. Ein Punkt für Barver.':'In den Legs · das nächste Leg beginnt.'}</p></div>`;
+    for(const image of host.querySelectorAll('img'))image.addEventListener('error',()=>{image.src='/pics/sv-barver-darts-tight-512.webp';image.alt='Vereinslogo als Ersatz für das Spielerfoto';image.classList.add('is-logo');},{once:true});
+    host.hidden=false;q('#stage').focus({preventScroll:true});hideControls();positionMoment();
+    momentTimer=setTimeout(()=>{host.hidden=true;},partie?5500:3500);
   }
 
+  function positionMoment() {
+    const top=q('#demoControls').getBoundingClientRect().top;
+    q('#moment').style.bottom=`${document.body.classList.contains('controls-hidden')?100:Math.max(100,innerHeight-top+16)}px`;
+  }
   function showControls() {
     clearTimeout(controlsTimer);document.body.classList.remove('controls-hidden');q('#demoControls').inert=false;q('#showControls').setAttribute('aria-expanded','true');
+    positionMoment();
     if(!pinned)controlsTimer=setTimeout(hideControls,5000);
   }
   function hideControls() {
     if(pinned)return;
     if(q('#demoControls').contains(document.activeElement)){controlsTimer=setTimeout(hideControls,5000);return;}
     document.body.classList.add('controls-hidden');q('#demoControls').inert=true;q('#showControls').setAttribute('aria-expanded','false');
+    positionMoment();
   }
   for(const button of document.querySelectorAll('[data-scene]'))button.addEventListener('click',()=>setScene(button.dataset.scene));
   for(const button of document.querySelectorAll('[data-moment]'))button.addEventListener('click',()=>showMoment(button.dataset.moment));
   q('#showControls').addEventListener('click',showControls);
   q('#pinControls').addEventListener('click',()=>{pinned=!pinned;q('#pinControls').setAttribute('aria-pressed',String(pinned));q('#pinControls').textContent=pinned?'Bedienung lösen':'Bedienung festhalten';showControls();});
   q('#boardCount').addEventListener('click',()=>{boardCount=boardCount===2?1:2;q('#boardCount').textContent=boardCount===1?'Zwei Boards':'Ein Board';q('#boardCount').setAttribute('aria-pressed',String(boardCount===1));setScene('live');});
-  q('#themeToggle').addEventListener('click',()=>{const light=document.documentElement.dataset.theme!=='light';document.documentElement.dataset.theme=light?'light':'dark';q('#themeToggle').textContent=light?'Dunkel':'Hell';q('#themeToggle').setAttribute('aria-pressed',String(light));});
+  const setTheme=theme=>{const light=theme==='light';document.documentElement.dataset.theme=light?'light':'dark';q('#themeToggle').textContent=light?'Dunkel':'Hell';q('#themeToggle').setAttribute('aria-pressed',String(light));};
+  setTheme(new URLSearchParams(location.search).get('theme'));
+  q('#themeToggle').addEventListener('click',()=>setTheme(document.documentElement.dataset.theme!=='light'?'light':'dark'));
   q('#fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{announce('Vollbild wird in diesem Fenster nicht unterstützt. Die Vorschau bleibt bedienbar.');}});
   q('#demoControls').addEventListener('click',event=>{if(event.detail>0&&event.target.closest('button'))q('#stage').focus({preventScroll:true});});
   document.addEventListener('fullscreenchange',()=>{q('#fullscreen').textContent=document.fullscreenElement?'Vollbild beenden':'Vollbild';});
   document.addEventListener('pointermove',showControls,{passive:true});document.addEventListener('pointerdown',showControls,{passive:true});
+  window.addEventListener('resize',positionMoment);
   document.addEventListener('keydown',event=>{
     if(event.key.toLowerCase()==='b'||event.key==='Tab')showControls();
     if(scene==='profile'&&event.key==='ArrowRight'){event.preventDefault();advanceProfile(1);}
