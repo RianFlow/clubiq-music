@@ -127,7 +127,7 @@ class CmsPostgresTests(unittest.TestCase):
             public = self.origin + '/api/v1/darts/appointment-notices'
             payload = {'title': 'Barver B gegen Gäste', 'message': 'Achtung: Spiel verlegt', 'expires_at': (datetime.now(timezone.utc)+timedelta(days=2)).isoformat()}
             self.assertEqual(requests.get(admin, timeout=5).status_code, 401)
-            self.assertEqual(requests.put(admin+'/match-123', json=payload, timeout=5).status_code, 401)
+            self.assertEqual(requests.put(admin+'/match-123', json=payload, timeout=5).status_code, 403)
             csrf = requests.Session();csrf.cookies.update(self.owner.cookies)
             self.assertEqual(csrf.put(admin+'/match-123', json=payload, timeout=5).status_code, 403)
             self.assertEqual(self.owner.put(admin+'/match-123', json=payload, timeout=5).status_code, 200)
