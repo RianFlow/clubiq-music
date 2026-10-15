@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   if(!state.cookieMode)return;
-  const baselines=new Map(), forms=['profileForm','sponsorForm','eventForm','socialForm','tournamentForm'];
+  const baselines=new Map(), forms=['profileForm','sponsorForm','eventForm','socialForm','tournamentForm','noticeForm'];
   const send=message=>parent.postMessage(message,location.origin);
   const fingerprint=id=>JSON.stringify([...document.getElementById(id).elements]
     .filter(node=>/^(INPUT|SELECT|TEXTAREA)$/.test(node.tagName))
@@ -14,6 +14,8 @@
   selectPlayer=(...args)=>{originalPlayer(...args);mark('profileForm');};
   selectSponsor=(...args)=>{originalSponsor(...args);mark('sponsorForm');};
   selectEvent=(...args)=>{originalEvent(...args);mark('eventForm');};
+  const originalNotice=selectAppointmentNotice;
+  selectAppointmentNotice=(...args)=>{originalNotice(...args);mark('noticeForm');};
   selectSocial=(...args)=>{originalSocial(...args);mark('socialForm');};
   loadTournament=async(...args)=>{await originalTournament(...args);mark('tournamentForm');};
   document.addEventListener('input',changed);document.addEventListener('change',changed);

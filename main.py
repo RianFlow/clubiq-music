@@ -32,6 +32,7 @@ from darts_ranking import get_darts_ranking
 from darts_tv import get_darts_tv
 from darts_training import get_trainings, get_training
 from darts_feed import DartsFeedUnavailable, get_darts_center, get_darts_feed, get_darts_match, get_darts_player_stats, get_darts_season
+from darts_notices import create_router as create_notices_router
 from darts_live import darts_live_hub, timestamp_ns
 from darts_web_app import router as darts_web_app_router
 from darts_training_live import training_live_monitor
@@ -626,6 +627,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="ClubIQ Music Voting API", lifespan=lifespan)
 app.include_router(darts_web_app_router)
+app.include_router(create_notices_router(lambda: db_connect(), require_darts_admin))
 club_darts_worker = ClubDartsWorker(lambda: db_connect(), lambda: darts_live_hub.snapshot())
 app.include_router(create_cms_router(
     connect=lambda: db_connect(),

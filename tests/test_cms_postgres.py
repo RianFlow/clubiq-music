@@ -18,6 +18,7 @@ from fastapi import Depends, FastAPI
 
 from db_config import connection_kwargs
 from darts_cms import CMS_SCHEMA_SQL, create_router
+from darts_notices import NOTICE_SCHEMA_SQL, create_router as create_notices_router
 
 
 @unittest.skipUnless(os.getenv("CMS_TEST_POSTGRES") == "1", "isolated PostgreSQL required")
@@ -30,6 +31,8 @@ class CmsPostgresTests(unittest.TestCase):
             cur.execute(sql.SQL("SET LOCAL search_path TO {}").format(sql.Identifier(cls.schema)))
             cur.execute(CMS_SCHEMA_SQL)
             cur.execute(CMS_SCHEMA_SQL)
+            cur.execute(NOTICE_SCHEMA_SQL)
+            cur.execute(NOTICE_SCHEMA_SQL)
         def connect():
             return psycopg.connect(**connection_kwargs(), options=f"-c search_path={cls.schema}")
         cls.connect = staticmethod(connect)
@@ -42,6 +45,7 @@ class CmsPostgresTests(unittest.TestCase):
         app.include_router(create_router(connect, lambda user, pwd: user == "owner" and pwd == "owner-test-password",
                                          lambda: hashlib.sha256(b"owner-test-password").hexdigest(), image, lambda: "owner", darts_worker=cls.worker))
         from main import require_darts_admin
+        app.include_router(create_notices_router(connect, require_darts_admin))
         @app.api_route('/api/v1/darts/admin/verify', methods=['GET', 'POST'], dependencies=[Depends(require_darts_admin)])
         def shared_admin_probe():
             return {'ok': True}
@@ -114,6 +118,40 @@ class CmsPostgresTests(unittest.TestCase):
 
     def post(self, title="Erste Fassung", image_id=None):
         return self.call("POST", self.prefix + "/posts", {"title": title, "summary": "Kurze Nachricht", "body": "Absatz eins.\n\nAbsatz zwei.", "image_id": image_id}).json()
+
+    def test_appointment_notices_persist_expire_and_require_owner_session(self):
+        import main
+        fingerprint = hashlib.sha256(b'owner-test-password').hexdigest()
+        with patch.object(main, 'ADMIN_PASSWORD', 'owner-test-password'), patch.object(main, 'DARTS_ADMIN_USERNAME', 'owner'), patch.object(main, 'db_connect', self.connect), patch.object(main, 'darts_owner_fingerprint', lambda:fingerprint):
+            admin = self.origin + '/api/v1/darts/admin/appointment-notices'
+            public = self.origin + '/api/v1/darts/appointment-notices'
+            payload = {'title': 'Barver B gegen Gäste', 'message': 'Achtung: Spiel verlegt', 'expires_at': (datetime.now(timezone.utc)+timedelta(days=2)).isoformat()}
+            self.assertEqual(requests.get(admin, timeout=5).status_code, 401)
+            self.assertEqual(requests.put(admin+'/match-123', json=payload, timeout=5).status_code, 403)
+            csrf = requests.Session();csrf.cookies.update(self.owner.cookies)
+            self.assertEqual(csrf.put(admin+'/match-123', json=payload, timeout=5).status_code, 403)
+            self.assertEqual(self.owner.put(admin+'/match-123', json=payload, timeout=5).status_code, 200)
+            payload['message'] = 'Spielort geändert: Vereinsheim'
+            self.assertEqual(self.owner.put(admin+'/match-123', json=payload, timeout=5).status_code, 200)
+            result = requests.get(public, timeout=5)
+            self.assertEqual(result.headers['cache-control'], 'no-store')
+            self.assertEqual([(n['target'],n['message'],datetime.fromisoformat(n['expiresAt'].replace('Z','+00:00'))) for n in result.json()['notices']], [('match-123',payload['message'],datetime.fromisoformat(payload['expires_at']))])
+            self.assertEqual(len(self.owner.get(admin, timeout=5).json()['notices']), 1)
+            for change in [{'active':False}, {'active':True,'expires_at':(datetime.now(timezone.utc)-timedelta(seconds=1)).isoformat()}]:
+                payload.update(change)
+                self.assertEqual(self.owner.put(admin+'/match-123', json=payload, timeout=5).status_code, 200)
+                self.assertEqual(requests.get(public, timeout=5).json()['notices'], [])
+            self.assertEqual(self.owner.put(admin+'/training-2026-02-30', json=payload, timeout=5).status_code, 422)
+            username = 'editor-'+uuid4().hex[:12]
+            self.call('POST', self.prefix+'/users', {'username':username,'password':'editor-test-password'})
+            editor=requests.Session();editor.headers['X-CMS-Request']='1'
+            self.assertEqual(editor.post(self.origin+'/api/v1/cms/login',json={'username':username,'password':'editor-test-password'},timeout=5).status_code,200)
+            self.assertEqual(editor.get(admin,timeout=5).status_code,403)
+            self.assertEqual(editor.put(admin+'/match-123',json=payload,timeout=5).status_code,403)
+            self.assertEqual(editor.delete(admin+'/match-123',timeout=5).status_code,403)
+            self.assertEqual(self.owner.delete(admin+'/match-123',timeout=5).status_code,200)
+            self.assertEqual(self.owner.get(admin,timeout=5).json()['notices'],[])
+            editor.close();csrf.close()
 
     def test_drafts_publish_snapshots_conflicts_history_and_restore(self):
         self.make_public()

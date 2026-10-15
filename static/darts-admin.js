@@ -71,6 +71,8 @@ async function loadData() {
   ]);
   if (profilesResult.status !== 'fulfilled') throw profilesResult.reason;
   const season=seasonResult.status === 'fulfilled' ? seasonResult.value : null;
+  state.season=season;
+  if(typeof renderNoticeOptions==='function')renderNoticeOptions();
   state.players = mergePlayers(profilesResult.value.players, season);
   const roster=rosterPlayers(season);
   if (roster.length) api('/api/v1/darts/admin/roster-cache',{method:'POST',body:JSON.stringify({players:roster})}).catch(()=>{});
@@ -351,6 +353,7 @@ function newEvent(){selectEvent({id:null,title:'',kicker:'',description:'',date:
 async function loadEvents(){
   $('#eventDataStatus').textContent='Veranstaltungen werden geladen …';const keep=state.selectedEvent?.id;const result=await api('/api/v1/darts/admin/events');
   state.events=Array.isArray(result.events)?result.events:[];$('#eventDataStatus').textContent=`${state.events.length} Veranstaltung${state.events.length===1?'':'en'}`;
+  if(typeof renderNoticeOptions==='function')renderNoticeOptions();
   const selected=state.events.find(e=>e.id===keep);if(selected)selectEvent(selected);else{state.selectedEvent=null;$('#eventForm').hidden=true;$('#eventEditorEmpty').hidden=false;renderEventList();}
 }
 async function saveEvent(event){
@@ -395,8 +398,8 @@ async function openAdmin(password, username = state.username) {
   if(!state.cookieMode){sessionStorage.setItem('clubiq_darts_admin',password);sessionStorage.setItem('clubiq_darts_admin_username',state.username);}
   $('#adminPassword').value='';
   $('#loginPanel').hidden=true; $('#adminPanel').hidden=false; $('#logout').hidden=false;
-  const results=await Promise.allSettled([loadData(),loadSponsors(),loadEvents(),loadSocial(),loadTournament()]);
-  const targets=['#dataStatus','#sponsorDataStatus','#eventDataStatus','#socialDataStatus','#tournamentCurrent'];
+  const results=await Promise.allSettled([loadData(),loadSponsors(),loadEvents(),loadSocial(),loadTournament(),loadAppointmentNotices()]);
+  const targets=['#dataStatus','#sponsorDataStatus','#eventDataStatus','#socialDataStatus','#tournamentCurrent','#noticeStatus'];
   results.forEach((result,index)=>{if(result.status==='rejected')$(targets[index]).textContent=`Laden fehlgeschlagen: ${result.reason?.message||'Unbekannter Fehler'}`;});
 }
 

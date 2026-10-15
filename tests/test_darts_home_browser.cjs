@@ -3,6 +3,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 const root=path.resolve(__dirname,'..');
 const now=()=>new Date().toISOString();
 const day=n=>{const d=new Date();d.setDate(d.getDate()+n);d.setHours(19,30,0,0);return d.toISOString();};
+let noticeMessage='Achtung: Spiel verlegt auf Samstag, 18 Uhr',noticeExpires=day(4),noticeFailure=false;
 const matches=[
   {id:901,barverTeam:'A',home:'SV Barver Darts A',away:'Demo-Gäste A',kind:'live',score:'5:4',eventId:1445,plannedAt:day(0)},
   {id:902,barverTeam:'D',home:'Demo-Gäste D',away:'SV Barver Darts D',kind:'live',score:'3:2',eventId:1460,plannedAt:day(0)},
@@ -36,6 +37,7 @@ const server=http.createServer((req,res)=>{
     if(p.endsWith('/members')) data={members:['Patrick Lammers','Erika Beispiel']};
     if(p==='/api/v1/darts/events'||p==='/api/v1/darts/appointments') data={events:[{id:1,title:'11. Barver Dart Open',description:'Einzel und Doppel in Barver',image:'/pics/events/barver-dart-open-2026.webp',active:true,priority:100},{id:2,title:'Vereinsabend',description:'Zweite Veranstaltung',calendarDate:day(3).slice(0,10),location:'Testvereinsheim',active:true},{id:3,title:'Entwurf',active:false}]};
     if(p==='/api/v1/darts/appointments')data.events=data.events.map(e=>e.id===2?{...e,startsAt:day(9)}:e);
+    if(p==='/api/v1/darts/appointment-notices'){if(noticeFailure){res.writeHead(503,{'Content-Type':'application/json'});res.end('{}');return;}data={notices:[{target:'match-903',message:noticeMessage,expiresAt:noticeExpires},{target:'match-904',message:'Abgelaufener Hinweis',expiresAt:day(-1)}]};}
     if(p==='/api/v1/darts/social-links') data={links:[{id:1,platform:'whatsapp',label:'WhatsApp-Kanal',href:'https://whatsapp.com/channel/0029Vb1TkYQ5K3zONLbu0C0l',active:true},{id:2,platform:'instagram',label:'Instagram · SV Barver Darts',href:'https://www.instagram.com/svbarverdarts/',teaser:'Bilder aus dem Verein',showInBanner:true,active:true},{id:3,platform:'facebook',label:'Ausgeblendeter Kanal',href:'https://www.facebook.com/',active:false}]};
     if(p==='/api/v1/darts/sponsors') data={displaySeconds:12,sponsors:[{id:1,name:'Testpartner',type:'main',placements:['top','inline']}]};
     if(p.endsWith('/player-profiles')) {data=JSON.parse(fs.readFileSync(path.join(root,'static/darts-players.json'),'utf8'));data.players['89029'].personal.throwingHand='right';}
@@ -134,6 +136,21 @@ const server=http.createServer((req,res)=>{
     assert.equal(await page.locator('.personal-settings #pushToggle').count(),1);
     await page.locator('#homeSchedule .team-profile-match').first().waitFor();
     await page.locator('#nextAppointmentsList .appointment-card').first().waitFor();assert.ok(await page.locator('.calendar-button').count()>0);await page.locator('#nextAppointmentsList').getByRole('heading',{name:'Vereinsabend'}).waitFor();assert.ok(await page.locator('#nextAppointmentsList').getByRole('link',{name:'Route öffnen'}).count()>0);
+    await page.locator('#matchCenterGrid [data-notice-target="match-903"]').waitFor();
+    assert.equal(await page.locator('#nextAppointmentsList [data-notice-target="match-903"]').innerText(),noticeMessage);
+    assert.equal(await page.locator('[data-notice-target="match-904"]').count(),0);
+    assert.equal(await page.locator('#matchCenterGrid .match-center-entry').filter({hasText:noticeMessage}).count(),1,'warning stays with its game');
+    for(const theme of ['light','dark']){await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);await page.locator('#homeTeamsPanel').screenshot({path:path.join(root,`outputs/appointment-notices-${theme}.png`)});}
+    noticeMessage='Spielort geändert: <img src=x onerror=alert(1)>';
+    await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+    await page.waitForFunction(text=>document.querySelector('#matchCenterGrid [data-notice-target="match-903"]')?.textContent===text,noticeMessage);
+    assert.equal(await page.locator('.appointment-notice img').count(),0,'notice is plain text');
+    noticeFailure=true;await Promise.all([page.waitForResponse(r=>r.url().endsWith('/appointment-notices')&&r.status()===503),page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')))]);
+    assert.equal(await page.locator('#nextAppointmentsList [data-notice-target="match-903"]').innerText(),noticeMessage,'temporary failure retains last valid notice');
+    noticeFailure=false;noticeExpires=day(-1);await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+    await page.waitForFunction(()=>!document.querySelector('[data-notice-target="match-903"]'));
+    noticeMessage='Achtung: Spiel verlegt';noticeExpires=day(4);await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+    await page.locator('#matchCenterGrid [data-notice-target="match-903"]').waitFor();
     const downloadPromise=page.waitForEvent('download');await page.locator('#nextAppointmentsList .calendar-button').first().click();const calendarDownload=await downloadPromise;assert.match(calendarDownload.suggestedFilename(),/barver-.*\.ics/);
     await page.locator('#clubEventTitle').getByText('11. Barver Dart Open',{exact:true}).waitFor();
     await page.click('#nextClubEvent');assert.equal(await page.locator('#clubEventTitle').textContent(),'Vereinsabend');

@@ -467,6 +467,27 @@ function initDarts() {
     .then(config=>startSponsorRotation(dartsSponsors(config)))
     .catch(()=>document.querySelectorAll('.sponsor-slot').forEach(slot=>{ slot.hidden=true; slot.replaceChildren(); }));
   let clubSocialLinks=[], calendarEvents=null;
+  let appointmentNotices=[];
+  function appointmentNoticeText(target){
+    return appointmentNotices.find(item=>item.target===target&&Date.parse(item.expiresAt)>Date.now())?.message||'';
+  }
+  function appointmentNotice(target){
+    const text=appointmentNoticeText(target);if(!text)return null;
+    const banner=document.createElement('p');banner.className='appointment-notice';
+    banner.dataset.noticeTarget=target;banner.textContent=text;return banner;
+  }
+  let noticesLoading=false;
+  async function loadAppointmentNotices(){
+    if(noticesLoading)return;noticesLoading=true;
+    try{
+      const response=await fetch('/api/v1/darts/appointment-notices',{cache:'no-store',headers:{Accept:'application/json'},signal:AbortSignal.timeout(8000)});
+      if(!response.ok)throw new Error('Hinweise nicht verfügbar');
+      const result=await response.json();if(!Array.isArray(result.notices))throw new Error('Ungültige Hinweise');
+      appointmentNotices=result.notices.filter(item=>typeof item.target==='string'&&typeof item.message==='string'&&item.active!==false);
+      renderCompleteMatchCenter();renderExperience();
+    }catch(_){/* Keep previously received, unexpired notices during a short outage. */}
+    finally{noticesLoading=false;}
+  }
   function renderClubEvent(event) {
     const banner=q('#clubEventBanner');
     if (!event) { banner.hidden=true; return; }
@@ -854,6 +875,7 @@ function initDarts() {
       const text=document.createElement('strong'); appendTeamAwareText(text,item ? (item.text || `${item.home} ${item.score||'vs'} ${item.away}`) : 'Keine Begegnung im aktuellen Zeitraum');
       const when=document.createElement('span'); when.className='match-center-time'; when.textContent=item ? tickerTime(item) : '3K-Spielplan prüfen';
       card.append(top,status,text,when);
+      const notice=item?.id?appointmentNotice(`match-${item.id}`):null;if(notice)card.append(notice);
       const entry=document.createElement('div');entry.className='match-center-entry';
       const roster=document.createElement('button');roster.type='button';roster.className='present-team-roster';
       roster.textContent='Kader vorstellen';roster.setAttribute('aria-label',`Kader Barver ${code} vorstellen`);
@@ -1018,10 +1040,10 @@ function initDarts() {
     const items=window.DartsExperience.agenda([...matches.values()],calendarEvents===null?clubEvents:calendarEvents,favorite);
     for(const item of items)item.location=appointmentLocation(item);
     const selectedTeam=teamByCode(favorite);const lastResult=[...matches.values()].filter(m=>m.kind==='final'&&(m.barverTeams||[barverTeam(m)]).includes(favorite)).sort((a,b)=>Date.parse(b.plannedAt||b.updatedAt||0)-Date.parse(a.plannedAt||a.updatedAt||0))[0];
-    const signature=JSON.stringify([favorite,selectedTeam?.name,selectedTeam?.rank,items.map(item=>[item.id,item.title,item.start,item.location,item.href]),lastResult?.id,lastResult?.score,lastResult?.plannedAt,[...recentResults.keys()]]);if(signature===experienceSignature)return;experienceSignature=signature;
+    const signature=JSON.stringify([favorite,selectedTeam?.name,selectedTeam?.rank,items.map(item=>[item.id,item.title,item.start,item.location,item.href,appointmentNoticeText(item.id)]),lastResult?.id,lastResult?.score,lastResult?.plannedAt,[...recentResults.keys()]]);if(signature===experienceSignature)return;experienceSignature=signature;
     renderHomeTeam([...matches.values()]);renderJoin();
     target.replaceChildren();
-    for(const item of items){const card=document.createElement('article');card.className='appointment-card';const type=document.createElement('small');type.textContent={match:'Mannschaftsspiel',training:'Training',event:'Veranstaltung'}[item.kind];const title=document.createElement('h3');title.textContent=item.title;const date=document.createElement('time');date.dateTime=item.start;date.textContent=new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',weekday:'short',day:'2-digit',month:'2-digit',...(item.allDay?{}:{hour:'2-digit',minute:'2-digit'})}).format(new Date(item.start))+(item.allDay?' · ganztägig':' Uhr');const location=document.createElement('p');location.textContent=item.location||'Spielort noch nicht hinterlegt';const actions=document.createElement('div');actions.className='appointment-actions';actions.append(calendarButton(item));if(item.location){const route=document.createElement('a');route.href=`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(item.location)}`;route.target='_blank';route.rel='noopener noreferrer';route.textContent='Route öffnen';actions.append(route);}if(item.match){const open=document.createElement('button');open.type='button';open.textContent='Spiel ansehen';open.addEventListener('click',()=>openMatch(item.match.id));actions.append(open);}else if(item.kind==='training'){const open=document.createElement('button');open.type='button';open.textContent='Trainingsbereich öffnen';open.addEventListener('click',()=>setSection('training'));actions.append(open);}else if(item.href){const open=document.createElement('a');open.href=item.href;open.target='_blank';open.rel='noopener noreferrer';open.textContent='Mehr erfahren';actions.append(open);}card.append(type,title,date,location,actions);target.append(card);}
+    for(const item of items){const card=document.createElement('article');card.className='appointment-card';const type=document.createElement('small');type.textContent={match:'Mannschaftsspiel',training:'Training',event:'Veranstaltung'}[item.kind];const title=document.createElement('h3');title.textContent=item.title;const date=document.createElement('time');date.dateTime=item.start;date.textContent=new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',weekday:'short',day:'2-digit',month:'2-digit',...(item.allDay?{}:{hour:'2-digit',minute:'2-digit'})}).format(new Date(item.start))+(item.allDay?' · ganztägig':' Uhr');const location=document.createElement('p');location.textContent=item.location||'Spielort noch nicht hinterlegt';const actions=document.createElement('div');actions.className='appointment-actions';actions.append(calendarButton(item));if(item.location){const route=document.createElement('a');route.href=`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(item.location)}`;route.target='_blank';route.rel='noopener noreferrer';route.textContent='Route öffnen';actions.append(route);}if(item.match){const open=document.createElement('button');open.type='button';open.textContent='Spiel ansehen';open.addEventListener('click',()=>openMatch(item.match.id));actions.append(open);}else if(item.kind==='training'){const open=document.createElement('button');open.type='button';open.textContent='Trainingsbereich öffnen';open.addEventListener('click',()=>setSection('training'));actions.append(open);}else if(item.href){const open=document.createElement('a');open.href=item.href;open.target='_blank';open.rel='noopener noreferrer';open.textContent='Mehr erfahren';actions.append(open);}card.append(type,title,date);const notice=appointmentNotice(item.id);if(notice)card.append(notice);card.append(location,actions);target.append(card);}
     q('#nextAppointmentsNote').textContent=favorite==='all'?'Alle Mannschaften und der Verein':`Barver ${favorite} und der Verein`;
   }
   let profileReturnMatch=null;
@@ -2305,7 +2327,9 @@ function initDarts() {
   q('#reloadSeason').addEventListener('click',()=>loadSeason(true));
   q('#favoriteTeam').value=favorite;q('#homeTeam').value=favorite;
   function selectFavorite(value){favorite=value;try{localStorage.setItem(favoriteKey,favorite);}catch(_){}q('#favoriteTeam').value=favorite;q('#homeTeam').value=favorite;renderTicker(tickerData);}
-  window.setInterval(renderExperience,60000);
+  loadAppointmentNotices();
+  window.setInterval(()=>{renderExperience();renderCompleteMatchCenter();if(!document.hidden)loadAppointmentNotices();},60000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)loadAppointmentNotices();});
   q('#favoriteTeam').addEventListener('change',()=>selectFavorite(q('#favoriteTeam').value));
   q('#tvTeamControls').addEventListener('click',event=>{
     const button=event.target.closest('button[data-tv-team]'); if(!button) return;

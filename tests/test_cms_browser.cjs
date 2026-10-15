@@ -20,6 +20,7 @@ const server=http.createServer(async(req,res)=>{
     if(sessionExpired)return response(res,401,{detail:'Bitte erneut anmelden.'});
     assert.equal(req.headers['x-admin-password'],undefined,'shared editors never send passwords');
     if(!['GET','HEAD'].includes(req.method))assert.equal(req.headers['x-cms-request'],'1');
+    if(p.endsWith('/appointment-notices'))return response(res,200,{notices:[]});
     if(p.endsWith('/verify'))return response(res,200,{status:'ok'});
     if(p.endsWith('/players')&&req.method==='GET')return response(res,200,fixtureProfiles);
     if(p.endsWith('/sponsors'))return response(res,200,{sponsors:[]});
@@ -63,6 +64,12 @@ if(require.main===module)(async()=>{
     const embedded=page.frameLocator('#dartsWorkspace');
     await embedded.locator('#profileForm').waitFor();
     await page.getByRole('button',{name:'Veranstaltungen & Banner',exact:true}).click();await embedded.getByRole('button',{name:/Testveranstaltung/}).click();await embedded.locator('#eventImagePreview img').waitFor();await page.waitForFunction(()=>{const image=document.querySelector('#dartsWorkspace').contentDocument.querySelector('#eventImagePreview img');return image?.complete&&image.naturalWidth>0;});
+    await embedded.locator('#noticeTarget').selectOption({index:1});await embedded.locator('#noticeMessage').fill('Training findet heute an einem anderen Ort statt');
+    await page.locator('#workspaceUnsaved').waitFor();
+    await page.getByRole('button',{name:'Beiträge',exact:true}).click();await page.getByRole('button',{name:'Veranstaltungen & Banner',exact:true}).click();
+    assert.equal(await embedded.locator('#noticeMessage').inputValue(),'Training findet heute an einem anderen Ort statt','notice draft survives section changes');
+    rejectNextDialog=true;await page.locator('#clubChoice').selectOption('2');assert.equal(await page.locator('#clubChoice').inputValue(),'1','notice participates in unsaved edits warning');
+    await embedded.locator('#noticeMessage').fill('');await embedded.locator('#noticeTarget').selectOption('');
     await page.getByRole('button',{name:'Spielerprofile',exact:true}).click();await embedded.locator('#playersAdminView').waitFor();
     if(process.env.CMS_PLAYER_SCREENSHOT)await page.screenshot({path:process.env.CMS_PLAYER_SCREENSHOT});
     assert.equal(await page.evaluate(()=>sessionStorage.length),0,'shared login stores no passwords');
