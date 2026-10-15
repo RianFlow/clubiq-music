@@ -20,6 +20,7 @@
       <div class="team-name home"><span class="team-tag">BARVER B</span><strong>SV Barver Darts B</strong></div>
       <div class="match-score"><span id="matchState" class="match-state"><i></i> BEISPIELSPIEL</span><div><b id="homeScore">5</b><span>:</span><b id="awayScore">3</b></div><small>MANNSCHAFTSSTAND</small></div>
       <div class="team-name away"><span class="team-tag guest">GÄSTE</span><strong>DC Brenndorf E</strong></div>
+      <div id="multiScores" class="multi-scores" hidden aria-label="Mannschaftsstände der Beispielspiele"></div>
     </div>
   </header>
 
@@ -35,6 +36,7 @@
   <aside id="demoControls" class="controls" aria-label="Vorschau bedienen">
     <div class="control-caption"><span><b>DEIN TV-STUDIO</b><small>Ansichten ausprobieren · alle Spielstände sind Beispiele</small></span><button id="pinControls" class="quiet-button" aria-pressed="false">Bedienung festhalten</button></div>
     <div class="control-row">
+      <div class="layout-controls"><label for="teamCount">Mannschaften <select id="teamCount"><option value="1">1 · zwei Boards</option><option value="2">2 · vier Boards</option><option value="3">3 · sechs Boards</option><option value="4">4 · acht Boards</option></select></label><label for="eventTeam">Siegerbeispiel für <select id="eventTeam"><option value="B">Barver B</option></select></label></div>
       <div class="scene-controls" role="group" aria-label="Ansicht auswählen">
         <button data-scene="live" aria-pressed="true">Live-Bild</button><button data-scene="profile" aria-pressed="false">Spielerprofile</button><button data-scene="break" aria-pressed="false">Spielpause</button>
       </div>
