@@ -83,7 +83,7 @@ function dartsLiveGroupActive(group,now=Date.now()) {
   });
 }
 function dartsCupActive(season) {
-  if(!season||season.stale||season.specialEventsAvailable===false)return true;
+  if(!season)return false;
   const matches=(season.matches||[]).filter(m=>m.competitionType==='cup'||m.competitionBadge==='POKAL');
   if(!matches.length)return false;
   const latest=new Map();
@@ -97,6 +97,31 @@ function dartsCupActive(season) {
     const own=Number(score[side==='home'?1:2]),other=Number(score[side==='home'?2:1]);
     return own>=other;
   });
+}
+function dartsMergedMatches(season,ticker) {
+  const rows=new Map((season?.matches||[]).map(item=>[String(item.id),{...item}]));
+  for(const incoming of ticker?.items||[]){
+    const previous=rows.get(String(incoming.id));
+    const oldTime=Date.parse(previous?.fixtureObservedAt||season?.updatedAt||'')||0;
+    const newTime=Date.parse(incoming.fixtureObservedAt||ticker.updatedAt||'')||0;
+    if(previous&&oldTime>newTime)continue;
+    const item={...previous,...incoming,fixtureObservedAt:incoming.fixtureObservedAt||ticker.updatedAt||previous?.fixtureObservedAt};
+    const venue=incoming.homeVenue;
+    if(!venue?.street&&!venue?.city&&incoming.venueChecked!==true){
+      item.homeVenue=previous&&(!incoming.homeTeamId||previous.homeTeamId===incoming.homeTeamId)?previous.homeVenue||{}:{};
+    }
+    rows.set(String(item.id),item);
+  }
+  return [...rows.values()].sort((a,b)=>String(a.plannedAt||a.updatedAt||'').localeCompare(String(b.plannedAt||b.updatedAt||'')));
+}
+function dartsFixturesFresh(data,now=Date.now()){
+  const age=now-Date.parse(data?.fixturesUpdatedAt||'');return data?.fixturesStale===false&&Number.isFinite(age)&&age>=-30000&&age<360000;
+}
+function dartsTeamFixtures(team,matches) {
+  const games=matches.filter(m=>(m.barverTeams||[m.barverTeam]).includes(team.code));
+  const upcoming=games.filter(m=>m.kind==='upcoming'||m.kind==='live').sort((a,b)=>Number(b.kind==='live')-Number(a.kind==='live')||(Date.parse(a.plannedAt)||Infinity)-(Date.parse(b.plannedAt)||Infinity));
+  const final=games.filter(m=>m.kind==='final');
+  return {...team,matches:games,nextMatch:upcoming[0]||null,lastMatch:final.at(-1)||null};
 }
 function dartsTheme(value, prefersDark=false) {
   return value === 'dark' || value === 'light' ? value : prefersDark ? 'dark' : 'light';
@@ -1036,7 +1061,7 @@ function initDarts() {
   let experienceSignature='';
   function renderExperience() {
     const target=q('#nextAppointmentsList');if(!target||!window.DartsExperience)return;for(const [id,time] of recentResults)if(Date.now()-time>60000)recentResults.delete(id);
-    const matches=new Map((seasonData?.matches||[]).map(m=>[m.id,m]));for(const m of tickerData.items||[])matches.set(m.id,{...matches.get(m.id),...m});
+    const matches=new Map(currentFixtures().map(m=>[m.id,m]));
     const items=window.DartsExperience.agenda([...matches.values()],calendarEvents===null?clubEvents:calendarEvents,favorite);
     for(const item of items)item.location=appointmentLocation(item);
     const selectedTeam=teamByCode(favorite);const lastResult=[...matches.values()].filter(m=>m.kind==='final'&&(m.barverTeams||[barverTeam(m)]).includes(favorite)).sort((a,b)=>Date.parse(b.plannedAt||b.updatedAt||0)-Date.parse(a.plannedAt||a.updatedAt||0))[0];
@@ -1060,8 +1085,7 @@ function initDarts() {
   }
   const liveSnapshots=new Map();
   function renderHomeSchedule() {
-    const byId=new Map((seasonData?.matches||[]).map(item=>[item.id,item]));
-    for (const item of tickerData.items||[]) byId.set(item.id,{...byId.get(item.id),...item});
+    const byId=new Map(currentFixtures().map(item=>[item.id,item]));
     rememberResults([...byId.values()]);
     const groups=dartsHomeGroups([...byId.values()],{team:q('#homeTeam').value,league:q('#homeLeague').value,date:q('#homeDate').value});
     const filterSummary=q('#homeFilterSummary');
@@ -1082,8 +1106,7 @@ function initDarts() {
     renderExperience();
   }
   function renderCompleteMatchCenter() {
-    const byId=new Map((seasonData?.matches || []).map(item=>[item.id,item]));
-    for (const item of tickerData.items || []) byId.set(item.id,{...byId.get(item.id),...item});
+    const byId=new Map(currentFixtures().map(item=>[item.id,item]));
     renderMatchCenter({items:[...byId.values()]});
   }
   function renderTicker(data) {
@@ -1093,6 +1116,7 @@ function initDarts() {
     renderCompleteMatchCenter();
     renderToday(tickerData);
     renderHomeSchedule();
+    renderSeason();
     refreshSponsorSlots(false);
     if (!Array.isArray(tickerData.items) || !tickerData.items.length) {
       const empty = document.createElement('span'); empty.className='ticker-loading'; empty.textContent='Derzeit keine Barver-Begegnungen im aktuellen Zeitraum.';
@@ -1148,7 +1172,7 @@ function initDarts() {
         if (!Array.isArray(payload.items)) throw new Error('invalid ticker');
       } catch (_) { /* Try the independent public connection below. */ }
       clearTimeout(timeout);
-      const serverFresh=payload&&!payload.stale&&Date.now()-Date.parse(payload.updatedAt||'')<(payload.sourceConnection==='collector'?360000:180000);
+      const serverFresh=payload&&((!payload.stale&&Date.now()-Date.parse(payload.updatedAt||'')<(payload.sourceConnection==='collector'?360000:180000))||(dartsFixturesFresh(payload)&&!payload.items.some(item=>item.kind==='live')));
       if (!demoLive&&!serverFresh&&window.DartsSourceFallback) {
         try {payload=await window.DartsSourceFallback.load();}
         catch (_) { /* Keep the server snapshot or previously displayed data. */ }
@@ -1182,6 +1206,7 @@ function initDarts() {
     const status=q('#liveDataStatus'); status.dataset.state=stale?'warn':reconnecting?'wait':'ok';
     if (demoLive) status.textContent='Demo-Live aktiv';
     else if (!Number.isFinite(age)) status.textContent='Verbindung wird aufgebaut';
+    else if ((tickerData.stale||age>freshnessLimit)&&dartsFixturesFresh(tickerData))status.textContent='Nächste Spieltermine aktuell · weitere Daten älter';
     else if (tickerData.stale||age>freshnessLimit) status.textContent=`Letzter Stand: ${Math.max(1,Math.floor(age/60000))} Min. alt · erneuter Abruf automatisch`;
     else if (directDetailsFailed) status.textContent='Live-Punkte nicht erreichbar · Spielstand aktuell';
     else if (detailsStale||serverLiveStale) status.textContent='Live-Punkte veraltet · erneuter Abruf automatisch';
@@ -1285,8 +1310,10 @@ function initDarts() {
   q('#resetHomeFilters').addEventListener('click',()=>{q('#homeTeam').value='all';q('#homeLeague').value='all';q('#homeDate').value='';renderHomeSchedule();});
   function teamByCode(code) {
     const normalized=dartsTeamCode(`Barver ${code}`);
-    return (seasonData?.teams || []).find(team=>team.code===normalized) || null;
+    const team=(seasonData?.teams || []).find(team=>team.code===normalized);
+    return team?dartsTeamFixtures(team,currentFixtures()):null;
   }
+  function currentFixtures(){return dartsMergedMatches(seasonData,tickerData);}
   async function openTeamByCode(code) {
     const normalized=dartsTeamCode(`Barver ${code}`);
     if (!normalized) return;
@@ -1340,8 +1367,8 @@ function initDarts() {
     const panel=q('#specialEvents'), target=q('#specialEventsList');
     const events=seasonData?.specialEvents || [];
     const matches=(seasonData?.matches || []).filter(item=>item.isSpecial);
-    const cupActive=dartsCupActive(seasonData);q('#cupView').hidden=!cupActive;
-    if(!cupActive&&q('#cupView').getAttribute('aria-pressed')==='true')setSection('today');
+    const cupActive=dartsCupActive(seasonData);q('#cupView').hidden=!cupActive;q('#cupArchiveView').hidden=cupActive;
+    const mobileCup=q('[data-menu-target="cupView"]');if(mobileCup?.firstChild)mobileCup.firstChild.textContent=cupActive?'Pokal':'Pokal-Ergebnisse';
     panel.hidden=false;
     if (!events.length) {
       q('#specialEventsCount').textContent='Noch kein Termin erkannt';
@@ -1400,6 +1427,7 @@ function initDarts() {
     loadPlayerData();
   }
   function renderPlayerProfile(member,team) {
+    team=dartsTeamFixtures(team,currentFixtures());
     const target=q('#playerProfile');
     const profile=playerProfiles[String(member.id || '')] || {};
     const hero=document.createElement('section'); hero.className='player-profile-hero';
@@ -1509,6 +1537,7 @@ function initDarts() {
     loadPlayerData();
   }
   function renderTeamProfile(team) {
+    team=dartsTeamFixtures(team,currentFixtures());
     const target=q('#teamProfile');
     const record=team.record || {}, rosterMembers=dartsTeamRoster(team);
     const hero=document.createElement('section'); hero.className='team-profile-hero';
@@ -1578,7 +1607,7 @@ function initDarts() {
   function renderSeasonTeams() {
     const target=q('#seasonTeams');
     const fragment=document.createDocumentFragment();
-    for (const team of seasonData?.teams || []) {
+    for (const team of (seasonData?.teams || []).map(item=>dartsTeamFixtures(item,currentFixtures()))) {
       const card=document.createElement('button'); card.type='button'; card.className='native-team-card'; card.dataset.team=team.code;
       if (q('#seasonTeam').value===team.code) card.setAttribute('aria-pressed','true');
       const badge=document.createElement('b'); badge.textContent=team.code;
@@ -1594,7 +1623,7 @@ function initDarts() {
   }
   function renderSeasonMatches() {
     const team=q('#seasonTeam').value;
-    let matches=(seasonData?.matches || []).filter(item=>team==='all'||(item.barverTeams || [item.barverTeam]).includes(team));
+    let matches=currentFixtures().filter(item=>team==='all'||(item.barverTeams || [item.barverTeam]).includes(team));
     if (seasonStatus==='upcoming') matches=matches.filter(item=>item.kind==='upcoming'||item.kind==='live');
     if (seasonStatus==='final') matches=matches.filter(item=>item.kind==='final'||item.kind==='pending').reverse();
     const headings={upcoming:'Kommende Begegnungen',final:'Ergebnisse',all:'Alle Saisonspiele'};
@@ -1706,7 +1735,7 @@ function initDarts() {
       renderSeason(); renderHomeSchedule(); renderCompleteMatchCenter();
       if (q('#personalSettings').open) renderPlayerOptions();
       const seasonPartial=seasonData.degraded===true;
-      const freshnessText=seasonData.stale?'Letzter verfügbarer Stand':seasonPartial?'3K teilweise erreichbar':'Mit 3K abgeglichen';
+      const freshnessText=seasonData.stale?(dartsFixturesFresh(seasonData)?'Nächste Spieltermine aktuell · Saisonstand älter':'Letzter verfügbarer Stand'):seasonPartial?'3K teilweise erreichbar':'Mit 3K abgeglichen';
       const freshnessState=seasonData.stale||seasonPartial?'warn':'ok';
       q('#seasonFreshness').textContent=freshnessText; q('#seasonFreshness').dataset.state=freshnessState;
       q('#cupFreshness').textContent=freshnessText; q('#cupFreshness').dataset.state=freshnessState;
@@ -1930,9 +1959,7 @@ function initDarts() {
     matchRequestController?.abort();
     const controller=new AbortController();matchRequestController=controller;
     q('#matchDialog').dataset.matchId=String(matchId);
-    const scheduled=(seasonData?.matches||[]).find(item=>item.id===matchId);
-    const latest=(tickerData.items||[]).find(item=>item.id===matchId);
-    const knownMatch=scheduled||latest?{...scheduled,...latest}:null;
+    const knownMatch=currentFixtures().find(item=>item.id===matchId)||null;
     const summary=knownMatch?{available:true,stale:true,checking:true,reportAvailable:false,match:knownMatch,games:[],liveGames:[],performances:[],sourceUrl:knownMatch.url}:null;
     const sponsorSlot=q('#sponsorMatch');sponsorSlot.dataset.teams=(knownMatch?.barverTeams||[barverTeam(knownMatch)]).filter(Boolean).join(',');refreshSponsorSlots(false);
     activeMatchDetailData=summary;
@@ -2288,6 +2315,7 @@ function initDarts() {
     q('#todayView').setAttribute('aria-pressed',String(section === 'today'));
     q('#leagueView').setAttribute('aria-pressed',String(section === 'league'));
     q('#cupView').setAttribute('aria-pressed',String(section === 'cup'));
+    q('#cupArchiveView').setAttribute('aria-pressed',String(section === 'cup'));
     q('#gridView').setAttribute('aria-pressed',String(section === 'teams'));
     q('#membersView').setAttribute('aria-pressed',String(section === 'members'));
     q('#trainingView').setAttribute('aria-pressed',String(section === 'training'));
@@ -2314,6 +2342,7 @@ function initDarts() {
     }
   });
   q('#cupView').addEventListener('click',()=>{ setSection('cup'); loadSeason(); });
+  q('#cupArchiveView').addEventListener('click',()=>{setSection('cup');loadSeason();});
   q('#membersView').addEventListener('click',async()=>{ setSection('members'); await Promise.all([loadSeason(),loadClubMembers()]); renderMembers(); });
   q('#personalSettingsToggle').addEventListener('click',()=>{
     q('#moreNavigation').open=false;

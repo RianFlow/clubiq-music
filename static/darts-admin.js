@@ -21,7 +21,9 @@ async function api(path, options = {}) {
   if(state.cookieMode)headers.set('X-CMS-Request','1');
   else {headers.set('X-Admin-Password', state.password);headers.set('X-Admin-Username', state.username);}
   if (options.body && !(options.body instanceof FormData)) headers.set('Content-Type', 'application/json');
-  const response = await fetch(path, {...options, headers, credentials:'same-origin', cache:'no-store'});
+  let response;
+  try{response=await fetch(path,{...options,headers,credentials:'same-origin',cache:'no-store',signal:options.signal||AbortSignal.timeout(['GET','HEAD'].includes(options.method||'GET')?15000:45000)});}
+  catch(error){if(['AbortError','TimeoutError'].includes(error.name))throw new Error('Die Anfrage dauert zu lange. Bitte erneut versuchen.');throw new Error('Die Verbindung ist gerade unterbrochen. Bitte erneut versuchen.');}
   if (!response.ok) {
     let message = 'Die Anfrage konnte nicht ausgeführt werden.';
     try { message = (await response.json()).detail || message; } catch (_) {}
@@ -62,23 +64,33 @@ function rosterPlayers(season) {
   return players;
 }
 
+let playerDataGeneration=0,playerSeasonController=null;
+const adminProfileFingerprint=()=>JSON.stringify([...$('#profileForm').elements].filter(node=>/^(INPUT|SELECT|TEXTAREA)$/.test(node.tagName)).map(node=>[node.value,node.checked,[...(node.files||[])].map(file=>[file.name,file.size,file.lastModified])]));
 async function loadData() {
+  const generation=++playerDataGeneration;playerSeasonController?.abort();
+  const controller=new AbortController();playerSeasonController=controller;
+  const timeout=setTimeout(()=>controller.abort(),12000);
   $('#dataStatus').textContent = 'Profile und 3K-Kader werden geladen …';
-  const selectedId=state.selected?.playerId;
-  const [profilesResult, seasonResult] = await Promise.allSettled([
-    api('/api/v1/darts/admin/players'),
-    fetch('/api/v1/darts/season',{headers:{Accept:'application/json'},cache:'no-store'}).then(response=>response.ok?response.json():null),
-  ]);
-  if (profilesResult.status !== 'fulfilled') throw profilesResult.reason;
-  const season=seasonResult.status === 'fulfilled' ? seasonResult.value : null;
-  state.season=season;
-  if(typeof renderNoticeOptions==='function')renderNoticeOptions();
-  state.players = mergePlayers(profilesResult.value.players, season);
-  const roster=rosterPlayers(season);
-  if (roster.length) api('/api/v1/darts/admin/roster-cache',{method:'POST',body:JSON.stringify({players:roster})}).catch(()=>{});
-  $('#dataStatus').textContent = seasonResult.status === 'fulfilled' && seasonResult.value ? `${state.players.length} Profile · 3K-Kader aktuell` : `${state.players.length} Profile · 3K-Kader gerade nicht erreichbar`;
-  const selected=state.players.find(item=>item.playerId===selectedId) || state.players[0];
-  if (selected) selectPlayer(selected); else renderPlayerList();
+  const seasonResult=fetch('/api/v1/darts/season',{headers:{Accept:'application/json'},cache:'no-store',signal:controller.signal})
+    .then(async response=>{if(!response.ok)throw new Error();const data=await response.json();if(!Array.isArray(data.teams))throw new Error();return {data};})
+    .catch(()=>({data:null})).finally(()=>clearTimeout(timeout));
+  const profiles=await api('/api/v1/darts/admin/players');
+  if(generation!==playerDataGeneration)return;
+  state.players=mergePlayers(profiles.players,state.season);
+  if(!state.selected){if(state.players[0])selectPlayer(state.players[0]);else renderPlayerList();}else renderPlayerList();
+  const selectedId=state.selected?.playerId,fingerprint=adminProfileFingerprint();
+  $('#dataStatus').textContent=`${state.players.length} Profile verfügbar · 3K-Kader wird ergänzt …`;
+  seasonResult.then(({data:season})=>{
+    if(generation!==playerDataGeneration)return;
+    if(season)state.season=season;
+    state.players=mergePlayers(profiles.players,state.season);
+    if(typeof renderNoticeOptions==='function')renderNoticeOptions();
+    const roster=rosterPlayers(season);
+    if(roster.length)api('/api/v1/darts/admin/roster-cache',{method:'POST',body:JSON.stringify({players:roster})}).catch(()=>{});
+    const updated=state.players.find(item=>item.playerId===selectedId);
+    if(updated&&state.selected?.playerId===selectedId&&adminProfileFingerprint()===fingerprint)selectPlayer(updated);else renderPlayerList();
+    $('#dataStatus').textContent=`${state.players.length} Profile · ${season?(season.stale?'letzter gespeicherter 3K-Kader':'3K-Kader aktuell'):'3K-Kader gerade nicht erreichbar'}`;
+  });
 }
 
 function renderPlayerList() {
@@ -102,7 +114,7 @@ function setPreview(player, source = '') {
   const imageSource=source || player.image || '';
   if (imageSource) {
     const image=document.createElement('img'); image.src=imageSource; image.alt=`Porträt von ${playerLabel(player)}`;
-    image.addEventListener('error',()=>{root.replaceChildren(Object.assign(document.createElement('span'),{textContent:'Foto'}));},{once:true});
+    image.addEventListener('error',()=>{if(image.parentNode===root)root.replaceChildren(Object.assign(document.createElement('span'),{textContent:'Foto'}));},{once:true});
     root.append(image);
   } else root.append(Object.assign(document.createElement('span'),{textContent:'Foto'}));
 }

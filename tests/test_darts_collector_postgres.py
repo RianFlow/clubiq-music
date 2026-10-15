@@ -47,6 +47,24 @@ class CollectorPostgresTests(unittest.TestCase):
                     stale=feed.get_darts_feed(now+timedelta(minutes=7))
                     self.assertTrue(stale["stale"])
                     self.assertEqual(stale["updatedAt"],latest["updatedAt"])
+                    # A failed full-season refresh must not freeze independently verified fixtures.
+                    old_match={"id":1296315,"eventId":1460,"roundId":34527,"kind":"upcoming","barverTeams":["D"],
+                               "homeTeamId":174266,"home":"SV Barver Darts D","away":"OSC Damme D",
+                               "plannedAt":"2026-10-23T17:30:00+00:00","homeVenue":{"city":"Barver"}}
+                    base={"updatedAt":(now-timedelta(days=3)).isoformat(),"sourceConnection":"collector",
+                          "matches":[old_match],"teams":[{"code":"D","nextMatch":old_match}]}
+                    resilience.save_snapshot("collector:season",base)
+                    changed={**old_match,"homeTeamId":174268,"home":"OSC Damme D","away":"SV Barver Darts D",
+                             "plannedAt":"2026-10-24T15:00:00+00:00","homeVenue":{"name":"Aqua Vital","city":"Damme"},"venueChecked":True}
+                    delta={"scope":"fixtures","league":{"key":"kk11"},"roundIds":[34527],"matches":[changed],"updatedAt":now.isoformat()}
+                    collector.persist_dataset("fixtures:kk11",collector.verified_payload("fixtures:kk11",delta,now))
+                    result=feed.get_darts_season(now)
+                    self.assertTrue(result["stale"])
+                    self.assertEqual(result["updatedAt"],base["updatedAt"])
+                    self.assertEqual(result["teams"][0]["nextMatch"]["homeVenue"]["city"],"Damme")
+                    self.assertEqual(result["matches"][0]["plannedAt"],changed["plannedAt"])
+                    collector.persist_dataset("fixtures:kk11",collector.verified_payload("fixtures:kk11",{**delta,"updatedAt":(now-timedelta(minutes=2)).isoformat(),"matches":[old_match]},now))
+                    self.assertEqual(feed.get_darts_season(now)["matches"][0]["plannedAt"],changed["plannedAt"],"a late old writer must not undo the moved fixture")
             finally:
                 conn.rollback()
                 with conn.cursor() as cursor:

@@ -2,12 +2,13 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
 const root=path.resolve(__dirname,'..'); let notices=[],savedNotice=null; let saved=null,savedSponsor=null,savedEvent=null,savedSocial=null,eventHasImage=false;
 const profiles={players:[
-  {playerId:89029,alias:'Peddy',published:true,stored:false,image:'/pics/players/patrick-lammers-cutout.webp',personal:{darts:'95K von Aspinall',favoriteFinish:'D16'}},
-  {playerId:89017,alias:'',published:false,stored:true,personal:{}},
+  {playerId:89029,name:'Patrick Lammers',team:'B',alias:'Peddy',published:true,stored:false,image:'/pics/players/patrick-lammers-cutout.webp',personal:{darts:'95K von Aspinall',favoriteFinish:'D16'}},
+  {playerId:89017,name:'Justin Albrecht',team:'B',alias:'',published:false,stored:true,personal:{}},
 ]};
 const season={matches:[{id:701,kind:'upcoming',home:'SV Barver Darts B',away:'Testverein',plannedAt:new Date(Date.now()+86400000).toISOString()}],teams:[{code:'B',roster:[{id:89029,name:'Patrick Lammers',role:'Kapitän'},{id:89017,name:'Justin Albrecht',role:'Spieler'}]}]};
 const sponsors={sponsors:[{id:1,name:'Muster Hauptpartner',type:'main',href:'https://example.com/',teams:[],placements:['footer','tv'],eventName:'',eventMatchIds:[],startsAt:null,endsAt:null,priority:100,active:true,hasLogo:false}]};
 const events={events:[]},socialLinks={links:[]};
+let releaseSeason;const heldSeason=new Promise(resolve=>releaseSeason=resolve);let seasonHeld=true;
 const server=http.createServer((req,res)=>{
   const url=new URL(req.url,'http://localhost'),p=url.pathname;
   if(p.startsWith('/api/')) {
@@ -23,7 +24,7 @@ const server=http.createServer((req,res)=>{
     if(p==='/api/v1/darts/admin/events/22/image'&&req.method==='POST'){req.resume();req.on('end',()=>{eventHasImage=true;events.events[0].hasImage=true;res.writeHead(200,{'Content-Type':'application/json'});res.end('{"status":"success"}');});return;}
     if(p==='/api/v1/darts/admin/events/22/image'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'image/png','Cache-Control':'no-store'});res.end(fs.readFileSync(path.join(root,'pics/logo.png')));return;}
     if(p==='/api/v1/darts/admin/social-links'&&req.method==='POST'){let body='';req.on('data',part=>body+=part);req.on('end',()=>{savedSocial=JSON.parse(body);socialLinks.links=[{id:31,platform:savedSocial.platform,label:savedSocial.label,href:savedSocial.website,priority:savedSocial.priority,active:savedSocial.active,teaser:savedSocial.teaser,showInBanner:savedSocial.show_in_banner}];res.writeHead(201,{'Content-Type':'application/json'});res.end('{"id":31}');});return;}
-    if(p==='/api/v1/darts/season'){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(season));return;}
+    if(p==='/api/v1/darts/season'){const send=()=>{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(season));};if(seasonHeld)heldSeason.then(send);else send();return;}
     if(/^\/api\/v1\/darts\/admin\/players\/\d+$/.test(p)&&req.method==='PUT'){
       let body='';req.on('data',part=>body+=part);req.on('end',()=>{saved=JSON.parse(body);res.writeHead(200,{'Content-Type':'application/json'});res.end('{"status":"success"}');});return;
     }
@@ -45,7 +46,7 @@ const server=http.createServer((req,res)=>{
     const page=await browser.newPage({viewport:{width:1280,height:900},timezoneId:'Europe/Berlin'}),errors=[];page.on('pageerror',error=>errors.push(error.message));
     await page.goto(`${origin}/darts-admin`);
     await page.fill('#adminUsername','admin');await page.fill('#adminPassword','wrong');await page.click('#loginForm button');await page.getByText('Verwaltungskennwort ungültig.').waitFor();
-    await page.fill('#adminUsername','admin');await page.fill('#adminPassword','secret');await page.click('#loginForm button');await page.locator('#playerList').getByText('Patrick Lammers',{exact:true}).waitFor();
+    await page.fill('#adminUsername','admin');await page.fill('#adminPassword','secret');await page.click('#loginForm button');await page.locator('#playerList').getByText('Patrick Lammers',{exact:true}).click();assert.equal(await page.inputValue('#alias'),'Peddy','saved profiles render before the 3K roster responds');await page.fill('#alias','Entwurf bleibt erhalten');seasonHeld=false;releaseSeason();await page.getByText(/3K-Kader aktuell/).waitFor();assert.equal(await page.inputValue('#alias'),'Entwurf bleibt erhalten','late roster response must preserve a draft');await page.locator('#playerList').getByText('Patrick Lammers',{exact:true}).waitFor();
     await page.locator('#playerList').getByText('Patrick Lammers',{exact:true}).click();
     assert.equal(await page.inputValue('#alias'),'Peddy');assert.equal(await page.inputValue('#favoriteFinish'),'D16');
     assert.equal(await page.inputValue('#throwingHand'),'');await page.selectOption('#throwingHand','left');await page.fill('#playerNumber','Q8V4');await page.fill('#walkOnSong','Don\'t Stop Believin\' – Journey');await page.check('#published');await page.click('#profileForm button[type="submit"]');

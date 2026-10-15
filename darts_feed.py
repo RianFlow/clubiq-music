@@ -624,7 +624,8 @@ def get_darts_feed(now: datetime | None = None) -> dict:
     now = now or datetime.now(timezone.utc)
     collected = collected_snapshot("ticker", 360, now)
     if collected:
-        return collected
+        from darts_fixtures import overlay_fixtures
+        return overlay_fixtures(collected, now, ticker=True)
     timestamp = now.timestamp()
     with _feed_load_lock:
         with _lock:
@@ -1149,7 +1150,8 @@ def get_darts_season(now: datetime | None = None) -> dict:
     now = now or datetime.now(timezone.utc)
     collected = collected_snapshot("season", 360, now)
     if collected:
-        return collected
+        from darts_fixtures import overlay_fixtures
+        return overlay_fixtures(collected, now)
     with _lock:
         cached = _season_cache
         if cached:
