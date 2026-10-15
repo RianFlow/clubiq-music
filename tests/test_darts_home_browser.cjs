@@ -464,6 +464,31 @@ const server=http.createServer((req,res)=>{
     newsEmpty=true;await page.goto(`${origin}/darts`);await page.locator('#nextAppointmentsList .appointment-card').first().waitFor();
     assert.equal(await page.locator('#clubNewsPanel').isVisible(),false,'no blank news panel without published posts');
     assert.equal(await page.locator('#homeTeamPanel').isVisible(),false);
+    // A changed 3K fixture must be identical across home, team cards, team detail and calendar.
+    const syncContext=await browser.newContext({viewport:{width:1440,height:1000},serviceWorkers:'block'}),sync=await syncContext.newPage();
+    sync.on('pageerror',e=>errors.push(e.message));
+    const oldD={id:9901,eventId:1460,league:'kk11',roundId:123,kind:'upcoming',barverTeam:'D',barverTeams:['D'],barverSides:{D:'home'},homeTeamId:174266,awayTeamId:174268,home:'SV Barver Darts D',away:'OSC Damme D',plannedAt:day(8),homeVenue:{name:'Altes Vereinsheim',street:'Alter Weg 1',city:'Barver'}};
+    const changedD={...oldD,homeTeamId:174268,awayTeamId:174266,barverSides:{D:'away'},home:'OSC Damme D',away:'SV Barver Darts D',plannedAt:day(9),homeVenue:{name:'Aqua Vital',street:'Vördener Straße 19a',city:'Damme'},fixtureObservedAt:now(),venueChecked:true};
+    const closedCup=['A','B','C','D'].map((code,i)=>({id:9910+i,eventId:500,isSpecial:true,league:'special-500',competitionType:'cup',competitionBadge:'POKAL',kind:'final',score:'3:9',barverTeam:code,barverTeams:[code],barverSides:{[code]:'home'},home:`SV Barver Darts ${code}`,away:'Pokalgegner',plannedAt:day(-10+i)}));
+    await syncContext.route('https://**/*',route=>route.abort());
+    await syncContext.route(`${origin}/api/v1/darts/season`,route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({stale:true,updatedAt:day(-3),specialEventsAvailable:true,specialEvents:[{id:500,name:'Bezirkspokal',badge:'POKAL'}],matches:[...closedCup,oldD],teams:teams.map(t=>({...t,nextMatch:t.code==='D'?oldD:null,matches:t.code==='D'?[oldD]:[]}))})}));
+    await syncContext.route(`${origin}/api/v1/darts/ticker`,route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({stale:false,updatedAt:now(),items:[changedD]})}));
+    await syncContext.route(`${origin}/api/v1/darts/matches/9901`,route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({match:changedD,updatedAt:now(),games:[],reportAvailable:false})}));
+    await sync.goto(origin+'/darts');await sync.locator('#nextAppointmentsList time').first().waitFor();
+    await sync.click('#moreNavigation summary');await sync.click('#personalSettingsToggle');await sync.locator('#favoriteTeam').selectOption('D');
+    const newDate=new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',day:'2-digit',month:'2-digit'}).format(new Date(changedD.plannedAt));
+    await sync.locator('#nextAppointmentsList .appointment-card').filter({hasText:'OSC Damme D'}).locator('time[datetime="'+changedD.plannedAt+'"]').waitFor();
+    assert.match(await sync.locator('#nextAppointmentsList').innerText(),/Aqua Vital/);
+    assert.equal(await sync.locator('#cupView').isVisible(),false,'completed cup stays out of primary navigation even with a stale season');
+    await sync.click('#moreNavigation summary');await sync.click('#cupArchiveView');await sync.locator('#cupPanel').waitFor();assert.equal(await sync.locator('#cupPanel').isVisible(),true,'cup archive stays accessible');
+    await sync.click('#gridView');await sync.locator('#seasonTeams [data-team=D]').waitFor();assert((await sync.locator('#seasonTeams [data-team=D]').innerText()).includes(newDate));
+    await sync.locator('#seasonTeam').selectOption('D');await sync.locator('#seasonMatches .native-match-row').scrollIntoViewIfNeeded();await sync.waitForFunction(date=>document.querySelector('#seasonMatches').innerText.includes(date),newDate);
+    await sync.locator('#seasonTeams [data-team=D]').click();assert((await sync.locator('#teamProfile .team-profile-match').first().innerText()).includes(newDate));
+    await sync.locator('#teamProfile .team-profile-match').first().click();await sync.locator('#matchDetail').getByText(/Aqua Vital/).first().waitFor();
+    const download=sync.waitForEvent('download');await sync.locator('#matchDetail .calendar-button').click();const downloaded=await download;const calendar=fs.readFileSync(await downloaded.path(),'utf8');assert(calendar.includes('Vördener Straße 19a'));assert(calendar.includes(changedD.plannedAt.replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z')));
+    await sync.screenshot({path:path.join(root,'outputs/fixture-consistency-desktop.png')});await sync.locator('#closeMatch').click();
+    await sync.setViewportSize({width:390,height:844});await sync.click('[data-mobile-section=more]');await sync.click('[data-menu-target=cupView]');assert.equal(await sync.locator('#cupPanel').isVisible(),true);assert.equal(await sync.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+    await sync.screenshot({path:path.join(root,'outputs/cup-archive-mobile.png')});await syncContext.close();
     assert.deepEqual(errors,[]);
     console.log('Browser: homepage, two boards, favorites, filters, saved player/type preferences, reconnect, mobile OK');
   } finally {await browser.close();server.close();}

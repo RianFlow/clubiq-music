@@ -14,7 +14,7 @@ from time import monotonic
 from darts_resilience import load_snapshot, snapshot_connection
 from psycopg.types.json import Jsonb
 
-DATASET = re.compile(r"^(season|ticker|player-stats|ranking|training-catalog|training:[1-9][0-9]{0,7}|center:(kl04|kk11):latest)$")
+DATASET = re.compile(r"^(season|ticker|player-stats|ranking|training-catalog|training:[1-9][0-9]{0,7}|center:(kl04|kk11):latest|fixtures:(kl04|kk11))$")
 
 
 def stamp(value):
@@ -51,6 +51,21 @@ def verified_payload(key, payload, now):
     age = (now-stamp(payload.get("updatedAt"))).total_seconds()
     if not -30 <= age <= 180:
         raise ValueError("Cached answer is not a new source observation")
+    if key.startswith("fixtures:"):
+        code = key.split(":")[1]
+        event_id, teams = (1445, {"A", "B", "C"}) if code == "kl04" else (1460, {"D"})
+        rounds = payload.get("roundIds")
+        if (payload.get("scope") != "fixtures" or payload.get("league", {}).get("key") != code
+            or not isinstance(rounds, list) or not 0 < len(rounds) <= 6
+            or any(not isinstance(r, int) or isinstance(r, bool) or r <= 0 for r in rounds)
+            or not isinstance(payload.get("matches"), list)):
+            raise ValueError("Incomplete fixture source")
+        for match in payload["matches"]:
+            if (not isinstance(match, dict) or match.get("eventId") != event_id
+                or match.get("roundId") not in rounds or not match.get("barverTeams")
+                or not set(match["barverTeams"]).issubset(teams)
+                or not isinstance(match.get("id"), int) or isinstance(match["id"], bool) or match["id"] <= 0):
+                raise ValueError("Wrong fixture source")
     if key == "season":
         teams, leagues = payload.get("teams") or [], payload.get("leagues") or []
         if len(teams) != 4 or {team.get("code") for team in teams} != {"A","B","C","D"} or not payload.get("matches"):

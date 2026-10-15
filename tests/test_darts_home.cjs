@@ -28,7 +28,10 @@ console.log('Darts homepage groups and personal preferences OK');
 const {dartsCupActive,dartsLiveGroupActive}=vm.runInContext('({dartsCupActive,dartsLiveGroupActive})',context);
 const cup={specialEventsAvailable:true,matches:['A','B','C','D'].map((code,i)=>({id:i,eventId:1,competitionType:'cup',kind:'final',score:'3:9',barverTeams:[code],barverSides:{[code]:'home'},updatedAt:`2026-09-${20+i}`}))};
 assert.equal(dartsCupActive(cup),false);
-assert.equal(dartsCupActive({...cup,stale:true}),true);
+assert.equal(dartsCupActive({...cup,stale:true}),false,'cached confirmed elimination does not reopen the cup');
+assert.equal(dartsCupActive(null),false);
+assert.equal(dartsCupActive({...cup,specialEventsAvailable:false}),false);
+assert.equal(dartsCupActive({...cup,stale:true,matches:[...cup.matches,{eventId:2,competitionType:"cup",kind:"upcoming",barverTeams:["A"],plannedAt:"2027-07-01"}]}),true,'new season reopens the primary navigation');
 assert.equal(dartsCupActive({...cup,matches:cup.matches.slice(0,3)}),true);
 assert.equal(dartsCupActive({...cup,matches:[...cup.matches,{eventId:1,competitionType:'cup',kind:'upcoming',barverTeams:['B'],plannedAt:'2026-10-10'}]}),true);
 assert.equal(dartsLiveGroupActive({matches:[]}),false);
@@ -55,3 +58,12 @@ assert.equal(dartsCurrentLiveGames({matches:[{...completedBoard,active:false,gue
 for(const mode of ['Best of 7 Legs','Best of 5 Sets',''])assert.equal(dartsLiveGameFinished({...completedBoard,mode}),false,mode);
 assert.equal(dartsLiveGameFinished({...completedBoard,guest:{legs:2,points:0}}),false,'a checkout alone does not finish the game');
 assert.equal(dartsCurrentLiveGames({retired:true,matches:[{...completedBoard,guest:{legs:2}}]},liveTestNow).length,0);
+
+const {dartsMergedMatches,dartsTeamFixtures}=vm.runInContext('({dartsMergedMatches,dartsTeamFixtures})',context);
+const previous={id:40,kind:'upcoming',homeTeamId:1,home:'Barver D',away:'Damme',barverTeams:['D'],plannedAt:'2026-10-23T17:30:00Z',homeVenue:{city:'Barver'}};
+const changed={...previous,homeTeamId:2,home:'Damme',away:'Barver D',plannedAt:'2026-10-24T15:00:00Z',homeVenue:{city:'Damme'}};
+const merged=dartsMergedMatches({updatedAt:'2026-10-12T00:00:00Z',matches:[previous]},{updatedAt:'2026-10-15T00:00:00Z',items:[changed]});
+assert.equal(merged[0].plannedAt,changed.plannedAt);assert.equal(dartsTeamFixtures({code:'D'},merged).nextMatch.homeVenue.city,'Damme');
+assert.equal(dartsMergedMatches({updatedAt:'2026-10-16T00:00:00Z',matches:[previous]},{updatedAt:'2026-10-15T00:00:00Z',items:[changed]})[0].home,'Barver D','older ticker must not replace newer season facts');
+assert.equal(Object.keys(dartsMergedMatches({matches:[previous]},{items:[{...changed,homeVenue:{},venueChecked:false}]})[0].homeVenue).length,0,'new home team clears a stale venue');
+console.log('Shared fixture updates, source ordering and venue ownership OK');

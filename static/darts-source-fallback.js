@@ -28,7 +28,9 @@
     if(kind!=='final'&&plannedAt&&now-date(plannedAt)>8*3600000) {kind='pending';text=`${home} gegen ${away} · Vorläufig beendet – Bestätigung ausstehend`;}
     const sides={};if(league.teams[homeId])sides[league.teams[homeId]]='home';if(league.teams[awayId])sides[league.teams[awayId]]='away';
     const codes=Object.keys(sides).sort();
-    return {id:raw.id,eventId:league.event,phaseId:league.phase,roundId,kind,text,home,away,homeTeamId:homeId,awayTeamId:awayId,score:scored?`${raw.setsHome}:${raw.setsAway}`:null,plannedAt,updatedAt,league:league.key,leagueName:league.name,leagueShort:league.short,barverTeam:codes[0],barverTeams:codes,barverSides:sides,competitionType:'league',competitionBadge:league.short,isSpecial:false,url:`https://portal.3k-darts.com/frontend/events/10/event/${league.event}/phase/${league.phase}/group/${roundId}?matchId=${raw.id}`};
+    const venue=raw.participantHome?.teamSeason?.playingVenue;
+    const homeVenue=venue&&typeof venue==='object'?{name:String(venue.name||'').slice(0,160),street:String(venue.locationStreet||'').slice(0,160),postalCode:String(venue.locationPostalCode||'').slice(0,20),city:String(venue.locationCity||'').slice(0,120)}:{};
+    return {id:raw.id,eventId:league.event,phaseId:league.phase,roundId,kind,text,home,away,homeVenue,venueChecked:Boolean(venue),fixtureObservedAt:new Date(now).toISOString(),homeTeamId:homeId,awayTeamId:awayId,score:scored?`${raw.setsHome}:${raw.setsAway}`:null,plannedAt,updatedAt,league:league.key,leagueName:league.name,leagueShort:league.short,barverTeam:codes[0],barverTeams:codes,barverSides:sides,competitionType:'league',competitionBadge:league.short,isSpecial:false,url:`https://portal.3k-darts.com/frontend/events/10/event/${league.event}/phase/${league.phase}/group/${roundId}?matchId=${raw.id}`};
   }
   async function read(url, signal) {
     const response=await fetch(url,{credentials:'omit',headers:{Accept:'application/json'},cache:'no-store',signal});
@@ -82,6 +84,7 @@
       const raw=round.matches.find(item=>item.id===known.id),fresh=raw&&normalize(raw,league,roundId,Date.now());
       if(!fresh)throw new Error('Match does not belong to Barver');
       const match={...known,...fresh},result={available:true,stale:false,source:'browser-3k',updatedAt:new Date().toISOString(),match,games:[],liveGames:[],performances:[],reportAvailable:false,sourceUrl:fresh.url};
+      if(!fresh.venueChecked&&(!known.homeTeamId||known.homeTeamId===fresh.homeTeamId))match.homeVenue=known.homeVenue||{};
       if(!match.homeVenue?.street&&!match.homeVenue?.city&&Number.isSafeInteger(match.homeTeamId)) {
         try {
           const data=await read(`${api.replace(/\/event$/,'')}/participant/${match.homeTeamId}`,controller.signal);

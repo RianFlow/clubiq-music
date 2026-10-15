@@ -33,6 +33,7 @@ from darts_tv import get_darts_tv
 from darts_training import get_trainings, get_training
 from darts_feed import DartsFeedUnavailable, get_darts_center, get_darts_feed, get_darts_match, get_darts_player_stats, get_darts_season
 from darts_notices import create_router as create_notices_router
+from darts_fixtures import refresh_fixture_snapshots
 from darts_live import darts_live_hub, timestamp_ns
 from darts_web_app import router as darts_web_app_router
 from darts_training_live import training_live_monitor
@@ -617,6 +618,7 @@ async def lifespan(_: FastAPI):
     scheduler.add_job(poll_darts_training_live, "interval", seconds=10, max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(seconds=3))
     scheduler.add_job(deliver_darts_live_events, "interval", seconds=2, max_instances=1, coalesce=True)
     scheduler.add_job(warm_darts_season, "interval", minutes=9, max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(seconds=12))
+    scheduler.add_job(refresh_fixture_snapshots, "interval", minutes=5, max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(seconds=3))
     scheduler.add_job(warm_darts_player_stats, "interval", minutes=55, max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(seconds=35))
     scheduler.add_job(warm_darts_trainings, "interval", minutes=5, max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(seconds=20))
     scheduler.start()
