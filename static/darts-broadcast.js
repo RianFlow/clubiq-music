@@ -7,6 +7,7 @@
   const MAX_AGE = 14 * 24 * 60 * 60 * 1000;
   const HIGHLIGHT_MS = 3000;
   const ROSTER_MS = 4000;
+  const TV_PROFILE_MS = 8000;
   const BARVER_TEAM = /^SV\s+Barver\s+Darts\s+[A-D]$/i;
   const CLUB_CREST = '/pics/sv-barver-darts-tight-512.webp';
   const TYPES = new Set(['180', 'high_finish', 'short_leg', 'leg', 'game', 'match']);
@@ -272,7 +273,8 @@
   }
   function scheduleRoster() {
     if (!state.roster || state.roster.paused) return;
-    state.rosterTimer = root.setTimeout(() => moveRoster(1), ROSTER_MS);
+    const playerSlide = state.roster.index > 0 && state.roster.index <= state.roster.players.length;
+    state.rosterTimer = root.setTimeout(() => moveRoster(1), state.tv && playerSlide ? TV_PROFILE_MS : ROSTER_MS);
   }
   function renderRosterSlide() {
     const roster = state.roster, host = mount();
