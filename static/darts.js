@@ -1172,7 +1172,7 @@ function initDarts() {
         if (!Array.isArray(payload.items)) throw new Error('invalid ticker');
       } catch (_) { /* Try the independent public connection below. */ }
       clearTimeout(timeout);
-      const serverFresh=payload&&((!payload.stale&&Date.now()-Date.parse(payload.updatedAt||'')<(payload.sourceConnection==='collector'?360000:180000))||dartsFixturesFresh(payload));
+      const serverFresh=payload&&((!payload.stale&&Date.now()-Date.parse(payload.updatedAt||'')<(payload.sourceConnection==='collector'?360000:180000))||(dartsFixturesFresh(payload)&&!payload.items.some(item=>item.kind==='live')));
       if (!demoLive&&!serverFresh&&window.DartsSourceFallback) {
         try {payload=await window.DartsSourceFallback.load();}
         catch (_) { /* Keep the server snapshot or previously displayed data. */ }
