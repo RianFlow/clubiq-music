@@ -12,10 +12,23 @@
   const avg=player=>Number.isInteger(player?.darts)&&player.darts>0&&Number.isInteger(player.remaining)&&player.remaining>=0&&player.remaining<=501?((501-player.remaining)*3/player.darts).toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1}):player?.darts===0&&player.remaining===501?'0,0':'–';
   const teamImage=team=>PHOTOS[team]||CREST;
   function image(src,alt,cls){const n=el('img',cls);n.src=src;n.alt=alt;n.decoding='async';n.classList.toggle('is-logo',src===CREST);n.addEventListener('error',()=>{n.src=CREST;n.alt='SV Barver Darts';n.classList.add('is-logo');},{once:true});return n;}
-  function teamCodes(item){return (item.barverTeams?.length?item.barverTeams:[code(item.home),code(item.away)]).filter(c=>context.selected.includes(c));}
+  function teamCodes(item){return [...new Set(item.barverTeams?.length?item.barverTeams:[item.barverTeam,code(item.home),code(item.away)])].filter(c=>context.selected.includes(c));}
   function ownSide(item,team){const side=item.barverSides?.[team]||(code(item.home)===team?'home':code(item.away)===team?'away':'');return side==='guest'?'away':side;}
   function outcome(item,team,score=item.score){const parts=String(score||'').match(/^(\d+)\s*:\s*(\d+)$/);const side=ownSide(item,team);if(!parts||!side)return null;const own=Number(parts[side==='home'?1:2]),other=Number(parts[side==='home'?2:1]);return own>other?'win':own<other?'loss':'draw';}
-  function updateClock(){if(host)host.querySelector('.studio-clock').textContent=new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'}).format(new Date());}
+  function nextFixture(items,selected,now=Date.now()){
+    return items.filter(item=>item.kind==='upcoming'&&Number.isFinite(Date.parse(item.plannedAt))&&Date.parse(item.plannedAt)>=now-3*60*60*1000&&(item.barverTeams?.length?item.barverTeams:[item.barverTeam,code(item.home),code(item.away)]).some(team=>selected.includes(team)))
+      .sort((a,b)=>Date.parse(a.plannedAt)-Date.parse(b.plannedAt)||Number(a.id)-Number(b.id))[0]||null;
+  }
+  function countdownParts(plannedAt,now=Date.now()){
+    const remaining=Date.parse(plannedAt)-now;if(!Number.isFinite(remaining))return null;const total=Math.max(0,Math.ceil(remaining/1000));
+    return {days:Math.floor(total/86400),hours:Math.floor(total/3600)%24,minutes:Math.floor(total/60)%60,seconds:total%60,started:remaining<=0};
+  }
+  function updateCountdown(){
+    const countdown=host?.querySelector('.studio-countdown');if(!countdown)return;const parts=countdownParts(countdown.dataset.start);if(!parts)return;
+    for(const key of ['days','hours','minutes','seconds'])countdown.querySelector(`[data-unit="${key}"]`).textContent=String(parts[key]).padStart(2,'0');
+    host.querySelector('.studio-countdown-note').textContent=parts.started?'Der geplante Spielbeginn ist erreicht. Wir warten auf die Live-Daten.':'Bis zum geplanten Spielbeginn';
+  }
+  function updateClock(){if(host){host.querySelector('.studio-clock').textContent=new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'}).format(new Date());updateCountdown();}}
   function showControls(){if(!host)return;clearTimeout(hideTimer);host.classList.remove('controls-hidden');controls.inert=false;host.querySelector('.studio-control-toggle').setAttribute('aria-expanded','true');hideTimer=root.setTimeout(hideControls,5000);}
   function hideControls(){if(!host)return;if(controls.contains(root.document.activeElement)){hideTimer=root.setTimeout(hideControls,5000);return;}host.classList.add('controls-hidden');controls.inert=true;host.querySelector('.studio-control-toggle').setAttribute('aria-expanded','false');}
   function keydown(event){if(!host)return;if(event.key==='Tab'||event.key.toLowerCase()==='b')showControls();}
@@ -69,6 +82,16 @@
     section.append(image(teamImage(team),PHOTOS[team]?`Mannschaftsfoto von Barver ${team}`:'Vereinslogo von SV Barver','studio-team-photo'),el('p','studio-pause-note',item.kind==='final'?'Danke fürs Mitfiebern!':model.stale?'Der letzte Spielstand bleibt erhalten. Wir verbinden uns automatisch neu.':'Sobald das nächste Board beginnt, erscheint es hier automatisch.'));
     return section;
   }
+  function upcoming(item,input){
+    const own=teamCodes(item),team=own[0],section=el('section','studio-no-games studio-next-match'),visual=el('div','studio-next-photos'),copy=el('div','studio-next-copy');
+    for(const selected of own)visual.append(image(teamImage(selected),PHOTOS[selected]?`Mannschaftsfoto von Barver ${selected}`:`Vereinslogo für Barver ${selected}`,'studio-team-photo'));
+    copy.append(el('p','studio-eyebrow','ALS NÄCHSTES'),el('h1','',own.map(selected=>'BARVER '+selected).join(' / ')),el('p','studio-next-opponent',`gegen ${ownSide(item,team)==='home'?item.away:item.home}`));
+    const date=el('time','studio-next-date',new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',weekday:'long',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(item.plannedAt))+' Uhr');date.dateTime=item.plannedAt;copy.append(date);
+    const countdown=el('div','studio-countdown');countdown.dataset.start=item.plannedAt;countdown.setAttribute('role','timer');countdown.setAttribute('aria-live','off');countdown.setAttribute('aria-label','Zeit bis zum geplanten Spielbeginn');
+    for(const [unit,label] of [['days','Tage'],['hours','Stunden'],['minutes','Minuten'],['seconds','Sekunden']]){const box=el('span'),value=el('strong','','00');value.dataset.unit=unit;box.append(value,el('small','',label));countdown.append(box);}
+    const open=el('button','studio-next-open','Begegnung ansehen');open.type='button';open.addEventListener('click',()=>input.openMatch(item.id));
+    copy.append(countdown,el('p','studio-countdown-note'),el('p','studio-next-note','Sobald Live-Daten vorliegen, erscheinen die Spiele hier automatisch.'),open);section.append(visual,copy);return section;
+  }
   function models(input){
     const now=Date.now(),current=new Map(input.models.map(m=>[String(m.item.id),m]));
     for(const [id,previous] of tiles){if(current.has(id))continue;const item=input.items.find(i=>String(i.id)===id);if(item?.kind==='final'&&!finished.has(id))finished.set(id,{model:{...previous.model,item,games:[]},until:now+90000});}
@@ -92,7 +115,7 @@
     }
     for(const [id,tile] of tiles)if(!wanted.has(id)){tile.node.remove();tiles.delete(id);}
     summary.replaceChildren(...summaryNodes);
-    if(!display.length){const blank=el('section','studio-no-games app-tv-empty');blank.append(el('p','studio-eyebrow','BEREIT FÜRS NÄCHSTE SPIEL'),el('h1','','Gerade läuft keine Begegnung deiner Auswahl.'),image(teamImage(input.selected.length===1?input.selected[0]:''),'SV Barver Darts','studio-team-photo'),el('p','','Sobald eine Partie beginnt, erscheint sie hier automatisch.'));content.replaceChildren(blank);}
+    if(!display.length){const next=nextFixture(input.items,input.selected);if(next){content.replaceChildren(upcoming(next,input));updateCountdown();}else{const blank=el('section','studio-no-games app-tv-empty');blank.append(el('p','studio-eyebrow','BEREIT FÜRS NÄCHSTE SPIEL'),el('h1','','Gerade läuft keine Begegnung deiner Auswahl.'),image(teamImage(input.selected.length===1?input.selected[0]:''),'SV Barver Darts','studio-team-photo'),el('p','','Sobald eine Partie beginnt, erscheint sie hier automatisch.'));content.replaceChildren(blank);}}
     if(highlight)placeHighlight();
   }
   function confetti(){const wrap=el('div','studio-confetti');wrap.setAttribute('aria-hidden','true');for(let i=0;i<28;i++){const bit=el('i');bit.style.setProperty('--x',`${2+i*3.5}%`);bit.style.setProperty('--delay',`${i%6*.09}s`);bit.style.setProperty('--drift',`${i%2?-55:55}px`);wrap.append(bit);}return wrap;}
@@ -117,5 +140,5 @@
   }
   function clearHighlight(){highlight?.node.remove();highlight=null;}
   root.DartsTvStudio={render,close,showHighlight,clearHighlight,teamImage,isActive:()=>Boolean(host)};
-  if(typeof module!=='undefined'&&module.exports)module.exports={avg,outcome,teamImage};
+  if(typeof module!=='undefined'&&module.exports)module.exports={avg,outcome,teamImage,nextFixture,countdownParts};
 })(typeof window!=='undefined'?window:globalThis);
