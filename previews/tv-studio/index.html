@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="de" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#081713">
+  <title>Barver Darts · TV-Vorschau</title>
+  <link rel="icon" href="/pics/sv-barver-darts-tight-512.webp">
+  <link rel="stylesheet" href="/tv-studio.css">
+  <script defer src="/tv-studio.js"></script>
+</head>
+<body>
+  <header class="broadcast-header">
+    <div class="masthead">
+      <a class="brand" href="/" aria-label="TV-Vorschau neu starten"><img src="/pics/sv-barver-darts-tight-512.webp" alt="" width="48" height="48"><span><b>SV BARVER DARTS</b><small>GEMEINSAM AM OCHE.</small></span></a>
+      <span class="demo-badge">VORSCHAU · BEISPIELDATEN</span>
+      <div class="clock"><span id="clock"></span><small>TV-STUDIO</small></div>
+    </div>
+    <div class="scorebar" aria-label="Mannschaftsstand der Beispielbegegnung">
+      <div class="team-name home"><span class="team-tag">BARVER B</span><strong>SV Barver Darts B</strong></div>
+      <div class="match-score"><span id="matchState" class="match-state"><i></i> BEISPIELSPIEL</span><div><b id="homeScore">5</b><span>:</span><b id="awayScore">3</b></div><small>MANNSCHAFTSSTAND</small></div>
+      <div class="team-name away"><span class="team-tag guest">GÄSTE</span><strong>DC Brenndorf E</strong></div>
+      <div id="multiScores" class="multi-scores" hidden aria-label="Mannschaftsstände der Beispielspiele"></div>
+    </div>
+  </header>
+
+  <main id="stage" tabindex="-1"></main>
+
+  <footer class="broadcast-footer">
+    <div class="footer-story"><span class="footer-pill" id="footerLabel">AM BOARD</span><span id="footerCopy">Zwei Boards. Eine Mannschaft. Gemeinsam für Barver.</span></div>
+    <div class="partner"><small>UNTERSTÜTZT VON</small><strong id="partnerName">Küster Barver</strong></div>
+  </footer>
+
+  <div id="moment" class="moment" hidden role="status" aria-live="polite"></div>
+  <button id="showControls" class="show-controls" aria-controls="demoControls" aria-expanded="true" title="Bedienung anzeigen (Taste B)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 14 6-6 6 6"/></svg><span>Bedienung</span></button>
+  <aside id="demoControls" class="controls" aria-label="Vorschau bedienen">
+    <div class="control-caption"><span><b>DEIN TV-STUDIO</b><small>Ansichten ausprobieren · alle Spielstände sind Beispiele</small></span><button id="pinControls" class="quiet-button" aria-pressed="false">Bedienung festhalten</button></div>
+    <div class="control-row">
+      <div class="layout-controls"><label for="teamCount">Mannschaften <select id="teamCount"><option value="1">1 · zwei Boards</option><option value="2">2 · vier Boards</option><option value="3">3 · sechs Boards</option><option value="4">4 · acht Boards</option></select></label><label for="eventTeam">Siegerbeispiel für <select id="eventTeam"><option value="B">Barver B</option></select></label></div>
+      <div class="scene-controls" role="group" aria-label="Ansicht auswählen">
+        <button data-scene="live" aria-pressed="true">Live-Bild</button><button data-scene="profile" aria-pressed="false">Spielerprofile</button><button data-scene="break" aria-pressed="false">Spielpause</button>
+      </div>
+      <div class="moment-controls" role="group" aria-label="Einblendung ausprobieren"><button data-moment="leg">Leggewinn</button><button data-moment="single">Einzelsieg</button><button data-moment="double">Doppelsieg</button><button data-scene="result" aria-pressed="false">Mannschaftssieg</button></div>
+      <div class="utility-controls"><button id="boardCount" aria-pressed="false">Ein Board</button><button id="themeToggle" aria-pressed="false">Hell</button><button id="fullscreen">Vollbild</button></div>
+    </div>
+    <div id="profileControls" class="profile-tools" hidden aria-label="Spielerpräsentation steuern"></div>
+    <p>Die Bedienung blendet sich nach 5 Sekunden aus. Maus bewegen oder <kbd>B</kbd> drücken, um sie wieder einzublenden.</p>
+  </aside>
+  <div class="sr-only" id="announcer" aria-live="polite"></div>
+</body>
+</html>

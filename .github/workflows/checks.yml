@@ -49,6 +49,7 @@ jobs:
           node tests/test_darts.cjs
           node tests/test_darts_home.cjs
           node tests/test_darts_broadcast.cjs
+          node tests/test_darts_tv_studio.cjs
           node tests/test_darts_history.cjs
           node tests/test_darts_experience.cjs
           node tests/test_darts_usability.cjs
@@ -71,6 +72,7 @@ jobs:
           npm test --prefix mobile
           npm run build:web --prefix mobile
           NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_darts_live_display_browser.cjs
+          NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_darts_tv_studio_browser.cjs
           NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node mobile/tests/web-browser.cjs
       - name: Player mit echtem mpv und stummer Ausgabe prüfen
         run: |
