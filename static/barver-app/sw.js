@@ -1,6 +1,6 @@
-const SHELL='barver-compact-shell-f55b66adf9cf883e',HISTORY='barver-compact-history-v1';
+const SHELL='barver-compact-shell-df1587de6bdc49c0',HISTORY='barver-compact-history-v1';
 const base=new URL('./',self.location.href),assets=['','index.html','app.js','app.css','crest.webp','manifest.webmanifest','icon-192.png','icon-512.png','apple-touch-icon.png'];
-const assetVersion='c7b7daddb3a7f0d1';
+const assetVersion='0f53f6eb7d4fbcf4';
 function assetUrl(name){const url=new URL(name,base);if(name&&name!=='index.html')url.searchParams.set('v',assetVersion);return url.href;}
 self.addEventListener('install',event=>event.waitUntil(caches.open(SHELL).then(cache=>cache.addAll(assets.map(assetUrl)))));
 self.addEventListener('activate',event=>event.waitUntil((async()=>{for(const key of await caches.keys())if(key.startsWith('barver-compact-shell-')&&key!==SHELL)await caches.delete(key);await self.clients.claim();})()));

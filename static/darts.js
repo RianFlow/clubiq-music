@@ -1566,7 +1566,7 @@ function initDarts() {
     hero.append(identity,form);
     const teamPhotos={
       A:{src:'/pics/teams/barver-a-team-20261007.webp',width:1846,height:852},
-      B:{src:'/pics/teams/barver-b-team-cutout.webp?v=20260927-2',width:1600,height:738},
+      B:{src:'/pics/teams/barver-b-team-20261016.webp',width:2000,height:800},
       D:{src:'/pics/teams/barver-d-team-20261016-v4.webp',width:2000,height:800}
     };
     const teamPhoto=teamPhotos[team.code] ? document.createElement('figure') : null;

@@ -2,7 +2,7 @@
 (function(root){
   'use strict';
   const CREST='/pics/sv-barver-darts-tight-512.webp';
-  const PHOTOS={A:'/pics/teams/barver-a-team-20261007.webp',B:'/pics/teams/barver-b-team-cutout.webp?v=20260927-2',D:'/pics/teams/barver-d-team-20261016-v4.webp'};
+  const PHOTOS={A:'/pics/teams/barver-a-team-20261007.webp',B:'/pics/teams/barver-b-team-20261016.webp',D:'/pics/teams/barver-d-team-20261016-v4.webp'};
   let host=null,context=null,controls=null,controlsHome=null,hideTimer=null,clockTimer=null,resultTimer=null,statusObserver=null,highlight=null;
   const tiles=new Map(),finished=new Map();
   const el=(tag,cls,value)=>{const n=root.document.createElement(tag);n.className=cls||'';if(value!==undefined)n.textContent=value;return n;};
