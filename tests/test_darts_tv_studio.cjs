@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {avg,outcome,teamImage,nextFixture,countdownParts}=require('../static/darts-tv-studio.js');
+const {avg,outcome,teamImage,nextFixture,countdownParts,fixtureVenue}=require('../static/darts-tv-studio.js');
 test('TV averages use known current-leg darts and remaining points, without inventing missing values',()=>{
  assert.equal(avg({remaining:84,darts:18,average:55.5,totalDarts:99}),'69,5');
  assert.equal(avg({remaining:501,darts:0}),'0,0');
@@ -24,4 +24,7 @@ test('TV countdown uses days, hours, minutes and seconds and never runs below ze
  const now=Date.parse('2026-10-17T10:00:00Z');assert.deepEqual(countdownParts(new Date(now+((2*24+3)*3600+4*60+5)*1000).toISOString(),now),{days:2,hours:3,minutes:4,seconds:5,started:false});
  assert.deepEqual(countdownParts(new Date(now-1000).toISOString(),now),{days:0,hours:0,minutes:0,seconds:0,started:true});assert.equal(countdownParts('unknown',now),null);
  assert.equal(countdownParts(new Date(now+1).toISOString(),now).seconds,1);
+});
+test('the countdown venue belongs to the home side, including away matches for Barver',()=>{
+ assert.equal(fixtureVenue({home:'Mad Dogs C',away:'SV Barver Darts A',homeVenue:{name:'Dartclub Diepholz',street:'Nährweg 4',postalCode:'49356',city:'Diepholz'},awayVenue:{name:'Barver'}}),'Dartclub Diepholz, Nährweg 4, 49356 Diepholz');assert.equal(fixtureVenue({awayVenue:{name:'Barver'}}),'');
 });
