@@ -1567,7 +1567,7 @@ function initDarts() {
     const teamPhotos={
       A:{src:'/pics/teams/barver-a-team-20261007.webp',width:1846,height:852},
       B:{src:'/pics/teams/barver-b-team-cutout.webp?v=20260927-2',width:1600,height:738},
-      D:{src:'/pics/teams/barver-d-team-20261016.webp',width:2000,height:925}
+      D:{src:'/pics/teams/barver-d-team-20261016-v4.webp',width:2000,height:800}
     };
     const teamPhoto=teamPhotos[team.code] ? document.createElement('figure') : null;
     if (teamPhoto) {
@@ -1617,6 +1617,7 @@ function initDarts() {
     if (venue.boards) { const boards=document.createElement('small'); boards.textContent=`${venue.boards} Boards an der Spielstätte`; venueSection.append(boards); }
     const filter=document.createElement('button'); filter.type='button'; filter.className='primary'; filter.textContent='Nur Spiele dieser Mannschaft anzeigen'; filter.addEventListener('click',()=>{ q('#teamDialog').close(); q('#seasonTeam').value=team.code; renderSeason(); q('#seasonMatches').scrollIntoView({behavior:'smooth',block:'start'}); }); venueSection.append(filter);
     grid.append(schedule,squad,venueSection);const news=window.DartsCmsNews?.teamSection(team.code);target.replaceChildren(hero,...(teamPhoto?[teamPhoto]:[]),stats,...(news?[news]:[]),grid);
+    if(teamPhoto)window.DartsTeamPhoto?.mount(teamPhoto,{team:team.code,image:teamPhoto.querySelector('.team-group-players'),players:rosterMembers,onOpen:member=>{q('#teamDialog').close();openPlayerProfile(member,team);}});
   }
   function renderSeasonTeams() {
     const target=q('#seasonTeams');

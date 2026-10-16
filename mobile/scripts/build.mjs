@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('../',import.meta.url));
 const web=process.argv.includes('--web'),output=root+(web?'web-dist/':'dist/');
 const sourceHash=createHash('sha256');
-if(web)for(const file of ['scripts/build.mjs','src/app.js','src/training.js','../static/darts-training-source.js','src/app.css','src/index.html','src/web-app.js','src/web-push.js','src/web-sw.js','src/model.js','src/native-push.js','src/push-transport.js','web-icons/icon-192.png','web-icons/icon-512.png','web-icons/apple-touch-icon.png','../pics/sv-barver-darts-tight-512.webp'])sourceHash.update(await readFile(root+file));
+if(web)for(const file of ['scripts/build.mjs','src/app.js','src/training.js','../static/darts-training-source.js','../static/darts-team-photo.js','../static/darts-team-photo.css','src/app.css','src/index.html','src/web-app.js','src/web-push.js','src/web-sw.js','src/model.js','src/native-push.js','src/push-transport.js','web-icons/icon-192.png','web-icons/icon-512.png','web-icons/apple-touch-icon.png','../pics/sv-barver-darts-tight-512.webp'])sourceHash.update(await readFile(root+file));
 const webBuildId=web?sourceHash.digest('hex').slice(0,16):'';
 await mkdir(output,{recursive:true});
 const firebaseConfigured=!web&&await access(root+'android/app/google-services.json').then(()=>true,()=>false);
@@ -15,6 +15,7 @@ if(firebaseConfigured){
 }
 await build({entryPoints:[root+'src/app.js'],bundle:true,outfile:output+'app.js',minify:true,platform:'browser',target:['safari16','chrome110'],define:{__ANDROID_FIREBASE_CONFIGURED__:JSON.stringify(firebaseConfigured),__WEB_APP__:JSON.stringify(web),__WEB_BUILD_ID__:JSON.stringify(webBuildId)}});
 for(const file of ['index.html','app.css']) await copyFile(root+'src/'+file,output+file);
+await writeFile(output+'app.css',(await readFile(output+'app.css','utf8'))+'\n'+await readFile(root+'../static/darts-team-photo.css','utf8'));
 await copyFile(root+'../pics/sv-barver-darts-tight-512.webp',output+'crest.webp');
 if(web){
   const html=(await readFile(output+'index.html','utf8')).replace('Barver Darts · App-Vorschau','Barver Darts').replace('</head>','<link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="apple-touch-icon.png"><meta name="apple-mobile-web-app-title" content="Barver Darts"><meta name="apple-mobile-web-app-capable" content="yes"></head>').replace(/(app\.js|app\.css|crest\.webp|manifest\.webmanifest|apple-touch-icon\.png)"/g,'$1?v='+webBuildId+'"');await writeFile(output+'index.html',html);
