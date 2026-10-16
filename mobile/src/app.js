@@ -1,3 +1,4 @@
+import '../../static/darts-team-photo.js';
 import {Capacitor,CapacitorHttp,registerPlugin} from '@capacitor/core';
 import {App} from '@capacitor/app';
 import {Browser} from '@capacitor/browser';
@@ -285,13 +286,14 @@ function openTeam(code,restore=false){
   const league=(state.season.leagues||[]).find(l=>(l.league?.key||l.key)===selected?.league?.key);
   root.append(node('p',selected?.league?.name||'Mannschaftsdaten werden geladen.','muted'));teamMetrics(root,selected,league);
   const venue=matchLocation({homeVenue:selected?.venue});if(venue)root.append(node('p',venue,'muted venue'));
-  const teamPhotos={A:'barver-a-team-20261007.webp',B:'barver-b-team-cutout.webp?v=20260927-2',D:'barver-d-team-20261016.webp'};
+  const teamPhotos={A:'barver-a-team-20261007.webp',B:'barver-b-team-cutout.webp?v=20260927-2',D:'barver-d-team-20261016-v4.webp'};
   if(teamPhotos[code]){
     const photo=node('figure',undefined,'team-photo'),image=node('img');
     image.src=API_ORIGIN+'/pics/teams/'+teamPhotos[code];image.alt='Mannschaftsfoto SV Barver Darts '+code;
-    image.loading='lazy';image.decoding='async';image.width=2000;image.height=925;
+    image.loading='lazy';image.decoding='async';image.width=2000;image.height=code==='D'?800:925;
     image.addEventListener('error',()=>photo.remove(),{once:true});
     photo.append(image,node('figcaption','SV Barver Darts '+code+' · Mannschaft 2026 / 2027'));root.append(photo);
+    globalThis.DartsTeamPhoto?.mount(photo,{team:code,image,players:selected?.roster||[],onOpen:member=>{teamScroll=q('#detail').scrollTop;openPlayer(member,state.profiles.players?.[String(member.id)]||{},code);}});
   }
   root.append(button('Mannschaft aktualisieren',()=>refresh(),'detail-refresh'));
   const roster=[...(selected?.roster||[])].sort((a,b)=>roleRank(a)-roleRank(b)||String(a.name).localeCompare(String(b.name),'de'));
