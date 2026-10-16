@@ -2,8 +2,8 @@
 (function(root){
   'use strict';
   const CREST='/pics/sv-barver-darts-tight-512.webp';
-  const PHOTOS={A:'/pics/teams/barver-a-team-20261007.webp',B:'/pics/teams/barver-b-team-cutout.webp?v=20260927-2',D:'/pics/teams/barver-d-team-20261016-v4.webp'};
-  let host=null,context=null,controls=null,controlsHome=null,hideTimer=null,clockTimer=null,resultTimer=null,statusObserver=null,highlight=null;
+  const PHOTOS={A:'/pics/teams/barver-a-team-20261007.webp',B:'/pics/teams/barver-b-team-20261016.webp',D:'/pics/teams/barver-d-team-20261016-v4.webp'};
+  let host=null,context=null,controls=null,controlsHome=null,hideTimer=null,clockTimer=null,resultTimer=null,statusObserver=null,sponsorObserver=null,highlight=null;
   const tiles=new Map(),finished=new Map();
   const el=(tag,cls,value)=>{const n=root.document.createElement(tag);n.className=cls||'';if(value!==undefined)n.textContent=value;return n;};
   const q=selector=>root.document.querySelector(selector);
@@ -25,7 +25,7 @@
     const header=el('header','studio-header'),mast=el('div','studio-masthead'),brand=el('div','studio-brand');
     brand.append(image(CREST,'',''),el('strong','','SV BARVER DARTS'));
     const status=el('span','studio-connection'),clock=el('time','studio-clock');mast.append(brand,status,clock);header.append(mast,el('div','studio-summary'));
-    const content=el('div','studio-content'),foot=el('footer','studio-footer');foot.append(el('span','','GEMEINSAM FÜR BARVER.'),el('span','studio-partner'));
+    const content=el('div','studio-content'),foot=el('footer','studio-footer'),partner=el('div','studio-partner');partner.setAttribute('aria-label','TV-Partner');partner.hidden=true;foot.append(el('span','','GEMEINSAM FÜR BARVER.'),partner);
     controls=el('aside','studio-controls');controls.setAttribute('aria-label','TV-Ansicht bedienen');const existing=q('#tvTeamControls');controlsHome=existing.parentNode;controls.append(existing);
     const tools=el('div','studio-tools'),theme=el('button','','Hell / Dunkel'),exit=el('button','','TV-Modus beenden');theme.type=exit.type='button';
     theme.addEventListener('click',()=>q('#themeToggle').click());exit.addEventListener('click',()=>{if(root.location.pathname==='/app/live')root.location.assign('/app/');else root.document.exitFullscreen?.();});
@@ -33,11 +33,18 @@
     const toggle=el('button','studio-control-toggle','Bedienung');toggle.type='button';toggle.setAttribute('aria-expanded','true');toggle.addEventListener('click',showControls);
     host.append(header,content,foot,controls,toggle);container.replaceChildren(host);host.addEventListener('pointermove',showControls,{passive:true});host.addEventListener('pointerdown',showControls,{passive:true});root.document.addEventListener('keydown',keydown);
     const source=q('#liveDataStatus');if(source){const sync=()=>{status.textContent=source.textContent;status.dataset.state=source.dataset.state||'';};statusObserver=new MutationObserver(sync);statusObserver.observe(source,{childList:true,subtree:true,characterData:true,attributes:true});sync();}
+    // Reuse the configured TV placement and rotation, even when the game feed is idle.
+    const sponsorSource=q('#sponsorTv');if(sponsorSource){const sync=()=>{
+      const banner=sponsorSource.hidden?null:sponsorSource.querySelector('.sponsor-banner');partner.hidden=!banner;
+      if(!banner){partner.replaceChildren();return;}
+      const copy=banner.cloneNode(true);for(const logo of copy.querySelectorAll('img')){logo.loading='eager';logo.addEventListener('error',()=>{logo.hidden=true;},{once:true});}
+      partner.replaceChildren(copy);
+    };sponsorObserver=new MutationObserver(sync);sponsorObserver.observe(sponsorSource,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['hidden','src','href']});sync();}
     updateClock();clockTimer=root.setInterval(updateClock,1000);showControls();
   }
   function close(){
     if(!host)return;
-    clearTimeout(hideTimer);clearTimeout(resultTimer);clearInterval(clockTimer);statusObserver?.disconnect();root.document.removeEventListener('keydown',keydown);
+    clearTimeout(hideTimer);clearTimeout(resultTimer);clearInterval(clockTimer);statusObserver?.disconnect();sponsorObserver?.disconnect();root.document.removeEventListener('keydown',keydown);
     const original=q('#tvTeamControls');if(original&&controlsHome)controlsHome.insertBefore(original,q('#todayGrid'));
     host.remove();host=null;context=null;controls=null;highlight=null;tiles.clear();finished.clear();
   }
@@ -86,7 +93,6 @@
     for(const [id,tile] of tiles)if(!wanted.has(id)){tile.node.remove();tiles.delete(id);}
     summary.replaceChildren(...summaryNodes);
     if(!display.length){const blank=el('section','studio-no-games app-tv-empty');blank.append(el('p','studio-eyebrow','BEREIT FÜRS NÄCHSTE SPIEL'),el('h1','','Gerade läuft keine Begegnung deiner Auswahl.'),image(teamImage(input.selected.length===1?input.selected[0]:''),'SV Barver Darts','studio-team-photo'),el('p','','Sobald eine Partie beginnt, erscheint sie hier automatisch.'));content.replaceChildren(blank);}
-    const sponsor=q('#sponsorTv .sponsor-name,#sponsorTv strong');host.querySelector('.studio-partner').textContent=sponsor?.textContent||'';
     if(highlight)placeHighlight();
   }
   function confetti(){const wrap=el('div','studio-confetti');wrap.setAttribute('aria-hidden','true');for(let i=0;i<28;i++){const bit=el('i');bit.style.setProperty('--x',`${2+i*3.5}%`);bit.style.setProperty('--delay',`${i%6*.09}s`);bit.style.setProperty('--drift',`${i%2?-55:55}px`);wrap.append(bit);}return wrap;}
