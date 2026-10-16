@@ -242,7 +242,7 @@ const server=http.createServer((req,res)=>{
     await page.click('#closeTeamProfile');await page.setViewportSize({width:1440,height:1080});
     await page.locator('#matchCenterGrid [data-team-code="B"]').first().click();
     await page.locator('.team-group-players').waitFor();
-    assert.equal(await page.locator('.team-group-players').getAttribute('src'),'/pics/teams/barver-b-team-cutout.webp?v=20260927-2');
+    assert.equal(await page.locator('.team-group-players').getAttribute('src'),'/pics/teams/barver-b-team-20261016.webp');
     assert.equal(await page.locator('.team-group-wordmark strong').innerText(),'BARVER B');
     assert.equal(await page.locator('.team-group-crest').getAttribute('src'),'/pics/sv-barver-darts-tight-512.webp');
     assert.equal(await page.locator('.player-roster-card').count(),6);
