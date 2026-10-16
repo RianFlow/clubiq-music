@@ -49,6 +49,7 @@
 body.tv-live .ds-tv .studio-team{overflow:hidden}
 body.tv-live .ds-tv .studio-rest>small{font-size:7px;line-height:1;letter-spacing:.08em;white-space:nowrap;margin-bottom:5px;color:var(--tv-muted)}
 body.tv-live .ds-tv .throwing .studio-rest>small{color:var(--tv-mint)}
+body.tv-live .ds-tv .throwing .studio-rest{color:var(--tv-mint)}
 body.tv-live .ds-tv .throwing:after,body.tv-live .ds-tv .throwing small:before{display:none;content:none}
 body.tv-live .ds-tv .studio-board>footer{display:block;margin:0;line-height:1.2}
 body.tv-live .ds-tv .studio-footer{display:flex;margin:0}
