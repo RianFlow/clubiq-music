@@ -261,7 +261,7 @@ const server=http.createServer((req,res)=>{
     await page.keyboard.press('Escape');assert.equal(await page.locator('.darts-roster-slide').count(),0);
     await page.locator('#matchCenterGrid [data-team-code="B"]').first().click();
     await page.locator('.player-roster-card').first().waitFor();
-    await page.getByRole('button',{name:'Patrick Lammers, Profil öffnen'}).click();
+    await page.locator('.player-roster-card').filter({hasText:'Patrick Lammers'}).click();
     await page.getByText('95K von Aspinall',{exact:true}).waitFor();
     assert.match(await page.locator('#playerProfile').innerText(),/D16/);
     assert.match(await page.locator('#playerProfile').innerText(),/Rechtshänder/);
@@ -435,17 +435,17 @@ const server=http.createServer((req,res)=>{
     const playerPage=await playerContext.newPage();playerPage.on('pageerror',e=>errors.push(e.message));
     await playerPage.goto(`${origin}/darts`);
     await playerPage.locator('#matchCenterGrid [data-team-code="A"]').first().click();
-    await playerPage.getByRole('button',{name:'Jannik Kläning, Profil öffnen'}).click();
+    await playerPage.locator('.player-roster-card').filter({hasText:'Jannik Kläning'}).click();
     await playerPage.locator('#playerProfile .player-profile-visual img').waitFor({timeout:2000});
     assert.match(await playerPage.locator('#playerProfile').innerText(),/Saisonwerte werden geladen/,'profile is usable while statistics are pending');
     await playerPage.click('#closePlayerProfile');
-    await playerPage.locator('#matchCenterGrid [data-team-code="B"]').first().click();await playerPage.getByRole('button',{name:'Patrick Lammers, Profil öffnen'}).click();
+    await playerPage.locator('#matchCenterGrid [data-team-code="B"]').first().click();await playerPage.locator('.player-roster-card').filter({hasText:'Patrick Lammers'}).click();
     await playerPage.getByText('Rechtshänder',{exact:true}).waitFor();
     await playerPage.click('#closePlayerProfile');releaseStats();
     await playerPage.waitForFunction(()=>JSON.parse(localStorage.getItem('clubiq_darts_public_stats_v1')||'null')?.players['89029']?.average===50.1);
     assert.equal(await playerPage.locator('#playerDialog').evaluate(n=>n.open),false,'late data never reopens a closed profile');
     playerMode='zero';await playerPage.evaluate(()=>window.dispatchEvent(new Event('online')));
-    await playerPage.locator('#matchCenterGrid [data-team-code="B"]').first().click();await playerPage.getByRole('button',{name:'Patrick Lammers, Profil öffnen'}).click();
+    await playerPage.locator('#matchCenterGrid [data-team-code="B"]').first().click();await playerPage.locator('.player-roster-card').filter({hasText:'Patrick Lammers'}).click();
     await playerPage.locator('.player-performance-average strong').getByText('50,1',{exact:true}).waitFor();
     await playerPage.waitForFunction(()=>!document.querySelector('.player-data-status button').disabled);
     assert.equal((await playerPage.evaluate(()=>localStorage.getItem('clubiq_darts_public_stats_v1'))).includes('private@example.test'),false);
@@ -453,7 +453,7 @@ const server=http.createServer((req,res)=>{
     await playerPage.waitForFunction(()=>!document.querySelector('.player-data-status button').disabled);
     assert.equal(await playerPage.locator('.player-performance-average strong').innerText(),'50,1');
     assert.match(await playerPage.locator('.player-performance-note').innerText(),/letzter gespeicherter Stand/);await playerPage.getByText('Rechtshänder',{exact:true}).waitFor();
-    await playerPage.reload();await playerPage.locator('#matchCenterGrid [data-team-code="B"]').first().click();await playerPage.getByRole('button',{name:'Patrick Lammers, Profil öffnen'}).click();
+    await playerPage.reload();await playerPage.locator('#matchCenterGrid [data-team-code="B"]').first().click();await playerPage.locator('.player-roster-card').filter({hasText:'Patrick Lammers'}).click();
     await playerPage.getByText('Rechtshänder',{exact:true}).waitFor();assert.equal(await playerPage.locator('.player-performance-average strong').innerText(),'50,1','reload during outage retains statistics');
     await playerPage.waitForFunction(()=>!document.querySelector('.player-data-status button').disabled);
     playerMode='good';await playerPage.getByRole('button',{name:'Daten aktualisieren'}).click();
