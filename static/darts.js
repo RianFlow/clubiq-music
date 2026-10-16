@@ -834,8 +834,12 @@ function initDarts() {
       tickerData.items=[item,...(tickerData.items || [])];
     }
     if (item) {
-      if (group.finished && group.meta?.score) item.score=group.meta.score;
-      else if (latest && Number.isInteger(latest.teamScoreHome)&&Number.isInteger(latest.teamScoreGuest)) item.score=`${latest.teamScoreHome}:${latest.teamScoreGuest}`;
+      const finalEvent=(Array.isArray(group.events)?group.events:[]).find(event=>event.type==='match'&&Number(event.matchId)===matchId&&/^\d{1,2}\s*:\s*\d{1,2}$/.test(event.score||''));
+      // A later status frame must not undo the verified final.
+      const keepFinal=group.finished&&item.kind==='final'&&item.score;
+      if(group.finished&&finalEvent)item.score=finalEvent.score;
+      else if (!keepFinal&&group.finished&&group.meta?.score) item.score=group.meta.score;
+      else if (!keepFinal&&latest&&Number.isInteger(latest.teamScoreHome)&&Number.isInteger(latest.teamScoreGuest)) item.score=`${latest.teamScoreHome}:${latest.teamScoreGuest}`;
       item.kind=group.finished?'final':'live'; item.updatedAt=group.lastUpdate || item.updatedAt;
       item.text=`${item.home} ${item.score || '–'} ${item.away}`;
     }
@@ -844,9 +848,8 @@ function initDarts() {
   function applyServerLiveGroup(group) {
     if (!group?.groupKey) return;
     serverLiveGroups.set(String(group.groupKey),group);
-    if (group.stale) return;
+    if (group.stale) {renderToday(tickerData);updateFreshness(true);return;}
     const moments=!demoLive&&Array.isArray(group.events)?group.events.map(dartsLiveMoment).filter(Boolean):[];
-    if (!demoLive && !group.stale && Array.isArray(group.events)) window.DartsBroadcast?.ingest(group.events);
     if(moments.length){const merged=new Map([...recentHighlights,...moments].map(moment=>[dartsHighlightIdentity(moment),moment]));recentHighlights=[...merged.values()].sort((a,b)=>Date.parse(b.occurredAt||0)-Date.parse(a.occurredAt||0)).slice(0,60);}
     const serverCenters=[...serverLiveGroups.values()].filter(entry=>dartsLiveGroupActive(entry)).map(liveGroupAsCenter);
     const ids=new Set(serverCenters.flatMap(center=>center.barverMatches.map(match=>match.id)));
@@ -857,6 +860,8 @@ function initDarts() {
       renderMatchDetail(activeMatchDetailData);
     }
     renderCompleteMatchCenter(); renderToday(tickerData); refreshLeagueLiveMarkers(); updateFreshness(!group.connected);
+    // Update the visible fixture before showing its transition (including the final).
+    if (!demoLive && Array.isArray(group.events)) window.DartsBroadcast?.ingest(group.events);
     if(moments.length)renderTicker(tickerData);
   }
   function initServerLiveStream() {
@@ -928,6 +933,15 @@ function initDarts() {
     const upcoming = wanted.filter(item=>item.kind==='upcoming');
     const finals = wanted.filter(item=>item.kind==='final');
     const shown = tvActive ? live : live.slice(0,1);
+    if(tvActive&&window.matchMedia('(min-width:651px)').matches&&window.DartsTvStudio){
+      target.hidden=false;target.dataset.liveCount=String(live.length);
+      window.DartsTvStudio.render({container:target,selected:[...tvTeams],items,playerNode:matchPlayerNode,openMatch,models:live.map(item=>{
+        const center=liveCenters.find(entry=>(entry.barverMatches||[]).some(match=>match.id===item.id)),group=serverLiveGroups.get(String(item.id));
+        const games=(center?.pushEvents||[]).filter(event=>event.matchId===item.id&&event.type==='live_game').sort((a,b)=>String(a.board||'').localeCompare(String(b.board||''),undefined,{numeric:true}));
+        return {item,games,loaded:Boolean(center||group?.connected),stale:group?Boolean(group.stale||!group.connected):center?Boolean(center.stale):true};
+      })});return;
+    }
+    window.DartsTvStudio?.close();
     target.hidden=!shown.length&&!appTv;
     target.dataset.liveCount=String(shown.length);
     const today = new Date().toLocaleDateString('de-DE');
@@ -2501,6 +2515,7 @@ function initDarts() {
     } catch (_) { message('Der Kader konnte gerade nicht geladen werden. Bitte erneut versuchen.'); }
   }
   q('#presentTvRoster').addEventListener('click',()=>presentTeamRoster(q('#presentationTeam').value));
+  window.matchMedia('(min-width:651px)').addEventListener('change',()=>renderToday(tickerData));
   updatePresence();
   window.setInterval(updatePresence,30000);
   window.addEventListener('online',updatePresence);

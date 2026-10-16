@@ -162,6 +162,7 @@
     if (state.highlightTimer) root.clearTimeout(state.highlightTimer);
     state.highlightTimer = null;
     state.active = null;
+    root.DartsTvStudio?.clearHighlight();
     state.node?.classList.remove('is-loss');
     if (state.node && !state.roster) state.node.replaceChildren();
   }
@@ -169,6 +170,9 @@
     if (state.roster || state.active || !state.enabled || !state.queue.length) return;
     const event = state.queue.shift(), view = graphic(event), host = mount();
     if (!host) return;
+    const studio=state.tv?root.DartsTvStudio?.showHighlight(event,view,winnerPortraits(event)):false;
+    if(studio==='ignored'){nextHighlight();return;}
+    if(studio){state.active=event;state.highlightTimer=root.setTimeout(()=>{clearHighlight();nextHighlight();},event.type==='game'||event.type==='match'?8000:event.type==='leg'?6000:HIGHLIGHT_MS);return;}
     const compact = event.barverWon === false && ['leg', 'game'].includes(event.type);
     host.classList.toggle('is-loss', compact);
     const card = element('section', `darts-broadcast-card type-${event.type.replace('_', '-')}`);
@@ -315,6 +319,7 @@
       if (stats.length) copy.append(element('span', 'darts-roster-stats', stats.join(' · ')));
       slide.append(copy);
     }
+    if(state.tv&&(roster.index===0||roster.index===total-1)){const photo=element('img','darts-roster-team-photo');photo.src=root.DartsTvStudio?.teamImage(roster.code)||CLUB_CREST;photo.alt=`Mannschaft ${roster.name}`;slide.append(photo);}
     const controls = element('div', 'darts-roster-controls');
     const previous = element('button', '', 'Zurück'); previous.type = 'button'; previous.disabled = roster.index === 0; previous.addEventListener('click', () => moveRoster(-1));
     const pause = element('button', 'darts-roster-pause', roster.paused ? 'Fortsetzen' : 'Pause'); pause.type = 'button'; pause.setAttribute('aria-pressed', String(roster.paused)); pause.addEventListener('click', toggleRosterPause);
@@ -339,7 +344,7 @@
       clearHighlight();
     }
     state.previousFocus = root.document.activeElement;
-    state.roster = { name: text(input.name, 120), players, index: 0, paused: false };
+    state.roster = { code:text(input.code).toUpperCase(),name: text(input.name, 120), players, index: 0, paused: false };
     renderRosterSlide();
     return true;
   }
