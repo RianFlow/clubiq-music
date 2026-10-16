@@ -285,7 +285,7 @@ function openTeam(code,restore=false){
   const league=(state.season.leagues||[]).find(l=>(l.league?.key||l.key)===selected?.league?.key);
   root.append(node('p',selected?.league?.name||'Mannschaftsdaten werden geladen.','muted'));teamMetrics(root,selected,league);
   const venue=matchLocation({homeVenue:selected?.venue});if(venue)root.append(node('p',venue,'muted venue'));
-  const teamPhotos={A:'barver-a-team-20261007.webp',B:'barver-b-team-cutout.webp?v=20260927-2',D:'barver-d-team-20261011.webp'};
+  const teamPhotos={A:'barver-a-team-20261007.webp',B:'barver-b-team-cutout.webp?v=20260927-2',D:'barver-d-team-20261016.webp'};
   if(teamPhotos[code]){
     const photo=node('figure',undefined,'team-photo'),image=node('img');
     image.src=API_ORIGIN+'/pics/teams/'+teamPhotos[code];image.alt='Mannschaftsfoto SV Barver Darts '+code;
