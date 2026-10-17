@@ -710,7 +710,7 @@ body:is(:fullscreen,.app-tv) .today-time { font-size:.9rem; }
   .primary-navigation { grid-column:1/-1; justify-content:flex-start; width:100%; flex-wrap:nowrap; overflow-x:auto; padding-bottom:2px; scrollbar-width:thin; }
   .primary-navigation > * { flex:0 0 auto; text-align:center; }
   .header-tools { justify-self:end; }
-  .header-tools #fullscreen { display:none; }
+  .header-tools #fullscreen { display:inline-flex; align-items:center; justify-content:center; min-height:44px; white-space:nowrap; }
   .sponsor-slot { margin:8px auto; padding:0 12px; }
   .sponsor-slot-inline { padding:0; }
   .sponsor-banner { min-height:64px; padding:15px 10px 8px; border-radius:11px; }

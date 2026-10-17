@@ -47,7 +47,7 @@
     const content=el('div','studio-content'),foot=el('footer','studio-footer'),partner=el('div','studio-partner');partner.setAttribute('aria-label','TV-Partner');partner.hidden=true;foot.append(el('span','','GEMEINSAM FÜR BARVER.'),partner);
     controls=el('aside','studio-controls');controls.setAttribute('aria-label','TV-Ansicht bedienen');const existing=q('#tvTeamControls');controlsHome=existing.parentNode;controls.append(existing);
     const tools=el('div','studio-tools'),theme=el('button','','Hell / Dunkel'),exit=el('button','','TV-Modus beenden');theme.type=exit.type='button';
-    theme.addEventListener('click',()=>q('#themeToggle').click());exit.addEventListener('click',()=>{if(root.location.pathname==='/app/live')root.location.assign('/app/');else root.document.exitFullscreen?.();});
+    theme.addEventListener('click',()=>q('#themeToggle').click());exit.addEventListener('click',()=>{if(context.exitTv)context.exitTv();else if(root.location.pathname==='/app/live')root.location.assign('/app/');else root.document.exitFullscreen?.();});
     const touch=root.matchMedia('(pointer:coarse)').matches;
     tools.append(theme,exit);controls.append(tools,el('small','',touch?'Über „Bedienung“ öffnest du die Auswahl. Sie blendet sich nach 5 Sekunden aus.':'Maus bewegen oder B drücken · die Bedienung blendet sich nach 5 Sekunden aus.'));
     const toggle=el('button','studio-control-toggle','Bedienung');toggle.type='button';toggle.setAttribute('aria-expanded','true');toggle.addEventListener('click',showControls);
