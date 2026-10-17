@@ -526,7 +526,15 @@ def poll_darts_push_events() -> None:
                 continue
             match_times = {m["id"]: m.get("updatedAt") or m.get("plannedAt") for m in center.get("barverMatches", [])}
             detected.extend({**e, "occurred_at": match_times.get(e["match_id"]), "deliver": e["deliver"]} for e in barver_push_candidates(league, center))
-        _store_and_deliver_darts_events(detected, stale)
+        # A fresh 3K scorer connection is sufficient for live-game notifications,
+        # even when the league's historical center endpoint is stale.
+        observed = datetime.now(timezone.utc)
+        live_source_ok = any(
+            group.get("lastSuccess") and not group.get("stale") and not group.get("retired")
+            and 0 <= (observed - datetime.fromisoformat(group["lastSuccess"].replace("Z", "+00:00"))).total_seconds() <= 120
+            for group in darts_live_hub.snapshot().get("groups", [])
+        )
+        _store_and_deliver_darts_events(detected, stale and not live_source_ok)
     except (DartsFeedUnavailable, ValueError, psycopg.Error) as exc:
         cause = type(exc.__cause__).__name__ if exc.__cause__ else type(exc).__name__
         _darts_push_status.update({"upstreamAvailable": False, "lastError": cause, "detected": 0, "sent": 0})
@@ -536,10 +544,17 @@ def poll_darts_push_events() -> None:
 def sync_darts_live_groups() -> None:
     try:
         season = get_darts_season()
-        if not season.get("stale") and not season.get("degraded"):
-            # Use the complete season schedule here. The compact ticker intentionally
-            # looks only at nearby matchdays and can omit fixtures moved far away
-            # from their published round window.
+        if season.get("stale") or season.get("degraded"):
+            # The cached season still has verified scheduled dates and match IDs.
+            # Keep watching imminent/rearranged fixtures even while 3K's league feed
+            # is stale. Never use a stale final to end a live stream.
+            cached_fixtures = [
+                item for item in season.get("matches") or []
+                if item.get("kind") in ("upcoming", "live")
+            ]
+            darts_live_hub.reconcile(cached_fixtures)
+        else:
+            # The compact ticker omits matches moved to a different round.
             darts_live_hub.reconcile(season.get("matches") or [])
     except (DartsFeedUnavailable, ValueError, requests.RequestException) as exc:
         print(f"[DARTS LIVE] {type(exc).__name__}: Begegnungen werden später erneut geprüft.")

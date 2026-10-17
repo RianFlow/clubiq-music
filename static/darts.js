@@ -124,6 +124,26 @@ function dartsKickoffNeedsRecovery(items,now=Date.now()){
     return Number.isFinite(start)&&start-now<=15*60*1000&&now-start<=6*60*60*1000;
   });
 }
+function dartsHoldVerifiedLive(incoming, previous, now=Date.now()){
+  if(!incoming||!previous||previous.source!=='browser-3k'||!Array.isArray(previous.items))return incoming;
+  const incomingItems=Array.isArray(incoming.items)?incoming.items:[];
+  const byId=new Map(incomingItems.map(item=>[String(item.id),item]));
+  const retained=previous.items.filter(item=>{
+    const verified=Date.parse(item.liveVerifiedAt||'');
+    const replacement=byId.get(String(item.id));
+    return item.kind==='live'&&Number.isFinite(verified)&&now-verified>=0&&now-verified<20*60000
+      &&replacement?.kind!=='live'&&replacement?.kind!=='final'&&replacement?.kind!=='pending';
+  });
+  if(!retained.length)return incoming;
+  const ids=new Set(retained.map(item=>String(item.id)));
+  // Preserve the last confirmed match and scores, but mark them as delayed.
+  // Do not reset the verification clock unless 3K verifies LIVE again.
+  return {...incoming,source:'browser-3k',stale:true,updatedAt:previous.updatedAt,
+    centers:Array.isArray(previous.centers)?previous.centers:[],
+    items:[...retained.map(item=>({...item,liveFeedDelayed:true})),
+      ...incomingItems.filter(item=>!ids.has(String(item.id)))]};
+}
+
 function dartsTeamFixtures(team,matches) {
   const games=matches.filter(m=>(m.barverTeams||[m.barverTeam]).includes(team.code));
   const upcoming=games.filter(m=>m.kind==='upcoming'||m.kind==='live').sort((a,b)=>Number(b.kind==='live')-Number(a.kind==='live')||(Date.parse(a.plannedAt)||Infinity)-(Date.parse(b.plannedAt)||Infinity));
@@ -945,7 +965,7 @@ function initDarts() {
       window.DartsTvStudio.render({container:target,selected:[...tvTeams],items,playerNode:matchPlayerNode,openMatch,openPlayer:(member,code)=>openPlayerProfile(member,teamByCode(code)||{code,name:`SV Barver Darts ${code}`}),locationForMatch:item=>appointmentLocation({kind:'match',match:currentFixtures().find(row=>row.id===item.id)||item}),models:live.map(item=>{
         const center=liveCenters.find(entry=>(entry.barverMatches||[]).some(match=>match.id===item.id)),group=serverLiveGroups.get(String(item.id));
         const games=(center?.pushEvents||[]).filter(event=>event.matchId===item.id&&event.type==='live_game').sort((a,b)=>String(a.board||'').localeCompare(String(b.board||''),undefined,{numeric:true}));
-        return {item,games,loaded:Boolean(center||group?.connected),stale:group?Boolean(group.stale||!group.connected):center?Boolean(center.stale):true};
+        return {item,games,loaded:Boolean(center||group?.connected),stale:Boolean(item.liveFeedDelayed)||(group?Boolean(group.stale||!group.connected):center?Boolean(center.stale):true)};
       })});return;
     }
     window.DartsTvStudio?.close();
@@ -1203,11 +1223,13 @@ function initDarts() {
             // Direct 3K recovers league matches. Preserve separately published cup fixtures.
             const directIds=new Set(direct.items.map(item=>String(item.id)));
             const cups=(payload?.items||[]).filter(item=>item.isSpecial&&!directIds.has(String(item.id)));
-            payload={...direct,items:[...direct.items,...cups]};
+            const verifiedAt=new Date().toISOString();
+            payload={...direct,items:[...direct.items.map(item=>item.kind==='live'?{...item,liveVerifiedAt:verifiedAt}:item),...cups]};
           }
         } catch (_) { /* Keep the server snapshot or previously displayed data. */ }
       }
       if (!payload) throw new Error('no connection');
+      if (!demoLive) payload=dartsHoldVerifiedLive(payload,tickerData);
       const rendered=demoLive?demoTicker(payload):payload;
       renderTicker(rendered);tickerDelay=payload.stale?60000:30000;
       if (!demoLive&&!payload.stale) {try {localStorage.setItem('clubiq_darts_last_ticker',JSON.stringify(payload));} catch (_) {}}
