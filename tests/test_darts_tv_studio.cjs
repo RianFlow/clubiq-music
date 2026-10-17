@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {avg,outcome,teamImage,nextFixture,countdownParts,fixtureVenue}=require('../static/darts-tv-studio.js');
+const {avg,outcome,teamImage,nextFixture,startedFixture,countdownParts,fixtureVenue}=require('../static/darts-tv-studio.js');
 test('TV averages use known current-leg darts and remaining points, without inventing missing values',()=>{
  assert.equal(avg({remaining:84,darts:18,average:55.5,totalDarts:99}),'69,5');
  assert.equal(avg({remaining:501,darts:0}),'0,0');
@@ -19,6 +19,17 @@ test('next TV fixture follows the selected teams and actual date, excluding comp
  assert.equal(nextFixture(items,['A','B'],now).id,2);assert.equal(nextFixture(items,['A'],now).id,1);assert.equal(nextFixture(items,['D'],now),null);
  assert.equal(nextFixture([match(8,'B',-.1),match(9,'B',24)],['B'],now).id,8,'a short source delay at kickoff keeps the current fixture visible');assert.equal(items[0].id,1,'input order remains unchanged');
  assert.equal(nextFixture([{...match(10,'A',1),barverTeam:null,home:'Gäste',away:'SV Barver Darts A'}],['A'],now).id,10);
+});
+test('a scheduled encounter becomes a waiting match card at kickoff, never a fabricated live score',()=>{
+ const now=Date.parse('2026-10-17T19:30:00+02:00'),fixture=minutes=>({kind:'upcoming',plannedAt:new Date(now+minutes*60000).toISOString()});
+ assert.equal(startedFixture(fixture(1),now),false);
+ assert.equal(startedFixture(fixture(0),now),true);
+ assert.equal(startedFixture(fixture(-1),now),true);
+ assert.equal(startedFixture(fixture(-359),now),true);
+ assert.equal(startedFixture(fixture(-361),now),false);
+ assert.equal(startedFixture({...fixture(-1),kind:'final'},now),false);
+ assert.equal(startedFixture({...fixture(-1),kind:'live'},now),false);
+ assert.equal(startedFixture({kind:'upcoming',plannedAt:'invalid'},now),false);
 });
 test('TV countdown uses days, hours, minutes and seconds and never runs below zero',()=>{
  const now=Date.parse('2026-10-17T10:00:00Z');assert.deepEqual(countdownParts(new Date(now+((2*24+3)*3600+4*60+5)*1000).toISOString(),now),{days:2,hours:3,minutes:4,seconds:5,started:false});

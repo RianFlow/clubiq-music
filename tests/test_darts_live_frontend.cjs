@@ -9,11 +9,23 @@ const live = fs.readFileSync(path.join(root, 'darts_live.py'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'static', 'darts.css'), 'utf8');
 
 assert.match(frontend, /new EventSource\('\/api\/v1\/darts\/live\/stream'\)/);
+assert.match(frontend, /testButton\.addEventListener\('click'/,'self-service web push test must be explicit');
+assert.match(frontend, /pushRequest\('\/api\/v1\/darts\/push\/test'/,'test is directed only at the current subscription');
+assert.match(backend, /@app\.post\("\/api\/v1\/darts\/push\/test"\)/);
+const dartsHtml=require('node:fs').readFileSync(path.join(root,'darts.html'),'utf8');
+assert.match(dartsHtml, /id="pushTest" type="button">Testnachricht senden<\/button>/,
+  'the test action must remain visible regardless of subscription state');
+assert.match(frontend, /if\(!testButton&&actionHost\)/,'restore diagnostic action with an old HTML cache');
+assert.doesNotMatch(frontend, /testButton\.hidden=!subscription/,'do not conceal the diagnostic action');
 assert.doesNotMatch(frontend, /live\.3k-darts\.com.*websocket/i);
 assert.match(backend, /@app\.get\("\/api\/v1\/darts\/live\/stream"\)/);
 assert.match(backend, /season = get_darts_season\(\)[\s\S]*darts_live_hub\.reconcile\(season\.get\("matches"\) or \[\]\)/);
 assert.match(live, /destination:\/topic\/\{self\.database\}-\{self\.group_key\}/);
 assert.match(live, /REST_FALLBACK_SECONDS = 7/);
+assert.match(backend, /darts_live_hub\.reconcile\(cached_fixtures\)/,'stale season fixtures must still be watched');
+assert.match(live, /next_rest_sync = current_time \+ REST_FALLBACK_SECONDS/,'connected 3K WebSocket must be backed by REST');
+assert.match(frontend, /function dartsHoldVerifiedLive\(incoming, previous/,'do not flicker to countdown on short interruptions');
+assert.match(frontend, /liveFeedDelayed:true/,'carried scores must be labeled as delayed');
 assert.match(frontend, /function upsertServerLiveTickerItem\(group\)[\s\S]*tickerData\.items=\[item,\.\.\.\(tickerData\.items \|\| \[\]\)\]/);
 assert.match(frontend, /for \(const group of serverLiveGroups\.values\(\)\) upsertServerLiveTickerItem\(group\)/);
 assert.match(frontend, /value === 0 \? 'CHECK'/);

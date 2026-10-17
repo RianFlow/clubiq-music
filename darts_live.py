@@ -372,7 +372,7 @@ class DartsLiveHub:
     def _empty_group(self, group_key: str, meta: dict) -> dict:
         return {
             "groupKey": group_key, "database": "10", "meta": meta, "matches": {}, "connected": False,
-            "source": "starting", "stale": False, "finished": False, "finalizedBySeason": False,
+            "source": "starting", "stale": False, "finished": False, "finalizedBySeason": False, "clinchNotified": False,
             "lastUpdate": None, "lastSuccess": None, "lastError": None, "revision": 0,
         }
 
@@ -423,17 +423,55 @@ class DartsLiveHub:
                     isinstance(home, int) and isinstance(guest, int) and home + guest >= TEAM_MATCH_GAMES
                     for home, guest in totals
                 )
+            # Reaching seven points clinches a 12-game team encounter.
+            # Keep the scorer running until all twelve games are complete.
+            aggregate = [
+                item for item in group["matches"].values()
+                if isinstance(item.get("teamScoreHome"), int)
+                and isinstance(item.get("teamScoreGuest"), int)
+                and 0 <= item["teamScoreHome"] + item["teamScoreGuest"] <= TEAM_MATCH_GAMES
+            ]
+            latest = max(aggregate, key=lambda item: (
+                item["teamScoreHome"] + item["teamScoreGuest"], item.get("lastUpdateNs") or 0
+            ), default=None)
+            clinched_before = bool(group.get("clinchNotified"))
+            if latest:
+                home_score, guest_score = latest["teamScoreHome"], latest["teamScoreGuest"]
+                winning_side = "home" if home_score >= TEAM_MATCH_GAMES // 2 + 1 else (
+                    "away" if guest_score >= TEAM_MATCH_GAMES // 2 + 1 else None
+                )
+                if winning_side and not clinched_before:
+                    group["clinchNotified"] = True
+                    # A first snapshot must never replay a historical victory.
+                    if had_matches and not was_finished:
+                        meta = group.get("meta") or {}
+                        for code in meta.get("barverTeams") or [meta.get("barverTeam")]:
+                            if code not in ("A", "B", "C", "D"):
+                                continue
+                            side = (meta.get("barverSides") or {}).get(code) or (
+                                "home" if meta.get("home") == f"SV Barver Darts {code}" else "away"
+                            )
+                            if side != winning_side:
+                                continue
+                            emitted.append({
+                                "type": "match", "matchId": int(group_key),
+                                "team": f"SV Barver Darts {code}", "player": f"SV Barver Darts {code}",
+                                "score": f"{home_score}:{guest_score}", "barverWon": True, "clinch": True,
+                                "text": f"Mannschaftssieg steht fest: {meta.get('home') or 'Heim'} {home_score}:{guest_score} {meta.get('away') or 'Gast'}. Die restlichen Partien laufen weiter.",
+                                "occurred_at": latest.get("lastUpdate"),
+                                "event_id": _event_id(group_key, "match-clinch", code),
+                            })
             if had_matches and not was_finished and group["finished"]:
-                latest = max(group["matches"].values(), key=lambda item: item.get("lastUpdateNs") or 0)
+                latest_final = latest or max(group["matches"].values(), key=lambda item: item.get("lastUpdateNs") or 0)
                 code = next(iter(group.get("meta", {}).get("barverTeams") or []), None)
-                if code:
-                    home_score, guest_score = latest.get("teamScoreHome"), latest.get("teamScoreGuest")
+                if code and not any(event.get("clinch") for event in emitted):
+                    home_score, guest_score = latest_final.get("teamScoreHome"), latest_final.get("teamScoreGuest")
                     emitted.append({
                         "type": "match", "matchId": int(group_key), "team": f"SV Barver Darts {code}",
                         "player": f"SV Barver Darts {code}", "score": f"{home_score}:{guest_score}",
                         "text": f"{group['meta'].get('home') or 'Heim'} {home_score}:{guest_score} {group['meta'].get('away') or 'Gast'}",
-                        "occurred_at": latest.get("lastUpdate"),
-                        "event_id": _event_id(group_key, "match", home_score, guest_score),
+                        "occurred_at": latest_final.get("lastUpdate"), "finalOnly": clinched_before,
+                        "event_id": _event_id(group_key, "match-final", home_score, guest_score),
                     })
             if changed:
                 self._revision += 1
@@ -588,14 +626,25 @@ class _GroupConnector:
             self._rest_sync()  # Fill any gap between the initial request and subscription.
             self.hub.set_connection(self.group_key, True)
             last_heartbeat = time.monotonic()
+            next_rest_sync = last_heartbeat + REST_FALLBACK_SECONDS
             while not self._stop.is_set() and not self.hub.group_finished(self.group_key):
                 try:
                     message = ws.recv()
                 except Exception as exc:
                     if websocket and isinstance(exc, websocket.WebSocketTimeoutException):
-                        if time.monotonic() - last_heartbeat >= 10:
+                        current_time = time.monotonic()
+                        # Some 3K STOMP streams remain connected but miss updates.
+                        # Poll the official live REST endpoint as a safety net;
+                        # DartsLiveHub deduplicates events by 3K timestamps.
+                        if current_time >= next_rest_sync:
+                            try:
+                                self._rest_sync()
+                            except (requests.RequestException, ValueError):
+                                pass
+                            next_rest_sync = current_time + REST_FALLBACK_SECONDS
+                        if current_time - last_heartbeat >= 10:
                             self._sockjs_send(ws, "\n")
-                            last_heartbeat = time.monotonic()
+                            last_heartbeat = current_time
                         continue
                     raise
                 if message == "h":

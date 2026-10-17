@@ -60,7 +60,7 @@ def _event_identity(league: str, event: dict) -> tuple[str, str] | None:
     elif event_type == "game":
         identity = f"{event.get('gameId')}|{event.get('homeLegs')}|{event.get('awayLegs')}"
     else:
-        identity = str(event.get("score") or event.get("text") or "final")
+        identity = ("clinch|" if event.get("clinch") is True else "") + str(event.get("score") or event.get("text") or "final")
     if event_type in {"leg", "game"}:
         if league == "live" and event.get("league"):
             league = str(event["league"])[:40]
@@ -105,9 +105,10 @@ def barver_push_event(league: str, event: dict) -> dict | None:
         body = f"{team_name} · {str(event.get('text') or '').strip()}"[:600]
         tag = f"clubiq-game-{event.get('gameId') or match_id}"
     else:
-        title = f"🏁 Endstand Barver {team_match.group(1)}"
+        clinched = event.get("clinch") is True
+        title = f"🏆 Mannschaftssieg Barver {team_match.group(1)}" if clinched else f"🏁 Endstand Barver {team_match.group(1)}"
         body = str(event.get("text") or "Mannschaftsspiel beendet")[:220]
-        tag = f"clubiq-match-{match_id}"
+        tag = f"clubiq-match-{'clinch' if clinched else 'final'}-{match_id}"
     return {
         "event_id": hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest(),
         "event_type": event_type,

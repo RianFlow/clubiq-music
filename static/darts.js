@@ -117,6 +117,33 @@ function dartsMergedMatches(season,ticker) {
 function dartsFixturesFresh(data,now=Date.now()){
   const age=now-Date.parse(data?.fixturesUpdatedAt||'');return data?.fixturesStale===false&&Number.isFinite(age)&&age>=-30000&&age<360000;
 }
+function dartsKickoffNeedsRecovery(items,now=Date.now()){
+  return (Array.isArray(items)?items:[]).some(item=>{
+    if(item.kind!=='upcoming')return false;
+    const start=Date.parse(item.plannedAt);
+    return Number.isFinite(start)&&start-now<=15*60*1000&&now-start<=6*60*60*1000;
+  });
+}
+function dartsHoldVerifiedLive(incoming, previous, now=Date.now()){
+  if(!incoming||!previous||previous.source!=='browser-3k'||!Array.isArray(previous.items))return incoming;
+  const incomingItems=Array.isArray(incoming.items)?incoming.items:[];
+  const byId=new Map(incomingItems.map(item=>[String(item.id),item]));
+  const retained=previous.items.filter(item=>{
+    const verified=Date.parse(item.liveVerifiedAt||'');
+    const replacement=byId.get(String(item.id));
+    return item.kind==='live'&&Number.isFinite(verified)&&now-verified>=0&&now-verified<20*60000
+      &&replacement?.kind!=='live'&&replacement?.kind!=='final'&&replacement?.kind!=='pending';
+  });
+  if(!retained.length)return incoming;
+  const ids=new Set(retained.map(item=>String(item.id)));
+  // Preserve the last confirmed match and scores, but mark them as delayed.
+  // Do not reset the verification clock unless 3K verifies LIVE again.
+  return {...incoming,source:'browser-3k',stale:true,updatedAt:previous.updatedAt,
+    centers:Array.isArray(previous.centers)?previous.centers:[],
+    items:[...retained.map(item=>({...item,liveFeedDelayed:true})),
+      ...incomingItems.filter(item=>!ids.has(String(item.id)))]};
+}
+
 function dartsTeamFixtures(team,matches) {
   const games=matches.filter(m=>(m.barverTeams||[m.barverTeam]).includes(team.code));
   const upcoming=games.filter(m=>m.kind==='upcoming'||m.kind==='live').sort((a,b)=>Number(b.kind==='live')-Number(a.kind==='live')||(Date.parse(a.plannedAt)||Infinity)-(Date.parse(b.plannedAt)||Infinity));
@@ -696,6 +723,21 @@ function initDarts() {
   });
   async function initPushNotifications() {
     const button=q('#pushToggle');
+    const actionHost=q('.personal-push-actions');
+    // Older cached HTML may not contain the test button. Restore it rather than
+    // preventing the whole push UI from initializing.
+    let testButton=q('#pushTest'),testStatus=q('#pushTestStatus');
+    if(!testButton&&actionHost){
+      testButton=document.createElement('button');
+      testButton.id='pushTest';testButton.type='button';testButton.textContent='Testnachricht senden';
+      actionHost.append(testButton);
+    }
+    if(!testStatus&&actionHost){
+      testStatus=document.createElement('span');
+      testStatus.id='pushTestStatus';testStatus.setAttribute('role','status');
+      testStatus.setAttribute('aria-live','polite');actionHost.append(testStatus);
+    }
+    if(testButton)testButton.hidden=false;
     const health=q('#pushHealth');
     const updateHealth=async()=>{
       if (button.dataset.active !== 'true') { health.hidden=true; return; }
@@ -715,7 +757,9 @@ function initDarts() {
       } catch (_) { health.hidden=false; health.dataset.state='warn'; health.textContent='Status derzeit nicht verfügbar'; }
     };
     if (!window.isSecureContext || !('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
-      button.textContent='Benachrichtigungen nicht verfügbar'; button.disabled=true; return;
+      button.textContent='Benachrichtigungen nicht verfügbar'; button.disabled=true;
+      if(testButton){testButton.disabled=true;testButton.title='Push wird von diesem Browser nicht unterstützt.';}
+      return;
     }
     let registration;
     try {
@@ -727,7 +771,23 @@ function initDarts() {
         button.setAttribute('aria-pressed',String(Boolean(subscription)));
         button.textContent=subscription?'Benachrichtigungen aktiv':'Benachrichtigungen aktivieren';
         button.title=subscription?'Klicken, um Push-Benachrichtigungen auf diesem Gerät auszuschalten':'180er, High Finishes, Legs und Ergebnisse erhalten';
+        // Leave test always visible: a missing subscription should produce an
+        // actionable message on click, not hide the diagnostic tool.
+        testButton.hidden=false;
       };
+      testButton.addEventListener('click',async()=>{
+        testButton.disabled=true;
+        testStatus.textContent='Sende Testmeldung an dieses Gerät …';
+        try {
+          if(Notification.permission!=='granted')throw new Error('Browser-Benachrichtigungen sind auf diesem Gerät nicht erlaubt.');
+          const current=await registration.pushManager.getSubscription();
+          if(!current)throw new Error('Auf diesem Gerät sind noch keine Push-Benachrichtigungen aktiv.');
+          await pushRequest('/api/v1/darts/push/test',{...current.toJSON(),training:false});
+          testStatus.textContent='Testmeldung vom Push-Dienst angenommen. Bitte den Empfang auf diesem Gerät prüfen.';
+        } catch(error) {
+          testStatus.textContent=error.message||'Testnachricht konnte nicht gesendet werden.';
+        } finally {testButton.disabled=false;}
+      });
       await update();
       await updateHealth();
       window.setInterval(()=>{ if (!document.hidden) updateHealth(); },60000);
@@ -756,7 +816,11 @@ function initDarts() {
         } catch (error) { message(error.message || 'Push-Benachrichtigungen konnten nicht geändert werden.'); }
         finally { button.disabled=Notification.permission==='denied'; }
       });
-    } catch (_) { button.textContent='Benachrichtigungen nicht verfügbar'; button.disabled=true; }
+    } catch (_) {
+      button.textContent='Benachrichtigungen nicht verfügbar'; button.disabled=true;
+      if(testButton)testButton.disabled=true;
+      if(testStatus)testStatus.textContent='Push-Initialisierung fehlgeschlagen. Seite neu laden oder Browserberechtigungen prüfen.';
+    }
   }
   initPushNotifications();
   const favoriteKey = 'clubiq_darts_favorite';
@@ -941,7 +1005,7 @@ function initDarts() {
       window.DartsTvStudio.render({container:target,selected:[...tvTeams],items,playerNode:matchPlayerNode,openMatch,exitTv,openPlayer:(member,code)=>openPlayerProfile(member,teamByCode(code)||{code,name:`SV Barver Darts ${code}`}),locationForMatch:item=>appointmentLocation({kind:'match',match:currentFixtures().find(row=>row.id===item.id)||item}),models:live.map(item=>{
         const center=liveCenters.find(entry=>(entry.barverMatches||[]).some(match=>match.id===item.id)),group=serverLiveGroups.get(String(item.id));
         const games=(center?.pushEvents||[]).filter(event=>event.matchId===item.id&&event.type==='live_game').sort((a,b)=>String(a.board||'').localeCompare(String(b.board||''),undefined,{numeric:true}));
-        return {item,games,loaded:Boolean(center||group?.connected),stale:group?Boolean(group.stale||!group.connected):center?Boolean(center.stale):true};
+        return {item,games,loaded:Boolean(center||group?.connected),stale:Boolean(item.liveFeedDelayed)||(group?Boolean(group.stale||!group.connected):center?Boolean(center.stale):true)};
       })});return;
     }
     window.DartsTvStudio?.close();
@@ -1189,12 +1253,23 @@ function initDarts() {
         if (!Array.isArray(payload.items)) throw new Error('invalid ticker');
       } catch (_) { /* Try the independent public connection below. */ }
       clearTimeout(timeout);
-      const serverFresh=payload&&((!payload.stale&&Date.now()-Date.parse(payload.updatedAt||'')<(payload.sourceConnection==='collector'?360000:180000))||(dartsFixturesFresh(payload)&&!payload.items.some(item=>item.kind==='live')));
-      if (!demoLive&&!serverFresh&&window.DartsSourceFallback) {
-        try {payload=await window.DartsSourceFallback.load();}
-        catch (_) { /* Keep the server snapshot or previously displayed data. */ }
+      const tickerHasLive=payload?.items?.some(item=>item.kind==='live');
+      const nearKickoff=dartsKickoffNeedsRecovery([...(payload?.items||[]),...(seasonData?.matches||[])]);
+      const serverFresh=payload&&((!payload.stale&&Date.now()-Date.parse(payload.updatedAt||'')<(payload.sourceConnection==='collector'?360000:180000))||(dartsFixturesFresh(payload)&&!tickerHasLive&&!nearKickoff));
+      if (!demoLive&&(!serverFresh||(nearKickoff&&!tickerHasLive))&&window.DartsSourceFallback) {
+        try {
+          const direct=await window.DartsSourceFallback.load(seasonData?.matches||[]);
+          if(Array.isArray(direct?.items)) {
+            // Direct 3K recovers league matches. Preserve separately published cup fixtures.
+            const directIds=new Set(direct.items.map(item=>String(item.id)));
+            const cups=(payload?.items||[]).filter(item=>item.isSpecial&&!directIds.has(String(item.id)));
+            const verifiedAt=new Date().toISOString();
+            payload={...direct,items:[...direct.items.map(item=>item.kind==='live'?{...item,liveVerifiedAt:verifiedAt}:item),...cups]};
+          }
+        } catch (_) { /* Keep the server snapshot or previously displayed data. */ }
       }
       if (!payload) throw new Error('no connection');
+      if (!demoLive) payload=dartsHoldVerifiedLive(payload,tickerData);
       const rendered=demoLive?demoTicker(payload):payload;
       renderTicker(rendered);tickerDelay=payload.stale?60000:30000;
       if (!demoLive&&!payload.stale) {try {localStorage.setItem('clubiq_darts_last_ticker',JSON.stringify(payload));} catch (_) {}}
@@ -1751,6 +1826,9 @@ function initDarts() {
         }
       }
       renderSeason(); renderHomeSchedule(); renderCompleteMatchCenter();
+      // A newly loaded season may expose a fixture moved into today from a future 3K round.
+      // Immediately re-query 3K instead of waiting for the next normal ticker cycle.
+      if(dartsKickoffNeedsRecovery(seasonData.matches)&&!demoLive&&!tickerLoading)loadTicker();
       if (q('#personalSettings').open) renderPlayerOptions();
       const seasonPartial=seasonData.degraded===true;
       const freshnessText=seasonData.stale?(dartsFixturesFresh(seasonData)?'Nächste Spieltermine aktuell · Saisonstand älter':'Letzter verfügbarer Stand'):seasonPartial?'3K teilweise erreichbar':'Mit 3K abgeglichen';

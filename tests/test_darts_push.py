@@ -18,6 +18,15 @@ class DartsPushTests(unittest.TestCase):
         self.assertNotEqual(event["event_id"], barver_push_event("live", {**raw, "gameId": "board-game-2"})["event_id"])
         self.assertIsNone(barver_push_event("live", {**raw, "gameId": ""}))
 
+    def test_clinch_notification_is_distinct_from_final_result(self):
+        clinch = {"type": "match", "matchId": 1280545, "team": "SV Barver Darts A",
+                  "score": "1:7", "text": "Mannschaftssieg steht fest", "clinch": True}
+        winner = barver_push_event("live", clinch)
+        final = barver_push_event("live", {**clinch, "clinch": False})
+        self.assertIn("Mannschaftssieg", winner["title"])
+        self.assertIn("Endstand", final["title"])
+        self.assertNotEqual(winner["event_id"], final["event_id"])
+
     def test_normalizes_barver_180_and_keeps_player_name(self):
         event = barver_180_event("kl04", {
             "type": "180", "matchId": 123, "player": "Jannik Kläning",

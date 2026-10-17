@@ -256,6 +256,48 @@ class DartsLiveTests(unittest.TestCase):
         hub.apply("1657285", [first, second], "rest")
         self.assertFalse(hub.group_finished("1657285"))
 
+    def test_seventh_point_triggers_exactly_one_team_victory_before_official_end(self):
+        hub = DartsLiveHub()
+        hub._groups["1657285"] = hub._empty_group("1657285", META)
+        def entry(key, stamp, home, away):
+            return normalize_match(raw_match(key, "1", stamp, setsHome=home, setsGuest=away))
+        hub.apply("1657285", [entry("decider","2026-09-27T13:35:53.000000001",1,6)], "rest")
+        self.assertEqual(hub.drain_events(), [])
+        hub.apply("1657285", [entry("decider","2026-09-27T13:35:54.000000001",1,7)], "rest")
+        wins = [event for event in hub.drain_events() if event["type"] == "match"]
+        self.assertEqual(len(wins), 1)
+        self.assertTrue(wins[0]["clinch"])
+        self.assertEqual(wins[0]["score"], "1:7")
+        self.assertEqual(wins[0]["team"], "SV Barver Darts B")
+        self.assertFalse(hub.group_finished("1657285"))
+        hub.apply("1657285", [entry("decider","2026-09-27T13:35:54.000000001",1,7)], "rest")
+        self.assertEqual(hub.drain_events(), [])
+        hub.apply("1657285", [entry("decider","2026-09-27T13:35:55.000000001",4,8)], "rest")
+        finals = [event for event in hub.drain_events() if event["type"] == "match"]
+        self.assertEqual(len(finals), 1)
+        self.assertTrue(finals[0]["finalOnly"])
+        self.assertTrue(hub.group_finished("1657285"))
+
+    def test_initial_seventh_point_is_only_baseline(self):
+        hub = DartsLiveHub()
+        hub._groups["1657285"] = hub._empty_group("1657285", META)
+        first = normalize_match(raw_match("already", "1", "2026-09-27T13:35:53.000000001",setsHome=1,setsGuest=7))
+        hub.apply("1657285", [first], "rest")
+        self.assertEqual(hub.drain_events(), [])
+        self.assertTrue(hub.get_group("1657285")["clinchNotified"])
+        later = normalize_match(raw_match("already", "1", "2026-09-27T13:35:54.000000001",setsHome=2,setsGuest=7))
+        hub.apply("1657285", [later], "rest")
+        self.assertFalse(any(e["type"] == "match" for e in hub.drain_events()))
+
+    def test_opponent_seventh_point_does_not_celebrate_barver_win(self):
+        hub = DartsLiveHub()
+        hub._groups["1657285"] = hub._empty_group("1657285", META)
+        first = normalize_match(raw_match("loss","1","2026-09-27T13:35:53.000000001",setsHome=6,setsGuest=1))
+        hub.apply("1657285", [first], "rest")
+        later = normalize_match(raw_match("loss","1","2026-09-27T13:35:54.000000001",setsHome=7,setsGuest=1))
+        hub.apply("1657285", [later], "rest")
+        self.assertFalse(any(e.get("clinch") for e in hub.drain_events()))
+
     def test_group_finishes_at_twelve_team_games(self):
         hub = DartsLiveHub()
         hub._groups["1657285"] = hub._empty_group("1657285", META)
