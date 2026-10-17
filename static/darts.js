@@ -1194,11 +1194,11 @@ function initDarts() {
       } catch (_) { /* Try the independent public connection below. */ }
       clearTimeout(timeout);
       const tickerHasLive=payload?.items?.some(item=>item.kind==='live');
-      const nearKickoff=dartsKickoffNeedsRecovery(payload?.items);
+      const nearKickoff=dartsKickoffNeedsRecovery([...(payload?.items||[]),...(seasonData?.matches||[])]);
       const serverFresh=payload&&((!payload.stale&&Date.now()-Date.parse(payload.updatedAt||'')<(payload.sourceConnection==='collector'?360000:180000))||(dartsFixturesFresh(payload)&&!tickerHasLive&&!nearKickoff));
       if (!demoLive&&(!serverFresh||(nearKickoff&&!tickerHasLive))&&window.DartsSourceFallback) {
         try {
-          const direct=await window.DartsSourceFallback.load();
+          const direct=await window.DartsSourceFallback.load(seasonData?.matches||[]);
           if(Array.isArray(direct?.items)) {
             // Direct 3K recovers league matches. Preserve separately published cup fixtures.
             const directIds=new Set(direct.items.map(item=>String(item.id)));
@@ -1764,6 +1764,9 @@ function initDarts() {
         }
       }
       renderSeason(); renderHomeSchedule(); renderCompleteMatchCenter();
+      // A newly loaded season may expose a fixture moved into today from a future 3K round.
+      // Immediately re-query 3K instead of waiting for the next normal ticker cycle.
+      if(dartsKickoffNeedsRecovery(seasonData.matches)&&!demoLive&&!tickerLoading)loadTicker();
       if (q('#personalSettings').open) renderPlayerOptions();
       const seasonPartial=seasonData.degraded===true;
       const freshnessText=seasonData.stale?(dartsFixturesFresh(seasonData)?'Nächste Spieltermine aktuell · Saisonstand älter':'Letzter verfügbarer Stand'):seasonPartial?'3K teilweise erreichbar':'Mit 3K abgeglichen';
