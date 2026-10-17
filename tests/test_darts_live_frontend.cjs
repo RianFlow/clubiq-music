@@ -9,6 +9,10 @@ const live = fs.readFileSync(path.join(root, 'darts_live.py'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'static', 'darts.css'), 'utf8');
 
 assert.match(frontend, /new EventSource\('\/api\/v1\/darts\/live\/stream'\)/);
+assert.match(frontend, /testButton\.addEventListener\('click'/,'self-service web push test must be explicit');
+assert.match(frontend, /pushRequest\('\/api\/v1\/darts\/push\/test'/,'test is directed only at the current subscription');
+assert.match(backend, /@app\.post\("\/api\/v1\/darts\/push\/test"\)/);
+assert.match(require('node:fs').readFileSync(path.join(root,'darts.html'),'utf8'), /id="pushTest" type="button" hidden/);
 assert.doesNotMatch(frontend, /live\.3k-darts\.com.*websocket/i);
 assert.match(backend, /@app\.get\("\/api\/v1\/darts\/live\/stream"\)/);
 assert.match(backend, /season = get_darts_season\(\)[\s\S]*darts_live_hub\.reconcile\(season\.get\("matches"\) or \[\]\)/);
