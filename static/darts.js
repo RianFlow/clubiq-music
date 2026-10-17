@@ -132,7 +132,7 @@ function dartsHoldVerifiedLive(incoming, previous, now=Date.now()){
     const verified=Date.parse(item.liveVerifiedAt||'');
     const replacement=byId.get(String(item.id));
     return item.kind==='live'&&Number.isFinite(verified)&&now-verified>=0&&now-verified<20*60000
-      &&replacement?.kind!=='final'&&replacement?.kind!=='pending';
+      &&replacement?.kind!=='live'&&replacement?.kind!=='final'&&replacement?.kind!=='pending';
   });
   if(!retained.length)return incoming;
   const ids=new Set(retained.map(item=>String(item.id)));
