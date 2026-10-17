@@ -5,6 +5,7 @@
   const PHOTOS={A:'/pics/teams/barver-a-team-20261007.webp',B:'/pics/teams/barver-b-team-20261016.webp',D:'/pics/teams/barver-d-team-20261016-v4.webp'};
   let host=null,context=null,controls=null,controlsHome=null,hideTimer=null,clockTimer=null,resultTimer=null,statusObserver=null,sponsorObserver=null,highlight=null;
   const tiles=new Map(),finished=new Map();
+  const STARTED_FIXTURE_WINDOW_MS=6*60*60*1000;
   const el=(tag,cls,value)=>{const n=root.document.createElement(tag);n.className=cls||'';if(value!==undefined)n.textContent=value;return n;};
   const q=selector=>root.document.querySelector(selector);
   const code=name=>String(name||'').match(/(?:SV\s+)?Barver(?:\s+Darts)?\s+([A-D])$/i)?.[1]?.toUpperCase()||'';
@@ -21,8 +22,12 @@
   function teamCodes(item){return [...new Set(item.barverTeams?.length?item.barverTeams:[item.barverTeam,code(item.home),code(item.away)])].filter(c=>context.selected.includes(c));}
   function ownSide(item,team){const side=item.barverSides?.[team]||(code(item.home)===team?'home':code(item.away)===team?'away':'');return side==='guest'?'away':side;}
   function outcome(item,team,score=item.score){const parts=String(score||'').match(/^(\d+)\s*:\s*(\d+)$/);const side=ownSide(item,team);if(!parts||!side)return null;const own=Number(parts[side==='home'?1:2]),other=Number(parts[side==='home'?2:1]);return own>other?'win':own<other?'loss':'draw';}
+  function startedFixture(item,now=Date.now()){
+    const start=Date.parse(item?.plannedAt);
+    return item?.kind==='upcoming'&&Number.isFinite(start)&&start<=now&&now-start<=STARTED_FIXTURE_WINDOW_MS;
+  }
   function nextFixture(items,selected,now=Date.now()){
-    return items.filter(item=>item.kind==='upcoming'&&Number.isFinite(Date.parse(item.plannedAt))&&Date.parse(item.plannedAt)>=now-3*60*60*1000&&(item.barverTeams?.length?item.barverTeams:[item.barverTeam,code(item.home),code(item.away)]).some(team=>selected.includes(team)))
+    return items.filter(item=>item.kind==='upcoming'&&Number.isFinite(Date.parse(item.plannedAt))&&Date.parse(item.plannedAt)>=now-STARTED_FIXTURE_WINDOW_MS&&(item.barverTeams?.length?item.barverTeams:[item.barverTeam,code(item.home),code(item.away)]).some(team=>selected.includes(team)))
       .sort((a,b)=>Date.parse(a.plannedAt)-Date.parse(b.plannedAt)||Number(a.id)-Number(b.id))[0]||null;
   }
   function countdownParts(plannedAt,now=Date.now()){
@@ -32,7 +37,8 @@
   function updateCountdown(){
     const countdown=host?.querySelector('.studio-countdown');if(!countdown)return;const parts=countdownParts(countdown.dataset.start);if(!parts)return;
     for(const key of ['days','hours','minutes','seconds'])countdown.querySelector(`[data-unit="${key}"]`).textContent=String(parts[key]).padStart(2,'0');
-    host.querySelector('.studio-countdown-note').textContent=parts.started?'Der geplante Spielbeginn ist erreicht. Wir warten auf die Live-Daten.':'Bis zum geplanten Spielbeginn';
+    if(parts.started){if(context)render(context);return;}
+    host.querySelector('.studio-countdown-note').textContent='Bis zum geplanten Spielbeginn';
   }
   function updateClock(){if(host){host.querySelector('.studio-clock').textContent=new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'}).format(new Date());updateCountdown();}}
   function showControls(){if(!host)return;clearTimeout(hideTimer);host.classList.remove('controls-hidden');controls.inert=false;host.querySelector('.studio-control-toggle').setAttribute('aria-expanded','true');hideTimer=root.setTimeout(hideControls,5000);}
@@ -82,11 +88,11 @@
     node.append(head,score,el('footer','','Restpunkte, AVG, Darts und Punkte aus dem aktuellen Leg'));return node;
   }
   function idle(model){
-    const item=model.item,team=teamCodes(item)[0],section=el('section','studio-pause');
-    const title=item.kind==='final'?outcome(item,team)==='win'?`Mannschaftssieg für Barver ${team}`:outcome(item,team)==='draw'?'Unentschieden':'Mannschaftsspiel beendet':model.stale?'Verbindung wird aktualisiert':model.loaded?'Zwischen den Partien':'Boarddaten werden geladen';
-    section.append(el('p','studio-eyebrow',item.kind==='final'?'ENDSTAND':model.loaded&&!model.stale?'SPIELPAUSE':'LIVE-DATEN'),el('h2','',title));
+    const item=model.item,team=teamCodes(item)[0],section=el('section','studio-pause'),awaiting=Boolean(model.awaiting);
+    const title=awaiting?'Warten auf Live-Spielstände':item.kind==='final'?outcome(item,team)==='win'?`Mannschaftssieg für Barver ${team}`:outcome(item,team)==='draw'?'Unentschieden':'Mannschaftsspiel beendet':model.stale?'Verbindung wird aktualisiert':model.loaded?'Zwischen den Partien':'Boarddaten werden geladen';
+    section.append(el('p','studio-eyebrow',awaiting?'GEPLANTER SPIELBEGINN ERREICHT':item.kind==='final'?'ENDSTAND':model.loaded&&!model.stale?'SPIELPAUSE':'LIVE-DATEN'),el('h2','',title));
     if(item.kind==='final')section.append(el('strong','studio-final-score',item.score||'–'));
-    section.append(groupPhoto(team),el('p','studio-pause-note',item.kind==='final'?'Danke fürs Mitfiebern!':model.stale?'Der letzte Spielstand bleibt erhalten. Wir verbinden uns automatisch neu.':'Sobald das nächste Board beginnt, erscheint es hier automatisch.'));
+    section.append(groupPhoto(team),el('p','studio-pause-note',awaiting?`${item.home} gegen ${item.away} · Es liegen noch keine bestätigten Live-Spielstände von 3K vor.`:item.kind==='final'?'Danke fürs Mitfiebern!':model.stale?'Der letzte Spielstand bleibt erhalten. Wir verbinden uns automatisch neu.':'Sobald das nächste Board beginnt, erscheint es hier automatisch.'));
     return section;
   }
   function upcoming(item,input){
@@ -111,13 +117,21 @@
   }
   function render(input){
     context=input;mount(input.container);const display=models(input),content=host.querySelector('.studio-content'),summary=host.querySelector('.studio-summary'),summaryNodes=[],wanted=new Set();
+    // A scheduled encounter stays visible from kickoff even when the 3K live feed is delayed.
+    const shown=new Set(display.map(model=>String(model.item.id)));
+    for(const item of input.items){
+      if(!startedFixture(item)||!teamCodes(item).length||shown.has(String(item.id)))continue;
+      display.push({item,games:[],loaded:false,stale:false,awaiting:true});shown.add(String(item.id));
+    }
+    display.sort((a,b)=>teamCodes(a.item).join().localeCompare(teamCodes(b.item).join()));
     content.dataset.count=String(Math.max(1,display.length));content.className='studio-content'+(!display.length?' is-empty':'');if(display.length)content.querySelector('.studio-no-games')?.remove();
     for(const model of display){
-      const item=model.item,id=String(item.id),own=teamCodes(item),team=own[0],summaryItem=el('div','studio-summary-item');summaryItem.append(el('span','',own.map(c=>'BARVER '+c).join(' / ')),el('strong','',item.score||'–'),el('small','',item.kind==='final'?'ENDSTAND':model.stale?'LETZTER STAND':'LIVE'));summaryNodes.push(summaryItem);wanted.add(id);
+      const item=model.item,id=String(item.id),own=teamCodes(item),team=own[0],awaiting=Boolean(model.awaiting),summaryItem=el('div','studio-summary-item');summaryItem.append(el('span','',own.map(c=>'BARVER '+c).join(' / ')),el('strong','',item.score||'–'),el('small','',awaiting?'DATEN AUSSTEHEND':item.kind==='final'?'ENDSTAND':model.stale?'LETZTER STAND':'LIVE'));summaryNodes.push(summaryItem);wanted.add(id);
       let tile=tiles.get(id);if(!tile){const node=el('article','studio-team today-game live');node.dataset.matchId=id;node.setAttribute('aria-label',`Barver ${team}: ${item.home} gegen ${item.away}`);node.append(el('header','studio-team-head'),el('div','studio-team-body'));tile={node};tiles.set(id,tile);}tile.model=model;
       const title=el('div','studio-team-title'),opponent=ownSide(item,team)==='home'?item.away:item.home;title.append(el('h2','',own.map(c=>'BARVER '+c).join(' / ')),el('span','',`gegen ${opponent||'Gäste'}${model.stale?' · letzter Stand':''}`));
       const report=el('button','studio-report','Spielbericht öffnen');report.type='button';report.addEventListener('click',()=>input.openMatch(item.id));
       tile.node.querySelector('.studio-team-head').replaceChildren(title,el('strong','studio-team-score',item.score||'–'),report);
+      tile.node.classList.toggle('is-awaiting',awaiting);
       tile.node.classList.toggle('is-stale',Boolean(model.stale));tile.node.classList.toggle('is-finished',item.kind==='final');
       const body=tile.node.querySelector('.studio-team-body'),boards=el('div','studio-boards');boards.dataset.boards=String(model.games.length);for(const game of model.games)boards.append(board(game,item));
       const previous=body.querySelector('.studio-boards,.studio-pause');const next=model.games.length?boards:idle(model);if(previous)previous.replaceWith(next);else body.prepend(next);
@@ -150,5 +164,5 @@
   }
   function clearHighlight(){highlight?.node.remove();highlight=null;}
   root.DartsTvStudio={render,close,showHighlight,clearHighlight,teamImage,isActive:()=>Boolean(host)};
-  if(typeof module!=='undefined'&&module.exports)module.exports={avg,outcome,teamImage,nextFixture,countdownParts,fixtureVenue};
+  if(typeof module!=='undefined'&&module.exports)module.exports={avg,outcome,teamImage,nextFixture,startedFixture,countdownParts,fixtureVenue};
 })(typeof window!=='undefined'?window:globalThis);
