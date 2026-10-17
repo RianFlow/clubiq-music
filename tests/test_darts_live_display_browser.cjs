@@ -204,7 +204,8 @@ const server=http.createServer((req,res)=>{
     await page.locator('#tvTeamControls [data-tv-team="B"]').click();
     await page.locator('#todayGrid .app-tv-empty').waitFor();
     assert.match(await page.locator('#todayGrid').innerText(),/erscheint sie hier automatisch/);
-    await page.getByRole('button',{name:'Zurück zur App',exact:true}).click();
+    await page.keyboard.press('b');
+    await page.getByRole('button',{name:'TV-Modus beenden',exact:true}).click();
     await page.waitForURL('**/app/');
     await page.getByRole('heading',{name:'Barver B',exact:true}).waitFor();
     await page.locator('nav button[data-view="teams"]').click();

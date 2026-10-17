@@ -48,7 +48,8 @@
     controls=el('aside','studio-controls');controls.setAttribute('aria-label','TV-Ansicht bedienen');const existing=q('#tvTeamControls');controlsHome=existing.parentNode;controls.append(existing);
     const tools=el('div','studio-tools'),theme=el('button','','Hell / Dunkel'),exit=el('button','','TV-Modus beenden');theme.type=exit.type='button';
     theme.addEventListener('click',()=>q('#themeToggle').click());exit.addEventListener('click',()=>{if(root.location.pathname==='/app/live')root.location.assign('/app/');else root.document.exitFullscreen?.();});
-    tools.append(theme,exit);controls.append(tools,el('small','','Maus bewegen oder B drücken · die Bedienung blendet sich nach 5 Sekunden aus.'));
+    const touch=root.matchMedia('(pointer:coarse)').matches;
+    tools.append(theme,exit);controls.append(tools,el('small','',touch?'Über „Bedienung“ öffnest du die Auswahl. Sie blendet sich nach 5 Sekunden aus.':'Maus bewegen oder B drücken · die Bedienung blendet sich nach 5 Sekunden aus.'));
     const toggle=el('button','studio-control-toggle','Bedienung');toggle.type='button';toggle.setAttribute('aria-expanded','true');toggle.addEventListener('click',showControls);
     host.append(header,content,foot,controls,toggle);container.replaceChildren(host);host.addEventListener('pointermove',showControls,{passive:true});host.addEventListener('pointerdown',showControls,{passive:true});root.document.addEventListener('keydown',keydown);
     const source=q('#liveDataStatus');if(source){const sync=()=>{status.textContent=source.textContent;status.dataset.state=source.dataset.state||'';};statusObserver=new MutationObserver(sync);statusObserver.observe(source,{childList:true,subtree:true,characterData:true,attributes:true});sync();}
@@ -59,7 +60,7 @@
       const copy=banner.cloneNode(true);for(const logo of copy.querySelectorAll('img')){logo.loading='eager';logo.addEventListener('error',()=>{logo.hidden=true;},{once:true});}
       partner.replaceChildren(copy);
     };sponsorObserver=new MutationObserver(sync);sponsorObserver.observe(sponsorSource,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['hidden','src','href']});sync();}
-    updateClock();clockTimer=root.setInterval(updateClock,1000);showControls();
+    updateClock();clockTimer=root.setInterval(updateClock,1000);if(touch)hideControls();else showControls();
   }
   function close(){
     if(!host)return;

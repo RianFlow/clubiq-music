@@ -933,7 +933,7 @@ function initDarts() {
     const upcoming = wanted.filter(item=>item.kind==='upcoming');
     const finals = wanted.filter(item=>item.kind==='final');
     const shown = tvActive ? live : live.slice(0,1);
-    if(tvActive&&window.matchMedia('(min-width:651px)').matches&&window.DartsTvStudio){
+    if(tvActive&&window.DartsTvStudio&&(window.matchMedia('(min-width:651px)').matches||!live.length)){
       target.hidden=false;target.dataset.liveCount=String(live.length);
       window.DartsTvStudio.render({container:target,selected:[...tvTeams],items,playerNode:matchPlayerNode,openMatch,openPlayer:(member,code)=>openPlayerProfile(member,teamByCode(code)||{code,name:`SV Barver Darts ${code}`}),locationForMatch:item=>appointmentLocation({kind:'match',match:currentFixtures().find(row=>row.id===item.id)||item}),models:live.map(item=>{
         const center=liveCenters.find(entry=>(entry.barverMatches||[]).some(match=>match.id===item.id)),group=serverLiveGroups.get(String(item.id));
