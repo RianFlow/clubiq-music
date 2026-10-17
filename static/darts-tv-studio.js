@@ -6,6 +6,7 @@
   let host=null,context=null,controls=null,controlsHome=null,hideTimer=null,clockTimer=null,resultTimer=null,statusObserver=null,sponsorObserver=null,highlight=null;
   const tiles=new Map(),finished=new Map();
   const STARTED_FIXTURE_WINDOW_MS=6*60*60*1000;
+  let kickoffFixtures=[];
   const el=(tag,cls,value)=>{const n=root.document.createElement(tag);n.className=cls||'';if(value!==undefined)n.textContent=value;return n;};
   const q=selector=>root.document.querySelector(selector);
   const code=name=>String(name||'').match(/(?:SV\s+)?Barver(?:\s+Darts)?\s+([A-D])$/i)?.[1]?.toUpperCase()||'';
@@ -25,6 +26,12 @@
   function startedFixture(item,now=Date.now()){
     const start=Date.parse(item?.plannedAt);
     return item?.kind==='upcoming'&&Number.isFinite(start)&&start<=now&&now-start<=STARTED_FIXTURE_WINDOW_MS;
+  }
+  function retainKickoffFixtures(previous,items,selected,now=Date.now()){
+    const eligible=item=>{const start=Date.parse(item?.plannedAt);return item?.id!=null&&item.kind==='upcoming'&&Number.isFinite(start)&&start-now<=15*60*1000&&now-start<=STARTED_FIXTURE_WINDOW_MS&&(item.barverTeams?.length?item.barverTeams:[item.barverTeam,code(item.home),code(item.away)]).some(team=>selected.includes(team));};
+    const retained=new Map(previous.filter(eligible).map(item=>[String(item.id),item]));
+    for(const item of items){if(eligible(item))retained.set(String(item.id),{...item});else retained.delete(String(item.id));}
+    return [...retained.values()];
   }
   function nextFixture(items,selected,now=Date.now()){
     return items.filter(item=>item.kind==='upcoming'&&Number.isFinite(Date.parse(item.plannedAt))&&Date.parse(item.plannedAt)>=now-STARTED_FIXTURE_WINDOW_MS&&(item.barverTeams?.length?item.barverTeams:[item.barverTeam,code(item.home),code(item.away)]).some(team=>selected.includes(team)))
@@ -72,7 +79,7 @@
     if(!host)return;
     clearTimeout(hideTimer);clearTimeout(resultTimer);clearInterval(clockTimer);statusObserver?.disconnect();sponsorObserver?.disconnect();root.document.removeEventListener('keydown',keydown);
     const original=q('#tvTeamControls');if(original&&controlsHome)controlsHome.insertBefore(original,q('#todayGrid'));
-    host.remove();host=null;context=null;controls=null;highlight=null;tiles.clear();finished.clear();
+    host.remove();host=null;context=null;controls=null;highlight=null;tiles.clear();finished.clear();kickoffFixtures=[];
   }
   function player(playerData,throwing,item,side){
     const data={...playerData,remaining:playerData.remaining??playerData.points},node=el('div','studio-player'+(throwing?' throwing':'')),identity=el('div','studio-player-copy'),name=context.playerNode(data.name||'Spieler',item.id,side);
@@ -117,9 +124,13 @@
   }
   function render(input){
     context=input;mount(input.container);const display=models(input),content=host.querySelector('.studio-content'),summary=host.querySelector('.studio-summary'),summaryNodes=[],wanted=new Set();
+    // A partial refresh can omit the encounter exactly when its countdown ends.
+    // Keep that known appointment until live data, a final, or a changed date confirms its state.
+    kickoffFixtures=retainKickoffFixtures(kickoffFixtures,input.items,input.selected);
+    const incomingIds=new Set(input.items.map(item=>String(item.id))),availableItems=[...input.items,...kickoffFixtures.filter(item=>!incomingIds.has(String(item.id)))];
     // A scheduled encounter stays visible from kickoff even when the 3K live feed is delayed.
     const shown=new Set(display.map(model=>String(model.item.id)));
-    for(const item of input.items){
+    for(const item of availableItems){
       if(!startedFixture(item)||!teamCodes(item).length||shown.has(String(item.id)))continue;
       display.push({item,games:[],loaded:false,stale:false,awaiting:true});shown.add(String(item.id));
     }
@@ -139,7 +150,7 @@
     }
     for(const [id,tile] of tiles)if(!wanted.has(id)){tile.node.remove();tiles.delete(id);}
     summary.replaceChildren(...summaryNodes);
-    if(!display.length){const next=nextFixture(input.items,input.selected);if(next){content.replaceChildren(upcoming(next,input));updateCountdown();}else{const blank=el('section','studio-no-games app-tv-empty');blank.append(el('p','studio-eyebrow','BEREIT FÜRS NÄCHSTE SPIEL'),el('h1','','Gerade läuft keine Begegnung deiner Auswahl.'),image(teamImage(input.selected.length===1?input.selected[0]:''),'SV Barver Darts','studio-team-photo'),el('p','','Sobald eine Partie beginnt, erscheint sie hier automatisch.'));content.replaceChildren(blank);}}
+    if(!display.length){const next=nextFixture(availableItems,input.selected);if(next){content.replaceChildren(upcoming(next,input));updateCountdown();}else{const blank=el('section','studio-no-games app-tv-empty');blank.append(el('p','studio-eyebrow','BEREIT FÜRS NÄCHSTE SPIEL'),el('h1','','Gerade läuft keine Begegnung deiner Auswahl.'),image(teamImage(input.selected.length===1?input.selected[0]:''),'SV Barver Darts','studio-team-photo'),el('p','','Sobald eine Partie beginnt, erscheint sie hier automatisch.'));content.replaceChildren(blank);}}
     if(highlight)placeHighlight();
   }
   function confetti(){const wrap=el('div','studio-confetti');wrap.setAttribute('aria-hidden','true');for(let i=0;i<28;i++){const bit=el('i');bit.style.setProperty('--x',`${2+i*3.5}%`);bit.style.setProperty('--delay',`${i%6*.09}s`);bit.style.setProperty('--drift',`${i%2?-55:55}px`);wrap.append(bit);}return wrap;}
@@ -164,5 +175,5 @@
   }
   function clearHighlight(){highlight?.node.remove();highlight=null;}
   root.DartsTvStudio={render,close,showHighlight,clearHighlight,teamImage,isActive:()=>Boolean(host)};
-  if(typeof module!=='undefined'&&module.exports)module.exports={avg,outcome,teamImage,nextFixture,startedFixture,countdownParts,fixtureVenue};
+  if(typeof module!=='undefined'&&module.exports)module.exports={avg,outcome,teamImage,nextFixture,startedFixture,countdownParts,fixtureVenue,retainKickoffFixtures};
 })(typeof window!=='undefined'?window:globalThis);

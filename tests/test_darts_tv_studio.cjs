@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {avg,outcome,teamImage,nextFixture,startedFixture,countdownParts,fixtureVenue}=require('../static/darts-tv-studio.js');
+const {avg,outcome,teamImage,nextFixture,startedFixture,countdownParts,fixtureVenue,retainKickoffFixtures}=require('../static/darts-tv-studio.js');
 test('TV averages use known current-leg darts and remaining points, without inventing missing values',()=>{
  assert.equal(avg({remaining:84,darts:18,average:55.5,totalDarts:99}),'69,5');
  assert.equal(avg({remaining:501,darts:0}),'0,0');
@@ -35,6 +35,20 @@ test('TV countdown uses days, hours, minutes and seconds and never runs below ze
  const now=Date.parse('2026-10-17T10:00:00Z');assert.deepEqual(countdownParts(new Date(now+((2*24+3)*3600+4*60+5)*1000).toISOString(),now),{days:2,hours:3,minutes:4,seconds:5,started:false});
  assert.deepEqual(countdownParts(new Date(now-1000).toISOString(),now),{days:0,hours:0,minutes:0,seconds:0,started:true});assert.equal(countdownParts('unknown',now),null);
  assert.equal(countdownParts(new Date(now+1).toISOString(),now).seconds,1);
+});
+test('a partial refresh at kickoff cannot replace the known encounter with the next countdown',()=>{
+ const start=Date.parse('2026-10-17T16:00:00+02:00'),current={id:1280545,kind:'upcoming',barverTeam:'A',plannedAt:new Date(start).toISOString()},next={...current,id:1280533,plannedAt:new Date(start+12*86400000).toISOString()};
+ const remembered=retainKickoffFixtures([],[current,next],['A'],start-60000);
+ assert.deepEqual(remembered,[current]);
+ const during=retainKickoffFixtures(remembered,[next],['A'],start+1000);
+ assert.deepEqual(during,[current],'missing from a partial response is not a cancellation or a result');
+ assert.equal(startedFixture(during[0],start+1000),true,'the known fixture becomes a waiting encounter');
+ assert.equal(during[0].score,undefined,'no live points are invented');
+ for(const kind of ['live','final','pending'])assert.deepEqual(retainKickoffFixtures(during,[{...current,kind}],['A'],start+1000),[],'confirmed status replaces the expectation: '+kind);
+ assert.deepEqual(retainKickoffFixtures(during,[{...current,plannedAt:next.plannedAt}],['A'],start+1000),[],'an explicit changed appointment is respected');
+ assert.deepEqual(retainKickoffFixtures(during,[],['B'],start+1000),[],'deselected teams do not remain on screen');
+ assert.deepEqual(retainKickoffFixtures(during,[],['A'],start+6*3600000+1),[],'unconfirmed fixtures cannot remain indefinitely');
+ assert.deepEqual(retainKickoffFixtures([],[next],['A'],start),[],'future games do not acquire a waiting state');
 });
 test('the countdown venue belongs to the home side, including away matches for Barver',()=>{
  assert.equal(fixtureVenue({home:'Mad Dogs C',away:'SV Barver Darts A',homeVenue:{name:'Dartclub Diepholz',street:'Nährweg 4',postalCode:'49356',city:'Diepholz'},awayVenue:{name:'Barver'}}),'Dartclub Diepholz, Nährweg 4, 49356 Diepholz');assert.equal(fixtureVenue({awayVenue:{name:'Barver'}}),'');
