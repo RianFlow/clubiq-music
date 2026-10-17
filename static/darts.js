@@ -720,6 +720,7 @@ function initDarts() {
   });
   async function initPushNotifications() {
     const button=q('#pushToggle');
+    const testButton=q('#pushTest'),testStatus=q('#pushTestStatus');
     const health=q('#pushHealth');
     const updateHealth=async()=>{
       if (button.dataset.active !== 'true') { health.hidden=true; return; }
@@ -751,7 +752,21 @@ function initDarts() {
         button.setAttribute('aria-pressed',String(Boolean(subscription)));
         button.textContent=subscription?'Benachrichtigungen aktiv':'Benachrichtigungen aktivieren';
         button.title=subscription?'Klicken, um Push-Benachrichtigungen auf diesem Gerät auszuschalten':'180er, High Finishes, Legs und Ergebnisse erhalten';
+        testButton.hidden=!subscription;
+        if(!subscription)testStatus.textContent='';
       };
+      testButton.addEventListener('click',async()=>{
+        testButton.disabled=true;
+        testStatus.textContent='Sende Testmeldung an dieses Gerät …';
+        try {
+          const current=await registration.pushManager.getSubscription();
+          if(!current)throw new Error('Auf diesem Gerät sind noch keine Push-Benachrichtigungen aktiv.');
+          await pushRequest('/api/v1/darts/push/test',{...current.toJSON(),training:false});
+          testStatus.textContent='Testmeldung vom Push-Dienst angenommen. Bitte den Empfang auf diesem Gerät prüfen.';
+        } catch(error) {
+          testStatus.textContent=error.message||'Testnachricht konnte nicht gesendet werden.';
+        } finally {testButton.disabled=false;}
+      });
       await update();
       await updateHealth();
       window.setInterval(()=>{ if (!document.hidden) updateHealth(); },60000);
