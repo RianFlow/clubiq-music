@@ -117,6 +117,13 @@ function dartsMergedMatches(season,ticker) {
 function dartsFixturesFresh(data,now=Date.now()){
   const age=now-Date.parse(data?.fixturesUpdatedAt||'');return data?.fixturesStale===false&&Number.isFinite(age)&&age>=-30000&&age<360000;
 }
+function dartsKickoffNeedsRecovery(items,now=Date.now()){
+  return (Array.isArray(items)?items:[]).some(item=>{
+    if(item.kind!=='upcoming')return false;
+    const start=Date.parse(item.plannedAt);
+    return Number.isFinite(start)&&start-now<=15*60*1000&&now-start<=6*60*60*1000;
+  });
+}
 function dartsTeamFixtures(team,matches) {
   const games=matches.filter(m=>(m.barverTeams||[m.barverTeam]).includes(team.code));
   const upcoming=games.filter(m=>m.kind==='upcoming'||m.kind==='live').sort((a,b)=>Number(b.kind==='live')-Number(a.kind==='live')||(Date.parse(a.plannedAt)||Infinity)-(Date.parse(b.plannedAt)||Infinity));
@@ -1186,10 +1193,19 @@ function initDarts() {
         if (!Array.isArray(payload.items)) throw new Error('invalid ticker');
       } catch (_) { /* Try the independent public connection below. */ }
       clearTimeout(timeout);
-      const serverFresh=payload&&((!payload.stale&&Date.now()-Date.parse(payload.updatedAt||'')<(payload.sourceConnection==='collector'?360000:180000))||(dartsFixturesFresh(payload)&&!payload.items.some(item=>item.kind==='live')));
-      if (!demoLive&&!serverFresh&&window.DartsSourceFallback) {
-        try {payload=await window.DartsSourceFallback.load();}
-        catch (_) { /* Keep the server snapshot or previously displayed data. */ }
+      const tickerHasLive=payload?.items?.some(item=>item.kind==='live');
+      const nearKickoff=dartsKickoffNeedsRecovery(payload?.items);
+      const serverFresh=payload&&((!payload.stale&&Date.now()-Date.parse(payload.updatedAt||'')<(payload.sourceConnection==='collector'?360000:180000))||(dartsFixturesFresh(payload)&&!tickerHasLive&&!nearKickoff));
+      if (!demoLive&&(!serverFresh||(nearKickoff&&!tickerHasLive))&&window.DartsSourceFallback) {
+        try {
+          const direct=await window.DartsSourceFallback.load();
+          if(Array.isArray(direct?.items)) {
+            // Direct 3K recovers league matches. Preserve separately published cup fixtures.
+            const directIds=new Set(direct.items.map(item=>String(item.id)));
+            const cups=(payload?.items||[]).filter(item=>item.isSpecial&&!directIds.has(String(item.id)));
+            payload={...direct,items:[...direct.items,...cups]};
+          }
+        } catch (_) { /* Keep the server snapshot or previously displayed data. */ }
       }
       if (!payload) throw new Error('no connection');
       const rendered=demoLive?demoTicker(payload):payload;
