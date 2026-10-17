@@ -720,7 +720,21 @@ function initDarts() {
   });
   async function initPushNotifications() {
     const button=q('#pushToggle');
-    const testButton=q('#pushTest'),testStatus=q('#pushTestStatus');
+    const actionHost=q('.personal-push-actions');
+    // Older cached HTML may not contain the test button. Restore it rather than
+    // preventing the whole push UI from initializing.
+    let testButton=q('#pushTest'),testStatus=q('#pushTestStatus');
+    if(!testButton&&actionHost){
+      testButton=document.createElement('button');
+      testButton.id='pushTest';testButton.type='button';testButton.textContent='Testnachricht senden';
+      actionHost.append(testButton);
+    }
+    if(!testStatus&&actionHost){
+      testStatus=document.createElement('span');
+      testStatus.id='pushTestStatus';testStatus.setAttribute('role','status');
+      testStatus.setAttribute('aria-live','polite');actionHost.append(testStatus);
+    }
+    if(testButton)testButton.hidden=false;
     const health=q('#pushHealth');
     const updateHealth=async()=>{
       if (button.dataset.active !== 'true') { health.hidden=true; return; }
@@ -740,7 +754,9 @@ function initDarts() {
       } catch (_) { health.hidden=false; health.dataset.state='warn'; health.textContent='Status derzeit nicht verfügbar'; }
     };
     if (!window.isSecureContext || !('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
-      button.textContent='Benachrichtigungen nicht verfügbar'; button.disabled=true; return;
+      button.textContent='Benachrichtigungen nicht verfügbar'; button.disabled=true;
+      if(testButton){testButton.disabled=true;testButton.title='Push wird von diesem Browser nicht unterstützt.';}
+      return;
     }
     let registration;
     try {
@@ -752,8 +768,9 @@ function initDarts() {
         button.setAttribute('aria-pressed',String(Boolean(subscription)));
         button.textContent=subscription?'Benachrichtigungen aktiv':'Benachrichtigungen aktivieren';
         button.title=subscription?'Klicken, um Push-Benachrichtigungen auf diesem Gerät auszuschalten':'180er, High Finishes, Legs und Ergebnisse erhalten';
-        testButton.hidden=!subscription;
-        if(!subscription)testStatus.textContent='';
+        // Leave test always visible: a missing subscription should produce an
+        // actionable message on click, not hide the diagnostic tool.
+        testButton.hidden=false;
       };
       testButton.addEventListener('click',async()=>{
         testButton.disabled=true;
@@ -796,7 +813,11 @@ function initDarts() {
         } catch (error) { message(error.message || 'Push-Benachrichtigungen konnten nicht geändert werden.'); }
         finally { button.disabled=Notification.permission==='denied'; }
       });
-    } catch (_) { button.textContent='Benachrichtigungen nicht verfügbar'; button.disabled=true; }
+    } catch (_) {
+      button.textContent='Benachrichtigungen nicht verfügbar'; button.disabled=true;
+      if(testButton)testButton.disabled=true;
+      if(testStatus)testStatus.textContent='Push-Initialisierung fehlgeschlagen. Seite neu laden oder Browserberechtigungen prüfen.';
+    }
   }
   initPushNotifications();
   const favoriteKey = 'clubiq_darts_favorite';
