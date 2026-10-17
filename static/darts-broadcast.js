@@ -45,7 +45,7 @@
       detail = `${event.gameId}|${event.legCount}|${event.darts}`;
     } else {
       if (!/^\d+\s*:\s*\d+$/.test(text(event.score))) return '';
-      detail = (event.clinch?'clinch|':'final|')+event.score.replace(/\s/g, '');
+      detail = (event.clinch?'clinch|':'')+event.score.replace(/\s/g, '');
     }
     return `${event.matchId}|${type}|${detail}`;
   }
