@@ -21,7 +21,8 @@
     const home=String(raw.participantHome?.displayName||'Unbekannt').slice(0,160),away=String(raw.participantGuest?.displayName||'Unbekannt').slice(0,160);
     const scored=Number.isInteger(raw.setsHome)&&Number.isInteger(raw.setsAway);
     const plannedAt=iso(raw.datePlanned),updatedAt=iso(raw.endDate||raw.lastUpdate)||plannedAt;
-    let kind=raw.statusCd==='FINISH'&&scored?'final':scored?'live':'upcoming',text=`${home} gegen ${away}`;
+    const status=String(raw.statusCd||'').toUpperCase(),inProgress=['ACTIVE','STARTED','RUNNING','LIVE','IN_PROGRESS'].includes(status);
+    let kind=status==='FINISH'&&scored?'final':scored||inProgress?'live':'upcoming',text=`${home} gegen ${away}`;
     if(kind==='final') {
       text=raw.setsHome===raw.setsAway?`${home} und ${away} trennen sich ${raw.setsHome}:${raw.setsAway}`:raw.setsHome>raw.setsAway?`${home} gewinnt ${raw.setsHome}:${raw.setsAway} gegen ${away}`:`${away} gewinnt ${raw.setsAway}:${raw.setsHome} gegen ${home}`;
     } else if(kind==='live') text=`Zwischenstand: ${home} ${raw.setsHome}:${raw.setsAway} ${away}`;
