@@ -16,6 +16,25 @@ assert.equal(context.dartsKickoffNeedsRecovery([{...match(-1),kind:'final'}],now
 assert.equal(context.dartsKickoffNeedsRecovery([{...match(-1),kind:'live'}],now),false,'existing live state does not need recovery');
 assert.equal(context.dartsKickoffNeedsRecovery([{kind:'upcoming',plannedAt:'invalid'}],now),false);
 assert.equal(context.dartsKickoffNeedsRecovery(null,now),false);
+const saved={source:'browser-3k',stale:false,updatedAt:new Date(now-60000).toISOString(),
+  items:[{id:1280545,kind:'live',home:"Mad Dog's C",away:'SV Barver Darts A',
+    liveVerifiedAt:new Date(now-60000).toISOString(),score:'3:2'}],
+  centers:[{barverMatches:[{id:1280545}],pushEvents:[]}]};
+const staleTicker={source:'last-known',stale:true,updatedAt:new Date(now-86400000).toISOString(),
+  items:[{id:345,kind:'upcoming'}]};
+const retained=context.dartsHoldVerifiedLive(staleTicker,saved,now);
+assert.equal(retained.items[0].id,1280545,'temporary 3K outage must not reset an active match to countdown');
+assert.equal(retained.items[0].liveFeedDelayed,true,'carried scores are explicitly marked delayed');
+assert.equal(retained.items[0].score,'3:2');
+assert.equal(retained.stale,true);
+assert.equal(retained.source,'browser-3k');
+assert.equal(retained.centers.length,1,'keep verified board state during fallback interruption');
+assert.equal(context.dartsHoldVerifiedLive(staleTicker,saved,now+21*60000),staleTicker,'verification expires after a bounded window');
+const officialFinal={...staleTicker,items:[{id:1280545,kind:'final',score:'8:4'}]};
+assert.equal(context.dartsHoldVerifiedLive(officialFinal,saved,now),officialFinal,'confirmed finals always win');
+const pendingFinal={...staleTicker,items:[{id:1280545,kind:'pending'}]};
+assert.equal(context.dartsHoldVerifiedLive(pendingFinal,saved,now),pendingFinal,'do not promote a pending final');
+
 assert.equal(context.dartsFixturesFresh({fixturesUpdatedAt:new Date(now).toISOString(),fixturesStale:false},now),true,
   'fresh fixtures must not be mistaken for a fresh match score');
 console.log('Live kickoff recovery rules passed');
