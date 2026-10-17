@@ -935,7 +935,7 @@ function initDarts() {
     const shown = tvActive ? live : live.slice(0,1);
     if(tvActive&&window.matchMedia('(min-width:651px)').matches&&window.DartsTvStudio){
       target.hidden=false;target.dataset.liveCount=String(live.length);
-      window.DartsTvStudio.render({container:target,selected:[...tvTeams],items,playerNode:matchPlayerNode,openMatch,models:live.map(item=>{
+      window.DartsTvStudio.render({container:target,selected:[...tvTeams],items,playerNode:matchPlayerNode,openMatch,openPlayer:(member,code)=>openPlayerProfile(member,teamByCode(code)||{code,name:`SV Barver Darts ${code}`}),locationForMatch:item=>appointmentLocation({kind:'match',match:currentFixtures().find(row=>row.id===item.id)||item}),models:live.map(item=>{
         const center=liveCenters.find(entry=>(entry.barverMatches||[]).some(match=>match.id===item.id)),group=serverLiveGroups.get(String(item.id));
         const games=(center?.pushEvents||[]).filter(event=>event.matchId===item.id&&event.type==='live_game').sort((a,b)=>String(a.board||'').localeCompare(String(b.board||''),undefined,{numeric:true}));
         return {item,games,loaded:Boolean(center||group?.connected),stale:group?Boolean(group.stale||!group.connected):center?Boolean(center.stale):true};

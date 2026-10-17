@@ -11,7 +11,13 @@
   const num=value=>Number.isInteger(value)&&value>=0?String(value):'–';
   const avg=player=>Number.isInteger(player?.darts)&&player.darts>0&&Number.isInteger(player.remaining)&&player.remaining>=0&&player.remaining<=501?((501-player.remaining)*3/player.darts).toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1}):player?.darts===0&&player.remaining===501?'0,0':'–';
   const teamImage=team=>PHOTOS[team]||CREST;
+  const fixtureVenue=item=>{const venue=item?.homeVenue;return venue?[venue.name,venue.street,[venue.postalCode,venue.city].filter(Boolean).join(' ')].filter(Boolean).join(', '):'';};
   function image(src,alt,cls){const n=el('img',cls);n.src=src;n.alt=alt;n.decoding='async';n.classList.toggle('is-logo',src===CREST);n.addEventListener('error',()=>{n.src=CREST;n.alt='SV Barver Darts';n.classList.add('is-logo');},{once:true});return n;}
+  function groupPhoto(team){
+    const img=image(teamImage(team),PHOTOS[team]?`Mannschaftsfoto von Barver ${team}`:`Vereinslogo für Barver ${team}`,'studio-team-photo');
+    if(!PHOTOS[team]||!root.DartsTeamPhoto||!context.openPlayer)return img;
+    const figure=el('figure','studio-group-photo');figure.append(img);root.DartsTeamPhoto.mount(figure,{team,image:img,onOpen:member=>{showControls();context.openPlayer(member,team);}});return figure;
+  }
   function teamCodes(item){return [...new Set(item.barverTeams?.length?item.barverTeams:[item.barverTeam,code(item.home),code(item.away)])].filter(c=>context.selected.includes(c));}
   function ownSide(item,team){const side=item.barverSides?.[team]||(code(item.home)===team?'home':code(item.away)===team?'away':'');return side==='guest'?'away':side;}
   function outcome(item,team,score=item.score){const parts=String(score||'').match(/^(\d+)\s*:\s*(\d+)$/);const side=ownSide(item,team);if(!parts||!side)return null;const own=Number(parts[side==='home'?1:2]),other=Number(parts[side==='home'?2:1]);return own>other?'win':own<other?'loss':'draw';}
@@ -79,14 +85,17 @@
     const title=item.kind==='final'?outcome(item,team)==='win'?`Mannschaftssieg für Barver ${team}`:outcome(item,team)==='draw'?'Unentschieden':'Mannschaftsspiel beendet':model.stale?'Verbindung wird aktualisiert':model.loaded?'Zwischen den Partien':'Boarddaten werden geladen';
     section.append(el('p','studio-eyebrow',item.kind==='final'?'ENDSTAND':model.loaded&&!model.stale?'SPIELPAUSE':'LIVE-DATEN'),el('h2','',title));
     if(item.kind==='final')section.append(el('strong','studio-final-score',item.score||'–'));
-    section.append(image(teamImage(team),PHOTOS[team]?`Mannschaftsfoto von Barver ${team}`:'Vereinslogo von SV Barver','studio-team-photo'),el('p','studio-pause-note',item.kind==='final'?'Danke fürs Mitfiebern!':model.stale?'Der letzte Spielstand bleibt erhalten. Wir verbinden uns automatisch neu.':'Sobald das nächste Board beginnt, erscheint es hier automatisch.'));
+    section.append(groupPhoto(team),el('p','studio-pause-note',item.kind==='final'?'Danke fürs Mitfiebern!':model.stale?'Der letzte Spielstand bleibt erhalten. Wir verbinden uns automatisch neu.':'Sobald das nächste Board beginnt, erscheint es hier automatisch.'));
     return section;
   }
   function upcoming(item,input){
     const own=teamCodes(item),team=own[0],section=el('section','studio-no-games studio-next-match'),visual=el('div','studio-next-photos'),copy=el('div','studio-next-copy');
-    for(const selected of own)visual.append(image(teamImage(selected),PHOTOS[selected]?`Mannschaftsfoto von Barver ${selected}`:`Vereinslogo für Barver ${selected}`,'studio-team-photo'));
-    copy.append(el('p','studio-eyebrow','ALS NÄCHSTES'),el('h1','',own.map(selected=>'BARVER '+selected).join(' / ')),el('p','studio-next-opponent',`gegen ${ownSide(item,team)==='home'?item.away:item.home}`));
+    for(const selected of own)visual.append(groupPhoto(selected));
+    const side=ownSide(item,team),labels=el('div','studio-next-labels');labels.append(el('p','studio-eyebrow','ALS NÄCHSTES'));if(own.length>1||side)labels.append(el('strong','studio-next-kind',own.length>1?'Vereinsduell':side==='home'?'Heimspiel':'Auswärtsspiel'));
+    copy.append(labels,el('h1','',own.map(selected=>'BARVER '+selected).join(' / ')),el('p','studio-next-opponent',own.length>1?`${item.home} gegen ${item.away}`:`${side==='away'?'bei':'gegen'} ${side==='home'?item.away:item.home}`));
     const date=el('time','studio-next-date',new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',weekday:'long',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(item.plannedAt))+' Uhr');date.dateTime=item.plannedAt;copy.append(date);
+    const location=input.locationForMatch?.(item)||fixtureVenue(item),venue=el('div','studio-next-venue');venue.append(el('strong','','Spielstätte'),el('span','',location||'Spielstätte noch nicht hinterlegt'));
+    if(location){const route=el('a','','Route öffnen ↗');route.href='https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(location);route.target='_blank';route.rel='noopener noreferrer';venue.append(route);}copy.append(venue);
     const countdown=el('div','studio-countdown');countdown.dataset.start=item.plannedAt;countdown.setAttribute('role','timer');countdown.setAttribute('aria-live','off');countdown.setAttribute('aria-label','Zeit bis zum geplanten Spielbeginn');
     for(const [unit,label] of [['days','Tage'],['hours','Stunden'],['minutes','Minuten'],['seconds','Sekunden']]){const box=el('span'),value=el('strong','','00');value.dataset.unit=unit;box.append(value,el('small','',label));countdown.append(box);}
     const open=el('button','studio-next-open','Begegnung ansehen');open.type='button';open.addEventListener('click',()=>input.openMatch(item.id));
@@ -140,5 +149,5 @@
   }
   function clearHighlight(){highlight?.node.remove();highlight=null;}
   root.DartsTvStudio={render,close,showHighlight,clearHighlight,teamImage,isActive:()=>Boolean(host)};
-  if(typeof module!=='undefined'&&module.exports)module.exports={avg,outcome,teamImage,nextFixture,countdownParts};
+  if(typeof module!=='undefined'&&module.exports)module.exports={avg,outcome,teamImage,nextFixture,countdownParts,fixtureVenue};
 })(typeof window!=='undefined'?window:globalThis);
