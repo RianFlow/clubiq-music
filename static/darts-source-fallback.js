@@ -6,7 +6,7 @@
     {key:'kl04',name:'Kreisligen 04',short:'KL 04',event:1445,phase:2139,teams:{174110:'A',174111:'B',174112:'C'}},
     {key:'kk11',name:'Kreisklasse 11',short:'KK 11',event:1460,phase:2154,teams:{174266:'D'}},
   ];
-  let pending=null, last=null, retryAt=0;
+  let pending=null, last=null, lastScope='', retryAt=0;
   const date=value=>{const time=Date.parse(value||'');return Number.isFinite(time)?time:null;};
   const iso=value=>date(value)===null?null:new Date(date(value)).toISOString();
   function relevantRounds(rounds, now) {
@@ -123,7 +123,8 @@
   }
   async function load(fixtures=[]) {
     const now=Date.now();
-    if(last&&now-Date.parse(last.updatedAt)<30000)return last;
+    const scope=leagues.map(league=>extraFixtureRounds(fixtures,league,now).join(',')).join('|');
+    if(last&&lastScope===scope&&now-Date.parse(last.updatedAt)<30000)return last;
     if(pending)return pending;
     if(now<retryAt)throw new Error('3K alternative cooling down');
     pending=(async()=>{
@@ -153,7 +154,7 @@
         const priority={live:0,upcoming:1,pending:2,final:3};
         items.sort((a,b)=>priority[a.kind]-priority[b.kind]||(a.kind==='upcoming'?date(a.plannedAt)-date(b.plannedAt):(date(b.updatedAt)||0)-(date(a.updatedAt)||0)));
         last={available:true,stale:false,source:'browser-3k',scope:'league',updatedAt:new Date(now).toISOString(),items:items.slice(0,12),centers};
-        retryAt=0;return last;
+        retryAt=0;lastScope=scope;return last;
       } catch(error) {retryAt=Date.now()+30000;throw error;}
       finally {clearTimeout(timeout);pending=null;}
     })();
