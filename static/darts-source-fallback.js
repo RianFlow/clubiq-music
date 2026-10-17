@@ -15,6 +15,14 @@
     const after=dated.filter(r=>date(r.dateFrom)>=now).sort((a,b)=>date(a.dateFrom)-date(b.dateFrom))[0];
     return [...new Map([before,after].filter(Boolean).map(r=>[r.id,r])).values()];
   }
+  function extraFixtureRounds(fixtures,league,now){
+    // Rearranged 3K fixtures retain their original (sometimes months-later) league round.
+    return [...new Set((Array.isArray(fixtures)?fixtures:[]).filter(item=>{
+      const start=date(item?.plannedAt);
+      return item?.eventId===league.event&&Number.isSafeInteger(item.roundId)&&
+        Number.isFinite(start)&&now-start>=-15*60000&&now-start<=8*3600000&&item.kind!=='final';
+    }).map(item=>item.roundId))].slice(0,4);
+  }
   function normalize(raw, league, roundId, now, allTeams=false) {
     const homeId=raw.participantHome?.id,awayId=raw.participantGuest?.id;
     if (!Number.isSafeInteger(raw.id)||!homeId||!awayId||raw.byeHome||raw.byeAway||(!allTeams&&!league.teams[homeId]&&!league.teams[awayId])) return null;
@@ -113,7 +121,7 @@
       return result;
     } finally {clearTimeout(timeout);signal?.removeEventListener('abort',abort);}
   }
-  async function load() {
+  async function load(fixtures=[]) {
     const now=Date.now();
     if(last&&now-Date.parse(last.updatedAt)<30000)return last;
     if(pending)return pending;
@@ -125,7 +133,9 @@
           const phaseUrl=`${api}/${league.event}/phase/${league.phase}`;
           const phase=await read(phaseUrl,controller.signal);
           if(!Array.isArray(phase.rounds))throw new Error('Invalid 3K phase');
-          const rounds=relevantRounds(phase.rounds,now);
+          const byId=new Map(phase.rounds.filter(round=>Number.isSafeInteger(round.id)).map(round=>[round.id,round]));
+          const extras=extraFixtureRounds(fixtures,league,now).map(id=>byId.get(id)).filter(Boolean);
+          const rounds=[...new Map([...relevantRounds(phase.rounds,now),...extras].map(round=>[round.id,round])).values()];
           if(!rounds.length)throw new Error('No published 3K rounds');
           const matches=(await Promise.all(rounds.map(async round=>{
             const data=await read(`${phaseUrl}/round/${round.id}`,controller.signal);
@@ -232,7 +242,7 @@
       return {available:true,statsSchema:1,source:'browser-3k',updatedAt,officialLeagues,degraded:officialLeagues.length<leagues.length,stale:officialLeagues.length<leagues.length,players};
     } finally {clearTimeout(timeout);}
   }
-  const exported={load,loadMatch,loadCenter,loadPlayerStats,officialStandings,tablePlacement,normalize,relevantRounds,liveEvents,publicGame,publicPerformances};
+  const exported={load,loadMatch,loadCenter,loadPlayerStats,officialStandings,tablePlacement,normalize,relevantRounds,extraFixtureRounds,liveEvents,publicGame,publicPerformances};
   if(typeof module!=='undefined'&&module.exports)module.exports=exported;
   else window.DartsSourceFallback=exported;
 })();
