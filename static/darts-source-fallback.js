@@ -6,7 +6,7 @@
     {key:'kl04',name:'Kreisligen 04',short:'KL 04',event:1445,phase:2139,teams:{174110:'A',174111:'B',174112:'C'}},
     {key:'kk11',name:'Kreisklasse 11',short:'KK 11',event:1460,phase:2154,teams:{174266:'D'}},
   ];
-  let pending=null, last=null, retryAt=0;
+  let pending=null, last=null, lastScope='', retryAt=0;
   const date=value=>{const time=Date.parse(value||'');return Number.isFinite(time)?time:null;};
   const iso=value=>date(value)===null?null:new Date(date(value)).toISOString();
   function relevantRounds(rounds, now) {
@@ -14,6 +14,14 @@
     const before=dated.filter(r=>date(r.dateFrom)<=now).sort((a,b)=>date(b.dateFrom)-date(a.dateFrom))[0];
     const after=dated.filter(r=>date(r.dateFrom)>=now).sort((a,b)=>date(a.dateFrom)-date(b.dateFrom))[0];
     return [...new Map([before,after].filter(Boolean).map(r=>[r.id,r])).values()];
+  }
+  function extraFixtureRounds(fixtures,league,now){
+    // Rearranged 3K fixtures retain their original (sometimes months-later) league round.
+    return [...new Set((Array.isArray(fixtures)?fixtures:[]).filter(item=>{
+      const start=date(item?.plannedAt);
+      return item?.eventId===league.event&&Number.isSafeInteger(item.roundId)&&
+        Number.isFinite(start)&&now-start>=-15*60000&&now-start<=8*3600000&&item.kind!=='final';
+    }).map(item=>item.roundId))].slice(0,4);
   }
   function normalize(raw, league, roundId, now, allTeams=false) {
     const homeId=raw.participantHome?.id,awayId=raw.participantGuest?.id;
@@ -113,9 +121,10 @@
       return result;
     } finally {clearTimeout(timeout);signal?.removeEventListener('abort',abort);}
   }
-  async function load() {
+  async function load(fixtures=[]) {
     const now=Date.now();
-    if(last&&now-Date.parse(last.updatedAt)<30000)return last;
+    const scope=leagues.map(league=>extraFixtureRounds(fixtures,league,now).join(',')).join('|');
+    if(last&&lastScope===scope&&now-Date.parse(last.updatedAt)<30000)return last;
     if(pending)return pending;
     if(now<retryAt)throw new Error('3K alternative cooling down');
     pending=(async()=>{
@@ -125,7 +134,9 @@
           const phaseUrl=`${api}/${league.event}/phase/${league.phase}`;
           const phase=await read(phaseUrl,controller.signal);
           if(!Array.isArray(phase.rounds))throw new Error('Invalid 3K phase');
-          const rounds=relevantRounds(phase.rounds,now);
+          const byId=new Map(phase.rounds.filter(round=>Number.isSafeInteger(round.id)).map(round=>[round.id,round]));
+          const extras=extraFixtureRounds(fixtures,league,now).map(id=>byId.get(id)).filter(Boolean);
+          const rounds=[...new Map([...relevantRounds(phase.rounds,now),...extras].map(round=>[round.id,round])).values()];
           if(!rounds.length)throw new Error('No published 3K rounds');
           const matches=(await Promise.all(rounds.map(async round=>{
             const data=await read(`${phaseUrl}/round/${round.id}`,controller.signal);
@@ -143,7 +154,7 @@
         const priority={live:0,upcoming:1,pending:2,final:3};
         items.sort((a,b)=>priority[a.kind]-priority[b.kind]||(a.kind==='upcoming'?date(a.plannedAt)-date(b.plannedAt):(date(b.updatedAt)||0)-(date(a.updatedAt)||0)));
         last={available:true,stale:false,source:'browser-3k',scope:'league',updatedAt:new Date(now).toISOString(),items:items.slice(0,12),centers};
-        retryAt=0;return last;
+        retryAt=0;lastScope=scope;return last;
       } catch(error) {retryAt=Date.now()+30000;throw error;}
       finally {clearTimeout(timeout);pending=null;}
     })();
@@ -232,7 +243,7 @@
       return {available:true,statsSchema:1,source:'browser-3k',updatedAt,officialLeagues,degraded:officialLeagues.length<leagues.length,stale:officialLeagues.length<leagues.length,players};
     } finally {clearTimeout(timeout);}
   }
-  const exported={load,loadMatch,loadCenter,loadPlayerStats,officialStandings,tablePlacement,normalize,relevantRounds,liveEvents,publicGame,publicPerformances};
+  const exported={load,loadMatch,loadCenter,loadPlayerStats,officialStandings,tablePlacement,normalize,relevantRounds,extraFixtureRounds,liveEvents,publicGame,publicPerformances};
   if(typeof module!=='undefined'&&module.exports)module.exports=exported;
   else window.DartsSourceFallback=exported;
 })();

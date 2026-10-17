@@ -18,6 +18,11 @@ assert.equal(live[0].home.darts,12);assert.equal(live[0].home.totalDarts,27);ass
 assert.ok(!JSON.stringify(live).includes('private'));assert.deepEqual(source.liveEvents({data:[{statusActive:false,matchPlayers:[]}]},item),[]);
 const rounds=[{id:1,dateFrom:new Date(now-86400000).toISOString()},{id:2,dateFrom:new Date(now+86400000).toISOString()},{id:3,dateFrom:new Date(now+10*86400000).toISOString()}];
 assert.deepEqual(source.relevantRounds(rounds,now).map(r=>r.id),[1,2]);
+const movedFixture={id:1280545,eventId:1445,roundId:34275,kind:'upcoming',plannedAt:new Date(now-60*60000).toISOString()};
+assert.deepEqual(source.extraFixtureRounds([movedFixture],league,now),[34275]);
+assert.deepEqual(source.extraFixtureRounds([{...movedFixture,kind:'final'}],league,now),[]);
+assert.deepEqual(source.extraFixtureRounds([{...movedFixture,eventId:1460}],league,now),[]);
+assert.deepEqual(source.extraFixtureRounds([{...movedFixture,plannedAt:new Date(now-9*3600000).toISOString()}],league,now),[]);
 let calls=0;
 global.fetch=async(url,options)=>{
   calls++;assert.equal(options.credentials,'omit');assert.ok(!options.headers.Authorization);
