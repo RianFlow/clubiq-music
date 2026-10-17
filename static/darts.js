@@ -759,6 +759,7 @@ function initDarts() {
         testButton.disabled=true;
         testStatus.textContent='Sende Testmeldung an dieses Gerät …';
         try {
+          if(Notification.permission!=='granted')throw new Error('Browser-Benachrichtigungen sind auf diesem Gerät nicht erlaubt.');
           const current=await registration.pushManager.getSubscription();
           if(!current)throw new Error('Auf diesem Gerät sind noch keine Push-Benachrichtigungen aktiv.');
           await pushRequest('/api/v1/darts/push/test',{...current.toJSON(),training:false});
