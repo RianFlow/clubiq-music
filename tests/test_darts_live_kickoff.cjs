@@ -29,6 +29,10 @@ assert.equal(retained.items[0].score,'3:2');
 assert.equal(retained.stale,true);
 assert.equal(retained.source,'browser-3k');
 assert.equal(retained.centers.length,1,'keep verified board state during fallback interruption');
+const recovered={source:'browser-3k',stale:false,updatedAt:new Date(now).toISOString(),
+  items:[{id:1280545,kind:'live',score:'5:3',liveVerifiedAt:new Date(now).toISOString()}]};
+assert.equal(context.dartsHoldVerifiedLive(recovered,saved,now),recovered,
+  'new verified 3K scores immediately replace buffered data');
 assert.equal(context.dartsHoldVerifiedLive(staleTicker,saved,now+21*60000),staleTicker,'verification expires after a bounded window');
 const officialFinal={...staleTicker,items:[{id:1280545,kind:'final',score:'8:4'}]};
 assert.equal(context.dartsHoldVerifiedLive(officialFinal,saved,now),officialFinal,'confirmed finals always win');
