@@ -10,6 +10,7 @@ assert.equal(context.dartsKickoffNeedsRecovery([match(30)],now),false,'do not po
 assert.equal(context.dartsKickoffNeedsRecovery([match(14)],now),true,'check before kickoff');
 assert.equal(context.dartsKickoffNeedsRecovery([match(0)],now),true,'check at kickoff');
 assert.equal(context.dartsKickoffNeedsRecovery([match(-90)],now),true,'check after scheduled start');
+assert.equal(context.dartsKickoffNeedsRecovery([{...match(-90),id:1280545,roundId:34275}],now),true,'moved fixture triggers a live recovery regardless of the original 3K round date');
 assert.equal(context.dartsKickoffNeedsRecovery([match(-361)],now),false,'do not treat old fixtures as active');
 assert.equal(context.dartsKickoffNeedsRecovery([{...match(-1),kind:'final'}],now),false,'finals do not trigger recovery');
 assert.equal(context.dartsKickoffNeedsRecovery([{...match(-1),kind:'live'}],now),false,'existing live state does not need recovery');
