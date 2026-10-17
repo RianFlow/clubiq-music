@@ -588,14 +588,25 @@ class _GroupConnector:
             self._rest_sync()  # Fill any gap between the initial request and subscription.
             self.hub.set_connection(self.group_key, True)
             last_heartbeat = time.monotonic()
+            next_rest_sync = last_heartbeat + REST_FALLBACK_SECONDS
             while not self._stop.is_set() and not self.hub.group_finished(self.group_key):
                 try:
                     message = ws.recv()
                 except Exception as exc:
                     if websocket and isinstance(exc, websocket.WebSocketTimeoutException):
-                        if time.monotonic() - last_heartbeat >= 10:
+                        current_time = time.monotonic()
+                        # Some 3K STOMP streams remain connected but miss updates.
+                        # Poll the official live REST endpoint as a safety net;
+                        # DartsLiveHub deduplicates events by 3K timestamps.
+                        if current_time >= next_rest_sync:
+                            try:
+                                self._rest_sync()
+                            except (requests.RequestException, ValueError):
+                                pass
+                            next_rest_sync = current_time + REST_FALLBACK_SECONDS
+                        if current_time - last_heartbeat >= 10:
                             self._sockjs_send(ws, "\n")
-                            last_heartbeat = time.monotonic()
+                            last_heartbeat = current_time
                         continue
                     raise
                 if message == "h":
