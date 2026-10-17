@@ -150,11 +150,11 @@
   function showHighlight(event,view,portraits){
     if(!host)return false;
     const tile=tiles.get(String(event.matchId));if(!tile||!teamCodes(tile.model.item).includes(code(event.team)))return 'ignored';
-    const compact=event.barverWon===false&&['leg','game'].includes(event.type),team=code(event.team),result=event.type==='match'?outcome(tile.model.item,team,event.score):null,complete=event.type==='game'&&event.barverWon===true||result==='win';
+    const compact=event.barverWon===false&&['leg','game'].includes(event.type),team=code(event.team),result=event.type==='match'?outcome(tile.model.item,team,event.score):null,complete=event.type==='game'&&event.barverWon===true||(result==='win'&&!event.finalOnly);
     const wrap=el('div','studio-event'+(compact?' is-loss':'')),card=el('section',`studio-event-card darts-broadcast-card type-${event.type.replace('_','-')}${complete?' complete-win':''}`);
     wrap.setAttribute('role','status');wrap.setAttribute('aria-live','polite');
     const visual=el('div','studio-event-portraits');if(event.type==='match')visual.append(image(teamImage(team),PHOTOS[team]?`Mannschaftsfoto von Barver ${team}`:'Vereinslogo von SV Barver','studio-event-team-photo'));else for(const p of portraits)visual.append(image(p.image,p.fallback?`Vereinslogo für ${p.name}`:`Porträt von ${p.name}`,p.fallback?'is-logo':''));
-    const copy=el('div','studio-event-copy'),label=event.type==='match'?result==='win'?'MANNSCHAFTSSIEG':result==='draw'?'UNENTSCHIEDEN':'MANNSCHAFTSSPIEL BEENDET':event.type==='game'&&event.barverWon?portraits.length>1?'DOPPEL GEWONNEN':'EINZEL GEWONNEN':view.label;
+    const copy=el('div','studio-event-copy'),label=event.type==='match'?event.finalOnly?'ENDSTAND':result==='win'?'MANNSCHAFTSSIEG':result==='draw'?'UNENTSCHIEDEN':'MANNSCHAFTSSPIEL BEENDET':event.type==='game'&&event.barverWon?portraits.length>1?'DOPPEL GEWONNEN':'EINZEL GEWONNEN':view.label;
     copy.append(el('p','studio-eyebrow',label),el('strong','studio-event-name darts-broadcast-headline',event.type==='match'?`Barver ${team}`:portraits.length?portraits.map(p=>p.name).join('\n'):view.headline));
     const side=event.barverSide||ownSide(tile.model.item,team),home=event.homeLegs,away=event.awayLegs;
     const score=event.type==='match'?event.score:Number.isInteger(home)&&Number.isInteger(away)?side==='home'?`${home} : ${away}`:side==='away'||side==='guest'?`${away} : ${home}`:'':event.type==='leg'?`${num(event.legCount)} Legs`:'';
