@@ -45,7 +45,7 @@
       detail = `${event.gameId}|${event.legCount}|${event.darts}`;
     } else {
       if (!/^\d+\s*:\s*\d+$/.test(text(event.score))) return '';
-      detail = event.score.replace(/\s/g, '');
+      detail = (event.clinch?'clinch|':'final|')+event.score.replace(/\s/g, '');
     }
     return `${event.matchId}|${type}|${detail}`;
   }
@@ -137,7 +137,7 @@
       case 'short_leg': return { label: 'SHORT LEG', headline: `${event.darts} DARTS`, detail: player, foot: team };
       case 'leg': return { label: 'LEG GEWONNEN', headline: player || 'BARVER', detail: text(event.text, 140), foot: team };
       case 'game': return { label: 'SPIEL GEWONNEN', headline: player || 'BARVER', detail: text(event.text, 140), foot: team };
-      default: return { label: 'ENDSTAND', headline: score, detail: text(event.text, 140), foot: team };
+      default: return { label: event.clinch?'MANNSCHAFTSSIEG':'ENDSTAND', headline: score, detail: text(event.text, 140), foot: team };
     }
   }
   function element(tag, className, content) {
