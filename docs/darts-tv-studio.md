@@ -8,6 +8,8 @@ bleibt die kompakte Ansicht mit einzeln vergrößerbaren Boards erhalten.
 - Zwei Mannschaften: Mannschaftsfelder nebeneinander, je zwei Boards darunter.
 - Drei oder vier Mannschaften: 2×2-Raster mit bis zu acht gleichzeitig sichtbaren
   Partien. Der Gesamtstand bleibt für jede Begegnung sichtbar.
+- Vor dem geplanten Start zeigt die TV-Ansicht den Countdown. Ab der Startzeit wird daraus eine Mannschaftskarte mit der Begegnung und dem Hinweis „Warten auf Live-Spielstände“ – auch wenn 3K noch keine Live-Werte meldet. In diesem Zustand werden keine fiktiven Scores oder Boards angezeigt; die Anzeige bleibt höchstens sechs Stunden nach dem angesetzten Beginn erhalten.
+- Bei ausbleibenden Live-Signalen wird rund um den Start (15 Minuten vorher bis sechs Stunden danach) zusätzlich die öffentliche 3K-Quelle direkt geprüft, auch wenn der Spielplan bereits frisch ist. Separat bekannte Pokaltermine bleiben bei einem erfolgreichen Fallback erhalten.
 - Ohne aktives Board zeigt das Mannschaftsfeld das zugehörige Gruppenbild.
   Vorhanden sind A, B und D; ohne Gruppenbild erscheint das Vereinslogo.
   Fehlende Daten oder Verbindungsprobleme erhalten eine eigene Statusanzeige.
