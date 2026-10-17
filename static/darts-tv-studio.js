@@ -110,7 +110,7 @@
   }
   function models(input){
     const now=Date.now(),current=new Map(input.models.map(m=>[String(m.item.id),m]));
-    for(const [id,previous] of tiles){if(current.has(id))continue;const item=input.items.find(i=>String(i.id)===id);if(item?.kind==='final'&&!finished.has(id))finished.set(id,{model:{...previous.model,item,games:[]},until:now+90000});}
+    for(const [id,previous] of tiles){if(current.has(id))continue;const item=input.items.find(i=>String(i.id)===id);if(item?.kind==='final'&&!finished.has(id))finished.set(id,{model:{...previous.model,item,games:[],awaiting:false},until:now+90000});}
     for(const [id,result] of finished){if(result.until<=now&&String(highlight?.event.matchId)!==id||!teamCodes(result.model.item).length){finished.delete(id);continue;}if(!current.has(id))current.set(id,result.model);}
     clearTimeout(resultTimer);if(finished.size)resultTimer=root.setTimeout(()=>{if(context)render(context);},Math.max(1000,Math.min(...[...finished.values()].map(r=>r.until-now))));
     return [...current.values()].sort((a,b)=>teamCodes(a.item).join().localeCompare(teamCodes(b.item).join()));
