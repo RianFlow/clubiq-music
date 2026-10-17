@@ -12,7 +12,11 @@ assert.match(frontend, /new EventSource\('\/api\/v1\/darts\/live\/stream'\)/);
 assert.match(frontend, /testButton\.addEventListener\('click'/,'self-service web push test must be explicit');
 assert.match(frontend, /pushRequest\('\/api\/v1\/darts\/push\/test'/,'test is directed only at the current subscription');
 assert.match(backend, /@app\.post\("\/api\/v1\/darts\/push\/test"\)/);
-assert.match(require('node:fs').readFileSync(path.join(root,'darts.html'),'utf8'), /id="pushTest" type="button" hidden/);
+const dartsHtml=require('node:fs').readFileSync(path.join(root,'darts.html'),'utf8');
+assert.match(dartsHtml, /id="pushTest" type="button">Testnachricht senden<\/button>/,
+  'the test action must remain visible regardless of subscription state');
+assert.match(frontend, /if\(!testButton&&actionHost\)/,'restore diagnostic action with an old HTML cache');
+assert.doesNotMatch(frontend, /testButton\.hidden=!subscription/,'do not conceal the diagnostic action');
 assert.doesNotMatch(frontend, /live\.3k-darts\.com.*websocket/i);
 assert.match(backend, /@app\.get\("\/api\/v1\/darts\/live\/stream"\)/);
 assert.match(backend, /season = get_darts_season\(\)[\s\S]*darts_live_hub\.reconcile\(season\.get\("matches"\) or \[\]\)/);
