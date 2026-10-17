@@ -374,6 +374,9 @@ if (typeof document !== 'undefined') initDarts();
 function initDarts() {
   const q = selector => document.querySelector(selector);
   const appTv=location.pathname==='/app/live';
+  const tvHome=appTv&&new URLSearchParams(location.search).get('return')==='website'?'/darts':'/app/';
+  const tvReturnLabel=tvHome==='/darts'?'Zurück zur Website':'Zurück zur App';
+  function exitTv(){if(appTv)location.assign(tvHome);else document.exitFullscreen?.().catch(()=>{});}
   if(appTv)document.body.classList.add('tv-live','app-tv');
   const grid = q('#teamGrid'), cards = new Map(), selections = {};
   const onlineNode = q('#dartsOnline');
@@ -999,7 +1002,7 @@ function initDarts() {
     const shown = tvActive ? live : live.slice(0,1);
     if(tvActive&&window.DartsTvStudio&&(window.matchMedia('(min-width:651px)').matches||!live.length)){
       target.hidden=false;target.dataset.liveCount=String(live.length);
-      window.DartsTvStudio.render({container:target,selected:[...tvTeams],items,playerNode:matchPlayerNode,openMatch,openPlayer:(member,code)=>openPlayerProfile(member,teamByCode(code)||{code,name:`SV Barver Darts ${code}`}),locationForMatch:item=>appointmentLocation({kind:'match',match:currentFixtures().find(row=>row.id===item.id)||item}),models:live.map(item=>{
+      window.DartsTvStudio.render({container:target,selected:[...tvTeams],items,playerNode:matchPlayerNode,openMatch,exitTv,openPlayer:(member,code)=>openPlayerProfile(member,teamByCode(code)||{code,name:`SV Barver Darts ${code}`}),locationForMatch:item=>appointmentLocation({kind:'match',match:currentFixtures().find(row=>row.id===item.id)||item}),models:live.map(item=>{
         const center=liveCenters.find(entry=>(entry.barverMatches||[]).some(match=>match.id===item.id)),group=serverLiveGroups.get(String(item.id));
         const games=(center?.pushEvents||[]).filter(event=>event.matchId===item.id&&event.type==='live_game').sort((a,b)=>String(a.board||'').localeCompare(String(b.board||''),undefined,{numeric:true}));
         return {item,games,loaded:Boolean(center||group?.connected),stale:Boolean(item.liveFeedDelayed)||(group?Boolean(group.stale||!group.connected):center?Boolean(center.stale):true)};
@@ -2602,17 +2605,18 @@ function initDarts() {
 
   let tvChoicesLoaded=false;
   async function loadTvChoices(){if(tvChoicesLoaded)return;try{const response=await fetch('/api/v1/darts/ranking');if(!response.ok)throw new Error();const data=await response.json();const group=document.createElement('optgroup');group.label=data.name;for(const event of [...data.events].sort((a,b)=>Date.parse(b.start)-Date.parse(a.start))){const option=document.createElement('option');option.value=event.id;option.textContent=event.name;group.append(option);}q('#tvTournamentChoice').append(group);tvChoicesLoaded=true;}catch(_){q('#tvLauncherNote').textContent='Das aktuelle Vereinsturnier ist verfügbar. Die DBD-Runden konnten gerade nicht geladen werden.';}}
-  q('#fullscreen').addEventListener('click',()=>{if(appTv){location.assign('/app/');return;}if(document.fullscreenElement){document.exitFullscreen().catch(()=>{});return;}q('#tvTeamChoice').value=favorite;q('#tvLauncher').showModal();loadTvChoices();});
-  if(appTv){q('#fullscreen').textContent='Zurück zur App';q('#tvTeamControls').prepend(q('#liveDataStatus'));q('.darts-header .brand').href='/app/';}
+  q('#fullscreen').addEventListener('click',()=>{if(appTv||document.fullscreenElement){exitTv();return;}q('#tvTeamChoice').value=favorite;q('#tvLauncher').showModal();loadTvChoices();});
+  if(appTv){q('#fullscreen').textContent=tvReturnLabel;q('#tvTeamControls').prepend(q('#liveDataStatus'));q('.darts-header .brand').href=tvHome;}
   q('#closeTvLauncher').addEventListener('click',()=>q('#tvLauncher').close());
   q('#tvLauncherForm').addEventListener('change',()=>{const tournament=q('#tvLauncherForm input[name="tvType"]:checked').value==='tournament';q('#tvTeamField').hidden=tournament;q('#tvTournamentField').hidden=!tournament;});
-  q('#tvLauncherForm').addEventListener('submit',async event=>{event.preventDefault();const type=q('#tvLauncherForm input[name="tvType"]:checked').value;q('#tvLauncher').close();if(type==='tournament'){const id=q('#tvTournamentChoice').value;location.href='/turnier?tv=1'+(id?`&event=${encodeURIComponent(id)}`:'');return;}const code=q('#tvTeamChoice').value;tvTeams=code==='all'?new Set(allTvTeams):new Set([code]);rememberTvTeams();updateTvTeamControls();setSection('today');renderToday(tickerData);try{if(document.body.requestFullscreen)await document.body.requestFullscreen();else message('Vollbild wird hier nicht unterstützt. Die Spiele bleiben in der normalen Ansicht verfügbar.');}catch(_){message('Vollbild konnte nicht gestartet werden. Nutze bei Bedarf die Vollbildfunktion deines Browsers.');}});
+  function openWindowTv(){const url=new URL('/app/live',location.origin);url.searchParams.set('teams',[...tvTeams].join(','));url.searchParams.set('appTheme',document.documentElement.dataset.theme==='dark'?'dark':'light');url.searchParams.set('return','website');location.assign(url.href);}
+  q('#tvLauncherForm').addEventListener('submit',async event=>{event.preventDefault();const type=q('#tvLauncherForm input[name="tvType"]:checked').value;q('#tvLauncher').close();if(type==='tournament'){const id=q('#tvTournamentChoice').value;location.href='/turnier?tv=1'+(id?`&event=${encodeURIComponent(id)}`:'');return;}const code=q('#tvTeamChoice').value;tvTeams=code==='all'?new Set(allTvTeams):new Set([code]);rememberTvTeams();if(window.matchMedia('(pointer:coarse)').matches||!document.body.requestFullscreen){openWindowTv();return;}updateTvTeamControls();setSection('today');renderToday(tickerData);try{await document.body.requestFullscreen();}catch(_){openWindowTv();}});
   document.addEventListener('fullscreenchange',()=>{
     const active=appTv||Boolean(document.fullscreenElement);
     document.body.classList.toggle('tv-live',active);
     window.DartsBroadcast?.configure({tv:active});
     updateTvTeamControls(); renderToday(tickerData); refreshSponsorSlots(false);
-    q('#fullscreen').textContent=appTv?'Zurück zur App':active ? 'TV-Modus beenden' : 'TV-Modus';
+    q('#fullscreen').textContent=appTv?tvReturnLabel:active ? 'TV-Modus beenden' : 'TV-Modus';
   });
   sectionNavigationReady=true;
   const sectionTargets={teams:'gridView',league:'leagueView',ranking:'rankingView',tv:'tvScheduleView',join:'joinView',members:'membersView',training:'trainingView',cup:'cupView'};

@@ -1,12 +1,12 @@
 "use strict";
 
-const CACHE = "clubiq-music-shell-20261017-clinch-win7";
+const CACHE = "clubiq-music-shell-20261018-tv-start1";
 const SHELL = [
   "/static/darts-team-photo.js?v=20261017-photo-names1", "/static/darts-team-photo.css?v=20261017-photo-names1",
-  "/static/darts-tv-studio.js?v=20261017-clinch-win7", "/static/darts-tv-studio.css?v=20261017-mobile-countdown1",
+  "/static/darts-tv-studio.js?v=20261018-tv-start1", "/static/darts-tv-studio.css?v=20261017-mobile-countdown1",
   "/static/darts-cms-news.js?v=20261010-cms2",
   "/", "/remote", "/party", "/darts", "/training", "/turnier", "/static/darts-training-source.js?v=20261006-training2", "/static/darts-tournament.js?v=20261006-training2", "/static/darts-tournament.css?v=20261006-training2", "/static/darts-trainings.json", "/impressum", "/datenschutz", "/manifest.webmanifest",
-  "/static/darts.css?v=20261017-clinch-win7", "/static/darts.js?v=20261017-clinch-win7", "/static/darts-source-fallback.js?v=20261017-clinch-win7", "/static/darts-player-data.js?v=20261006-training1", "/static/darts-broadcast.js?v=20261017-clinch-win7", "/static/darts-broadcast.css?v=20261010-cms2", "/static/darts-sponsors.json", "/static/darts-events.json", "/static/darts-players.json", "/pics/players/tim-thuerkow-cutout.webp", "/pics/players/christian-fecht-cutout.webp", "/pics/teams/barver-a-team-20261007.webp", "/pics/teams/barver-d-team-20261016-v4.webp", "/pics/sv-barver-darts-tight-512.webp", "/pics/events/barver-dart-open-2026.webp", "/pics/teams/barver-b-team-20261016.webp",
+  "/static/darts.css?v=20261018-tv-start1", "/static/darts.js?v=20261018-tv-start1", "/static/darts-source-fallback.js?v=20261017-clinch-win7", "/static/darts-player-data.js?v=20261006-training1", "/static/darts-broadcast.js?v=20261017-clinch-win7", "/static/darts-broadcast.css?v=20261010-cms2", "/static/darts-sponsors.json", "/static/darts-events.json", "/static/darts-players.json", "/pics/players/tim-thuerkow-cutout.webp", "/pics/players/christian-fecht-cutout.webp", "/pics/teams/barver-a-team-20261007.webp", "/pics/teams/barver-d-team-20261016-v4.webp", "/pics/sv-barver-darts-tight-512.webp", "/pics/events/barver-dart-open-2026.webp", "/pics/teams/barver-b-team-20261016.webp",
   "/static/app.css?v=20260915-1", "/static/app.js?v=20260919-1",
   "/static/song-info.js?v=20260917-1", "/static/comfort.js?v=20260919-1", "/static/comfort.css?v=20260917-1",
   "/static/reliability.js?v=20260919-1",
