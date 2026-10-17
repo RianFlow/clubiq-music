@@ -60,7 +60,7 @@ def _event_identity(league: str, event: dict) -> tuple[str, str] | None:
     elif event_type == "game":
         identity = f"{event.get('gameId')}|{event.get('homeLegs')}|{event.get('awayLegs')}"
     else:
-        identity = ("clinch|" if event.get("clinch") is True else "final|") + str(event.get("score") or event.get("text") or "final")
+        identity = ("clinch|" if event.get("clinch") is True else "") + str(event.get("score") or event.get("text") or "final")
     if event_type in {"leg", "game"}:
         if league == "live" and event.get("league"):
             league = str(event["league"])[:40]
