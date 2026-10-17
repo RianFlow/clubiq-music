@@ -21,10 +21,11 @@
     const home=String(raw.participantHome?.displayName||'Unbekannt').slice(0,160),away=String(raw.participantGuest?.displayName||'Unbekannt').slice(0,160);
     const scored=Number.isInteger(raw.setsHome)&&Number.isInteger(raw.setsAway);
     const plannedAt=iso(raw.datePlanned),updatedAt=iso(raw.endDate||raw.lastUpdate)||plannedAt;
-    let kind=raw.statusCd==='FINISH'&&scored?'final':scored?'live':'upcoming',text=`${home} gegen ${away}`;
+    const status=String(raw.statusCd||'').toUpperCase(),inProgress=['ACTIVE','STARTED','RUNNING','LIVE','IN_PROGRESS'].includes(status);
+    let kind=status==='FINISH'&&scored?'final':scored||inProgress?'live':'upcoming',text=`${home} gegen ${away}`;
     if(kind==='final') {
       text=raw.setsHome===raw.setsAway?`${home} und ${away} trennen sich ${raw.setsHome}:${raw.setsAway}`:raw.setsHome>raw.setsAway?`${home} gewinnt ${raw.setsHome}:${raw.setsAway} gegen ${away}`:`${away} gewinnt ${raw.setsAway}:${raw.setsHome} gegen ${home}`;
-    } else if(kind==='live') text=`Zwischenstand: ${home} ${raw.setsHome}:${raw.setsAway} ${away}`;
+    } else if(kind==='live') text=scored?`Zwischenstand: ${home} ${raw.setsHome}:${raw.setsAway} ${away}`:`${home} gegen ${away} · Live-Spiel läuft`;
     if(kind!=='final'&&plannedAt&&now-date(plannedAt)>8*3600000) {kind='pending';text=`${home} gegen ${away} · Vorläufig beendet – Bestätigung ausstehend`;}
     const sides={};if(league.teams[homeId])sides[league.teams[homeId]]='home';if(league.teams[awayId])sides[league.teams[awayId]]='away';
     const codes=Object.keys(sides).sort();
