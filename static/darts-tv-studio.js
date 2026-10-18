@@ -7,7 +7,7 @@
   const tiles=new Map(),finished=new Map();
   const STARTED_FIXTURE_WINDOW_MS=6*60*60*1000;
   const SUMMARY_MS=10*60*1000;
-  let compactMenu=null,compactHome=null,compactStatus=null,compactStatusHome=null;
+  let compactMenu=null,compactHome=null,compactStatus=null,compactStatusHome=null,compactSponsorObserver=null;
   let kickoffFixtures=[];
   const el=(tag,cls,value)=>{const n=root.document.createElement(tag);n.className=cls||'';if(value!==undefined)n.textContent=value;return n;};
   const q=selector=>root.document.querySelector(selector);
@@ -54,7 +54,7 @@
   function hideControls(force=false){if(!host)return;if(!force&&controls.contains(root.document.activeElement)){hideTimer=root.setTimeout(hideControls,5000);return;}clearTimeout(hideTimer);host.classList.add('controls-hidden');controls.inert=true;host.querySelector('.studio-control-toggle').setAttribute('aria-expanded','false');}
   function keydown(event){if(!host||event.target.matches('input,select,textarea')||q('dialog[open]'))return;if(event.key==='Escape'){hideControls(true);host.querySelector('.studio-control-toggle').focus();}else if(event.key==='Tab'||event.key.toLowerCase()==='b')showControls();}
   function compactControls(active){
-    if(!active){if(compactMenu){const original=q('#tvTeamControls');if(compactStatus){compactStatus.classList.remove('tv-compact-status');compactStatusHome.prepend(compactStatus);compactStatus=null;compactStatusHome=null;}compactHome.insertBefore(original,q('#todayGrid'));compactMenu.remove();compactMenu=null;}return;}
+    if(!active){compactSponsorObserver?.disconnect();compactSponsorObserver=null;if(compactMenu){const original=q('#tvTeamControls');if(compactStatus){compactStatus.classList.remove('tv-compact-status');compactStatusHome.prepend(compactStatus);compactStatus=null;compactStatusHome=null;}compactHome.insertBefore(original,q('#todayGrid'));compactMenu.remove();compactMenu=null;}return;}
     if(compactMenu)return;
     const original=q('#tvTeamControls');compactHome=original.parentNode;compactMenu=el('section','tv-compact-menu');
     const status=q('#liveDataStatus');if(status){compactStatus=status;compactStatusHome=status.parentNode;status.classList.add('tv-compact-status');compactHome.insertBefore(status,q('#todayGrid'));}
@@ -68,6 +68,11 @@
     const tools=el('div','studio-tools'),theme=el('button','','Hell / Dunkel'),exit=el('button','','TV-Modus beenden'),done=el('button','','Fertig');
     for(const button of [theme,exit,done])button.type='button';theme.addEventListener('click',()=>q('#themeToggle').click());exit.addEventListener('click',()=>q('#fullscreen').click());done.addEventListener('click',close);
     tools.append(theme,exit,done);panel.append(el('strong','','TV-Bedienung'),original,tools);compactMenu.append(shade,panel,toggle);root.document.body.append(compactMenu);
+    const sponsor=q('#sponsorTv');
+    if(sponsor&&root.ResizeObserver){
+      const place=()=>{if(compactMenu)compactMenu.style.setProperty('--tv-menu-bottom',Math.max(66,sponsor.hidden?0:root.innerHeight-sponsor.getBoundingClientRect().top+8)+'px');};
+      compactSponsorObserver=new root.ResizeObserver(place);compactSponsorObserver.observe(sponsor);place();
+    }
   }
   function mount(container){
     if(host)return;
@@ -81,10 +86,10 @@
     const tools=el('div','studio-tools'),theme=el('button','','Hell / Dunkel'),exit=el('button','','TV-Modus beenden');theme.type=exit.type='button';
     theme.addEventListener('click',()=>q('#themeToggle').click());exit.addEventListener('click',()=>{if(context.exitTv)context.exitTv();else if(root.location.pathname==='/app/live')root.location.assign('/app/');else root.document.exitFullscreen?.();});
     const touch=root.matchMedia('(pointer:coarse)').matches;
-    const done=el('button','','Fertig');done.type='button';done.addEventListener('click',()=>{hideControls(true);host.querySelector('.studio-control-toggle').focus();});tools.append(theme,exit,done);controls.append(tools,el('small','',touch?'Auswahl mit „Fertig“ schließen.':'Maus bewegen oder B drücken · die Bedienung blendet sich nach 5 Sekunden aus.'));
-    const toggle=el('button','studio-control-toggle',touch?'☰':'Bedienung');toggle.type='button';toggle.setAttribute('aria-label','Bedienung');toggle.setAttribute('aria-expanded','true');toggle.setAttribute('aria-controls','studioControls');controls.id='studioControls';toggle.addEventListener('click',()=>host.classList.contains('controls-hidden')?showControls():hideControls(true));
+    const done=el('button','','Fertig');done.type='button';done.addEventListener('click',()=>{hideControls(true);host.querySelector('.studio-control-toggle').focus();});tools.append(theme,exit,done);controls.append(tools,el('small','',touch?'Auswahl mit „Fertig“ schließen.':'Menüknopf oder B drücken · die Bedienung blendet sich nach 5 Sekunden aus.'));
+    const toggle=el('button','studio-control-toggle','☰');toggle.type='button';toggle.setAttribute('aria-label','Bedienung');toggle.setAttribute('aria-expanded','true');toggle.setAttribute('aria-controls','studioControls');controls.id='studioControls';toggle.addEventListener('click',()=>host.classList.contains('controls-hidden')?showControls():hideControls(true));
     const shade=el('button','studio-control-shade');shade.type='button';shade.setAttribute('aria-label','Bedienung schließen');shade.tabIndex=-1;shade.addEventListener('click',()=>{hideControls(true);toggle.focus();});
-    host.append(header,content,foot,shade,controls,toggle);container.replaceChildren(host);host.addEventListener('pointermove',event=>{if(event.pointerType==='mouse')showControls();},{passive:true});root.document.addEventListener('keydown',keydown);
+    foot.append(controls,toggle);host.append(header,content,foot,shade);container.replaceChildren(host);root.document.addEventListener('keydown',keydown);
     const source=q('#liveDataStatus');if(source){const sync=()=>{status.textContent=source.textContent;status.dataset.state=source.dataset.state||'';};statusObserver=new MutationObserver(sync);statusObserver.observe(source,{childList:true,subtree:true,characterData:true,attributes:true});sync();}
     // Reuse the configured TV placement and rotation, even when the game feed is idle.
     const sponsorSource=q('#sponsorTv');if(sponsorSource){const sync=()=>{
@@ -93,7 +98,7 @@
       const copy=banner.cloneNode(true);for(const logo of copy.querySelectorAll('img')){logo.loading='eager';logo.addEventListener('error',()=>{logo.hidden=true;},{once:true});}
       partner.replaceChildren(copy);
     };sponsorObserver=new MutationObserver(sync);sponsorObserver.observe(sponsorSource,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['hidden','src','href']});sync();}
-    updateClock();clockTimer=root.setInterval(updateClock,1000);if(touch)hideControls();else showControls();
+    updateClock();clockTimer=root.setInterval(updateClock,1000);hideControls(true);
   }
   function close(){
     if(!host)return;
