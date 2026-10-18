@@ -74,6 +74,7 @@ jobs:
           NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_darts_live_display_browser.cjs
           NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_darts_tv_studio_browser.cjs
           NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_darts_tv_recap_browser.cjs
+          NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_darts_tv_cross_team_browser.cjs
           NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_darts_team_photo_browser.cjs
           NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node mobile/tests/web-browser.cjs
       - name: Player mit echtem mpv und stummer Ausgabe prüfen

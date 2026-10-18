@@ -24,6 +24,11 @@ bleibt die kompakte Ansicht mit einzeln vergrößerbaren Boards erhalten.
 - Bedienung: Maus bewegen, **B** oder **Tab**. Mannschaftsauswahl,
   Kaderpräsentation, Hell/Dunkel und TV-Modus beenden sind dort erreichbar.
   Spielerprofile laufen weiterhin jeweils acht Sekunden.
+- Die Mannschaftsauswahl begrenzt die dargestellten Spiele. Bestätigte Ereignisse
+  anderer Barver-Mannschaften werden trotzdem eingeblendet, bei fehlendem
+  Mannschaftsfeld als übergreifende Grafik. Spielerbilder, Doppelpaarungen und
+  Mannschaftsfotos bleiben dabei erhalten. Mehrere Siege laufen nacheinander;
+  die gewählte Mannschaft und der laufende Countdown ändern sich dadurch nicht.
 - Am Handy öffnet ausschließlich ein kleiner Menüknopf die Auswahl. „Fertig“
   oder Tippen außerhalb schließen sie; Berührungen der Spiele öffnen kein Menü.
 

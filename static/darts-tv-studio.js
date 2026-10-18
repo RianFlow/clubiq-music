@@ -185,19 +185,20 @@
   }
   function confetti(){const wrap=el('div','studio-confetti');wrap.setAttribute('aria-hidden','true');for(let i=0;i<28;i++){const bit=el('i');bit.style.setProperty('--x',`${2+i*3.5}%`);bit.style.setProperty('--delay',`${i%6*.09}s`);bit.style.setProperty('--drift',`${i%2?-55:55}px`);wrap.append(bit);}return wrap;}
   function placeHighlight(){
-    if(!highlight||!host)return;const tile=tiles.get(String(highlight.event.matchId));if(!tile)return;
-    const parent=tile.node.querySelector('.studio-team-body');if(highlight.node.parentNode!==parent)parent.append(highlight.node);
+    if(!highlight||!host)return;const tile=tiles.get(String(highlight.event.matchId));
+    const parent=tile?.node.querySelector('.studio-team-body')||host;highlight.node.classList.toggle('is-global',!tile);if(highlight.node.parentNode!==parent)parent.append(highlight.node);
   }
   function showHighlight(event,view,portraits){
     if(!host)return false;
-    const tile=tiles.get(String(event.matchId));if(!tile||!teamCodes(tile.model.item).includes(code(event.team)))return 'ignored';
-    const compact=event.barverWon===false&&['leg','game'].includes(event.type),team=code(event.team),result=event.type==='match'?outcome(tile.model.item,team,event.score):null,complete=event.type==='game'&&event.barverWon===true||(result==='win'&&!event.finalOnly);
+    const tile=tiles.get(String(event.matchId)),team=code(event.team),item=tile?.model.item||context.items.find(item=>String(item.id)===String(event.matchId))||{barverSides:{[team]:event.barverSide}};
+    const compact=event.barverWon===false&&['leg','game'].includes(event.type),result=event.type==='match'?outcome(item,team,event.score):null,complete=event.type==='game'&&event.barverWon===true||(result==='win'&&!event.finalOnly);
     const wrap=el('div','studio-event'+(compact?' is-loss':'')),card=el('section',`studio-event-card darts-broadcast-card type-${event.type.replace('_','-')}${complete?' complete-win':''}`);
     wrap.setAttribute('role','status');wrap.setAttribute('aria-live','polite');
     const visual=el('div','studio-event-portraits');if(event.type==='match')visual.append(image(teamImage(team),PHOTOS[team]?`Mannschaftsfoto von Barver ${team}`:'Vereinslogo von SV Barver','studio-event-team-photo'));else for(const p of portraits)visual.append(image(p.image,p.fallback?`Vereinslogo für ${p.name}`:`Porträt von ${p.name}`,p.fallback?'is-logo':''));
     const copy=el('div','studio-event-copy'),label=event.type==='match'?event.finalOnly?'ENDSTAND':result==='win'?'MANNSCHAFTSSIEG':result==='draw'?'UNENTSCHIEDEN':'MANNSCHAFTSSPIEL BEENDET':event.type==='game'&&event.barverWon?portraits.length>1?'DOPPEL GEWONNEN':'EINZEL GEWONNEN':view.label;
+    copy.append(el('strong','studio-event-team-tag',`BARVER ${team}`));
     copy.append(el('p','studio-eyebrow',label),el('strong','studio-event-name darts-broadcast-headline',event.type==='match'?`Barver ${team}`:portraits.length?portraits.map(p=>p.name).join('\n'):view.headline));
-    const side=event.barverSide||ownSide(tile.model.item,team),home=event.homeLegs,away=event.awayLegs;
+    const side=event.barverSide||ownSide(item,team),home=event.homeLegs,away=event.awayLegs;
     const score=event.type==='match'?event.score:Number.isInteger(home)&&Number.isInteger(away)?side==='home'?`${home} : ${away}`:side==='away'||side==='guest'?`${away} : ${home}`:'':event.type==='leg'?`${num(event.legCount)} Legs`:'';
     if(score)copy.append(el('b','studio-event-score',score));copy.append(el('span','studio-event-detail',view.detail),el('small','studio-event-foot',event.team));
     if(!compact&&visual.children.length)card.append(visual);else card.classList.add('no-photo');card.append(copy);if(complete){card.append(confetti());const check=el('span','studio-win-check','✓');check.setAttribute('aria-hidden','true');card.append(check);}wrap.append(card);
