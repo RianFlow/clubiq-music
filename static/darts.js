@@ -42,7 +42,7 @@ function dartsLiveMoment(event) {
 }
 function dartsPreferences(value={}) {
   const list=(key,allowed,fallback)=>Array.isArray(value?.[key])?[...new Set(value[key].filter(v=>allowed.includes(v)))]:fallback;
-  return {teams:list('teams',['A','B','C','D'],['A','B','C','D']),eventTypes:list('eventTypes',Object.keys(DARTS_EVENT_LABELS),Object.keys(DARTS_EVENT_LABELS)),
+  return {training:value.training===true,teams:list('teams',['A','B','C','D'],['A','B','C','D']),eventTypes:list('eventTypes',Object.keys(DARTS_EVENT_LABELS),Object.keys(DARTS_EVENT_LABELS)),
     players:Array.isArray(value?.players)?[...new Set(value.players.filter(v=>typeof v==='string'&&v.trim()&&v.length<=100).map(v=>v.trim()))].slice(0,100):[]};
 }
 function dartsLocalDay(value) {
@@ -373,6 +373,7 @@ if (typeof document !== 'undefined') initDarts();
 
 function initDarts() {
   const q = selector => document.querySelector(selector);
+  const appWeb=location.pathname.startsWith('/app/');
   const appTv=location.pathname==='/app/live';
   const tvHome=appTv&&new URLSearchParams(location.search).get('return')==='website'?'/darts':'/app/';
   const tvReturnLabel=tvHome==='/darts'?'Zurück zur Website':'Zurück zur App';
@@ -681,6 +682,7 @@ function initDarts() {
   }
   for (const code of ['A','B','C','D']) preferenceCheckbox(q('#pushTeams'),'teams',code,`Barver ${code}`,preferences.teams.includes(code));
   for (const [type,label] of Object.entries(DARTS_EVENT_LABELS)) preferenceCheckbox(q('#pushTypes'),'eventTypes',type,label,preferences.eventTypes.includes(type));
+  if(q('#pushTraining'))q('#pushTraining').checked=preferences.training;
   function renderPlayerOptions() {
     const names=new Map();
     for (const team of seasonData?.teams || []) for (const member of dartsTeamRoster({...team,roster:team.roster || team.members || []})) {
@@ -710,7 +712,7 @@ function initDarts() {
   });
   q('#preferencesForm').addEventListener('submit',async event=>{
     event.preventDefault(); const form=event.currentTarget, button=form.querySelector('button[type="submit"]'); button.disabled=true;
-    const data=new FormData(form), next=dartsPreferences({teams:data.getAll('teams'),players:data.getAll('players'),eventTypes:data.getAll('eventTypes')});
+    const data=new FormData(form), next=dartsPreferences({teams:data.getAll('teams'),players:data.getAll('players'),eventTypes:data.getAll('eventTypes'),training:data.has('training')});
     try {
       const registration='serviceWorker' in navigator?await navigator.serviceWorker.getRegistration():null;
       const subscription=await registration?.pushManager.getSubscription();
@@ -763,7 +765,7 @@ function initDarts() {
     }
     let registration;
     try {
-      registration=await navigator.serviceWorker.register('/sw.js');
+      registration=appWeb?await (window.DartsWebApp?.registration||navigator.serviceWorker.register('/app/sw.js?v=20261018-shared1',{scope:'/app/',updateViaCache:'none'})):await navigator.serviceWorker.register('/sw.js');
       await navigator.serviceWorker.ready;
       const update=async()=>{
         const subscription=await registration.pushManager.getSubscription();
@@ -2400,7 +2402,7 @@ function initDarts() {
   const requestedSection=new URLSearchParams(location.search).get('view');
   let currentSection='today',sectionNavigationReady=false;
   function setSection(section) {
-    if(section==='training'){location.assign('/training');return;}
+    if(section==='training'){location.assign(appWeb?'/app/training':'/training');return;}
     currentSection=section;q('#personalSettings').open=false;if(sectionNavigationReady){const url=new URL(location.href);if(section==='today')url.searchParams.delete('view');else url.searchParams.set('view',section);history.replaceState(null,'',url);}window.scrollTo({top:0,behavior:'instant'});
     const teams = section === 'teams';
     grid.hidden = true; q('.intro').hidden = !teams;
@@ -2587,7 +2589,7 @@ function initDarts() {
   q('#loadAll').addEventListener('click',()=>{ focusTeam(null); DARTS_TEAMS.filter(t=>layout.selected.includes(t.id)).forEach(load); });
   q('#gridView').addEventListener('click',()=>{ setSection('teams'); loadSeason(); });
   q('#closeMatch').addEventListener('click',()=>q('#matchDialog').close());
-  q('#matchDialog').addEventListener('close',()=>{if(!q('#matchDialog').open){matchLoadSequence++;matchRequestController?.abort();activeMatchDetailData=null;}});
+  q('#matchDialog').addEventListener('close',()=>{if(!q('#matchDialog').open){matchLoadSequence++;matchRequestController?.abort();activeMatchDetailData=null;const url=new URL(location.href);if(url.searchParams.has('match')){url.searchParams.delete('match');history.replaceState(null,'',url);}}});
   q('#closeTeamProfile').addEventListener('click',()=>q('#teamDialog').close());
   q('#closePlayerProfile').addEventListener('click',()=>q('#playerDialog').close());
   q('#playerDialog').addEventListener('close',()=>{if(!q('#playerDialog').open)activePlayerProfile=null;});
@@ -2617,8 +2619,8 @@ function initDarts() {
   if(appTv){q('#fullscreen').textContent=tvReturnLabel;if(!q('#liveDataStatus').classList.contains('tv-compact-status'))q('#tvTeamControls').prepend(q('#liveDataStatus'));q('.darts-header .brand').href=tvHome;}
   q('#closeTvLauncher').addEventListener('click',()=>q('#tvLauncher').close());
   q('#tvLauncherForm').addEventListener('change',()=>{const tournament=q('#tvLauncherForm input[name="tvType"]:checked').value==='tournament';q('#tvTeamField').hidden=tournament;q('#tvTournamentField').hidden=!tournament;});
-  function openWindowTv(){const url=new URL('/app/live',location.origin);url.searchParams.set('teams',[...tvTeams].join(','));url.searchParams.set('appTheme',document.documentElement.dataset.theme==='dark'?'dark':'light');url.searchParams.set('return','website');location.assign(url.href);}
-  q('#tvLauncherForm').addEventListener('submit',async event=>{event.preventDefault();const type=q('#tvLauncherForm input[name="tvType"]:checked').value;q('#tvLauncher').close();if(type==='tournament'){const id=q('#tvTournamentChoice').value;location.href='/turnier?tv=1'+(id?`&event=${encodeURIComponent(id)}`:'');return;}const code=q('#tvTeamChoice').value;tvTeams=code==='all'?new Set(allTvTeams):new Set([code]);rememberTvTeams();if(window.matchMedia('(pointer:coarse)').matches||!document.body.requestFullscreen){openWindowTv();return;}updateTvTeamControls();setSection('today');renderToday(tickerData);try{await document.body.requestFullscreen();}catch(_){openWindowTv();}});
+  function openWindowTv(){const url=new URL('/app/live',location.origin);url.searchParams.set('teams',[...tvTeams].join(','));url.searchParams.set('appTheme',document.documentElement.dataset.theme==='dark'?'dark':'light');if(!appWeb)url.searchParams.set('return','website');location.assign(url.href);}
+  q('#tvLauncherForm').addEventListener('submit',async event=>{event.preventDefault();const type=q('#tvLauncherForm input[name="tvType"]:checked').value;q('#tvLauncher').close();if(type==='tournament'){const id=q('#tvTournamentChoice').value;location.href=(appWeb?'/app/turnier':'/turnier')+'?tv=1'+(id?`&event=${encodeURIComponent(id)}`:'');return;}const code=q('#tvTeamChoice').value;tvTeams=code==='all'?new Set(allTvTeams):new Set([code]);rememberTvTeams();if(window.matchMedia('(pointer:coarse)').matches||!document.body.requestFullscreen){openWindowTv();return;}updateTvTeamControls();setSection('today');renderToday(tickerData);try{await document.body.requestFullscreen();}catch(_){openWindowTv();}});
   document.addEventListener('fullscreenchange',()=>{
     const active=appTv||Boolean(document.fullscreenElement);
     document.body.classList.toggle('tv-live',active);
@@ -2629,4 +2631,6 @@ function initDarts() {
   sectionNavigationReady=true;
   const sectionTargets={teams:'gridView',league:'leagueView',ranking:'rankingView',tv:'tvScheduleView',join:'joinView',members:'membersView',training:'trainingView',cup:'cupView'};
   if(!appTv&&sectionTargets[requestedSection])q(`#${sectionTargets[requestedSection]}`).click();
+  const linkedMatch=new URLSearchParams(location.search).get('match');
+  if(!appTv&&/^[1-9]\d{0,11}$/.test(linkedMatch||''))openMatch(Number(linkedMatch));
 }

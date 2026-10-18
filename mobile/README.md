@@ -108,6 +108,11 @@ Offizielle Grundlagen:
 
 ## TV-Modus in der Web-App
 
+Seit 18.10.2026 nutzt die öffentliche Web-App `/app/` dieselbe responsive
+Oberfläche wie die Website. Einzelheiten zur Migration und den gemeinsamen
+Datenwegen stehen in `docs/darts-web-app.md`. Die nachfolgenden Beschreibungen
+der kompakten Oberfläche gelten weiterhin für die native App und deren Vorschau.
+
 In der Web-App öffnet **TV** oben im Kopfbereich oder **TV-Modus öffnen** auf der
 Startseite die Live-Ansicht der Website. Sie bleibt unter `/app/live` innerhalb
 der installierten Web-App. **Zurück zur App** führt zur kompakten Übersicht zurück.

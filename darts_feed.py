@@ -12,6 +12,7 @@ import requests
 
 from darts_resilience import PublicSession, source_recovery, save_snapshot, load_snapshot, last_known
 from darts_collector import collected_snapshot
+from darts_schedule_status import current_schedule
 from darts_transport import scoped_get
 from darts_live import darts_live_hub, _watch_live_candidate, _average_text, _player, source_timestamp
 
@@ -625,24 +626,24 @@ def get_darts_feed(now: datetime | None = None) -> dict:
     collected = collected_snapshot("ticker", 360, now)
     if collected:
         from darts_fixtures import overlay_fixtures
-        return overlay_fixtures(collected, now, ticker=True)
+        return current_schedule(overlay_fixtures(collected, now, ticker=True), now, "items")
     timestamp = now.timestamp()
     with _feed_load_lock:
         with _lock:
             if _cache and timestamp - _cache_time < CACHE_SECONDS:
-                return _cache
+                return current_schedule(_cache, now, "items")
         try:
             result = _load(now)
             with _lock:
                 _cache, _cache_time = result, timestamp
             save_snapshot("ticker", result)
-            return result
+            return current_schedule(result, now, "items")
         except (requests.RequestException, ValueError, KeyError, TypeError, DartsFeedUnavailable) as exc:
             cached = _cache or load_snapshot("ticker")
             if cached:
                 with _lock:
                     _cache = cached
-                return last_known(cached)
+                return current_schedule(last_known(cached), now, "items")
             raise DartsFeedUnavailable("3K-Ergebnisse sind gerade nicht erreichbar.") from exc
 
 
@@ -1151,37 +1152,37 @@ def get_darts_season(now: datetime | None = None) -> dict:
     collected = collected_snapshot("season", 360, now)
     if collected:
         from darts_fixtures import overlay_fixtures
-        return overlay_fixtures(collected, now)
+        return current_schedule(overlay_fixtures(collected, now), now)
     with _lock:
         cached = _season_cache
         if cached:
             ttl = CACHE_SECONDS if cached[1].get("degraded") else SEASON_CACHE_SECONDS
             if now.timestamp() - cached[0] < ttl:
-                return cached[1]
+                return current_schedule(cached[1], now)
     with _season_load_lock:
         with _lock:
             cached = _season_cache
             if cached:
                 ttl = CACHE_SECONDS if cached[1].get("degraded") else SEASON_CACHE_SECONDS
                 if now.timestamp() - cached[0] < ttl:
-                    return cached[1]
+                    return current_schedule(cached[1], now)
         try:
             result = _load_season(now)
             if result.get("degraded"):
                 previous = (_season_cache or (0, None))[1] or load_snapshot("season")
                 if previous:
-                    return last_known(previous)
+                    return current_schedule(last_known(previous), now)
                 result = {**result, "stale": True}
             with _lock:
                 _season_cache = (now.timestamp(), result)
             save_snapshot("season", result)
-            return result
+            return current_schedule(result, now)
         except (requests.RequestException, ValueError, KeyError, TypeError, DartsFeedUnavailable) as exc:
             with _lock:
                 cached = _season_cache
             previous = cached[1] if cached else load_snapshot("season")
             if previous:
-                return last_known(previous)
+                return current_schedule(last_known(previous), now)
             raise DartsFeedUnavailable("Der 3K-Saisonspielplan ist gerade nicht erreichbar.") from exc
 
 

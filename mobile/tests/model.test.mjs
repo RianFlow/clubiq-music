@@ -36,8 +36,9 @@ test('fresh boards override pending, never official final',()=>{
 });
 test('rearranged dates precede nominal round order and team filter',()=>{
   const season={matches:[{id:1,barverTeam:'A',kind:'upcoming',plannedAt:'2026-10-02T19:30:00+02:00'},{id:2,barverTeam:'A',kind:'upcoming',plannedAt:'2026-09-28T19:30:00+02:00'},{id:3,barverTeam:'D',kind:'final',plannedAt:'2026-09-27T19:30:00+02:00'}]};
-  assert.deepEqual(matchesFor(season,{groups:[]},'A').map(m=>m.id),[2,1]);
-  assert.equal(sections(matchesFor(season,{groups:[]}),'2026-09-27T12:00:00+02:00').next.length,2);
+  const now=Date.parse('2026-09-27T12:00:00+02:00');
+  assert.deepEqual(matchesFor(season,{groups:[]},'A',now).map(m=>m.id),[2,1]);
+  assert.equal(sections(matchesFor(season,{groups:[]},'',now),'2026-09-27T12:00:00+02:00').next.length,2);
 });
 test('captain before deputy and player',()=>{
   assert.deepEqual(['Spieler','Stellvertretung','Kapitän'].map(role=>({role})).sort((a,b)=>roleRank(a)-roleRank(b)).map(x=>x.role),['Kapitän','Stellvertretung','Spieler']);
@@ -91,6 +92,14 @@ test('new start notifications require explicit selection; stored filters stay in
 test('an undated fixture does not hide the next scheduled match',()=>{
   const rows=matchesFor({matches:[{id:1,kind:'upcoming',plannedAt:null},{id:2,kind:'upcoming',plannedAt:'2026-10-06T18:00:00Z'}]},{groups:[]});
   assert.deepEqual(rows.map(m=>m.id),[2,1]);
+});
+
+test('a stored fixture from yesterday is not the next match, while fresh live boards still win',()=>{
+  const now=Date.now(),season={matches:[{id:1,kind:'upcoming',plannedAt:new Date(now-18*3600000).toISOString()},{id:2,kind:'upcoming',plannedAt:new Date(now+86400000).toISOString()}]};
+  const rows=matchesFor(season,{groups:[]},'',now);
+  assert.equal(rows[0].kind,'pending');assert.deepEqual(sections(rows).next.map(m=>m.id),[2]);
+  const live={groups:[{groupKey:'1',matches:[{active:true,lastUpdateNs:now*1e6}]}]};
+  assert.equal(matchesFor(season,live,'',now)[0].kind,'live');
 });
 
 test('training links remain public and training alerts never open a league match',async()=>{

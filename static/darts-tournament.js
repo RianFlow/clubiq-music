@@ -1,6 +1,6 @@
 'use strict';
 const q=s=>document.querySelector(s), params=new URLSearchParams(location.search), initialTv=params.get('tv')==='1';
-const trainingPage=location.pathname==='/training';
+const trainingPage=['/training','/app/training'].includes(location.pathname);
 let trainingCatalog=null,trainingSearchBusy=false,trainingSearchAt=0,trainingSearchTimer,requestController=null,viewChosen=false;
 // No production subscriptions or network calls in the localhost-only demo.
 const demo=['127.0.0.1','localhost','[::1]'].includes(location.hostname)&&params.get('demo')==='tournament';
@@ -81,7 +81,7 @@ async function refresh(){
     if(version===selectionVersion)accept(next);
   }catch(_){if(version!==selectionVersion)return;q('#status').textContent='Verbindung wird erneut versucht';q('#notice').textContent=data?'Die letzten Daten bleiben sichtbar. Automatische Neuverbindung läuft.':'3K ist vorübergehend nicht erreichbar. Automatische Neuverbindung läuft.';}finally{busy=false;if(version!==selectionVersion)refresh();}
 }
-function tournamentLink(){q('#tvLink').href=(trainingPage?'/training':'/turnier')+'?tv=1'+(selectedEvent?`&event=${selectedEvent}`:'');}
+function tournamentLink(){q('#tvLink').href=(location.pathname.startsWith('/app/')?'/app':'')+(trainingPage?'/training':'/turnier')+'?tv=1'+(selectedEvent?`&event=${selectedEvent}`:'');}
 function renderTrainingChoices(){
   if(!trainingPage)return;
   const select=q('#tournamentChoice');select.replaceChildren(Object.assign(node('option','Aktuelles Training automatisch'),{value:''}));
