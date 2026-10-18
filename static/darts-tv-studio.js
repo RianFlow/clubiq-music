@@ -7,7 +7,7 @@
   const tiles=new Map(),finished=new Map();
   const STARTED_FIXTURE_WINDOW_MS=6*60*60*1000;
   const SUMMARY_MS=10*60*1000;
-  let compactMenu=null,compactHome=null;
+  let compactMenu=null,compactHome=null,compactStatus=null,compactStatusHome=null;
   let kickoffFixtures=[];
   const el=(tag,cls,value)=>{const n=root.document.createElement(tag);n.className=cls||'';if(value!==undefined)n.textContent=value;return n;};
   const q=selector=>root.document.querySelector(selector);
@@ -54,9 +54,10 @@
   function hideControls(force=false){if(!host)return;if(!force&&controls.contains(root.document.activeElement)){hideTimer=root.setTimeout(hideControls,5000);return;}clearTimeout(hideTimer);host.classList.add('controls-hidden');controls.inert=true;host.querySelector('.studio-control-toggle').setAttribute('aria-expanded','false');}
   function keydown(event){if(!host||event.target.matches('input,select,textarea')||q('dialog[open]'))return;if(event.key==='Escape'){hideControls(true);host.querySelector('.studio-control-toggle').focus();}else if(event.key==='Tab'||event.key.toLowerCase()==='b')showControls();}
   function compactControls(active){
-    if(!active){if(compactMenu){const original=q('#tvTeamControls');compactHome.insertBefore(original,q('#todayGrid'));compactMenu.remove();compactMenu=null;}return;}
+    if(!active){if(compactMenu){const original=q('#tvTeamControls');if(compactStatus){compactStatus.classList.remove('tv-compact-status');compactStatusHome.prepend(compactStatus);compactStatus=null;compactStatusHome=null;}compactHome.insertBefore(original,q('#todayGrid'));compactMenu.remove();compactMenu=null;}return;}
     if(compactMenu)return;
     const original=q('#tvTeamControls');compactHome=original.parentNode;compactMenu=el('section','tv-compact-menu');
+    const status=q('#liveDataStatus');if(status){compactStatus=status;compactStatusHome=status.parentNode;status.classList.add('tv-compact-status');compactHome.insertBefore(status,q('#todayGrid'));}
     const toggle=el('button','tv-compact-toggle','☰'),panel=el('aside','tv-compact-panel'),shade=el('button','tv-compact-shade');
     toggle.type=shade.type='button';toggle.setAttribute('aria-label','Bedienung');toggle.setAttribute('aria-expanded','false');toggle.setAttribute('aria-controls','compactTvControls');
     panel.id='compactTvControls';panel.setAttribute('aria-label','TV-Ansicht bedienen');panel.inert=true;shade.setAttribute('aria-label','Bedienung schließen');shade.tabIndex=-1;

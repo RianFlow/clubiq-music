@@ -83,6 +83,7 @@ body.tv-live .ds-tv .tv-team-controls{position:static;top:auto;z-index:auto}
 /* Explicit opening keeps touch interactions with scores separate from TV controls. */
 .studio-control-shade{display:none;position:fixed;inset:0;z-index:14;border:0;border-radius:0;background:#0005}
 .tv-compact-menu{position:fixed;right:0;bottom:0;z-index:100}
+body.tv-live .tv-compact-status{display:flex;align-items:center;min-height:24px;margin:0 10px 6px;font-size:11px;line-height:1.35}
 body.tv-live:has(.tv-compact-menu) .sponsor-slot-tv{right:66px}
 .ds-tv .studio-control-toggle{left:auto;right:12px;transform:none;min-width:44px;min-height:44px;max-width:110px}
 .ds-tv .studio-controls{width:min(700px,calc(100vw - 32px));padding:12px 14px;bottom:18px;box-shadow:0 8px 35px #0005}
