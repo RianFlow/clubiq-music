@@ -1,5 +1,10 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {avg,outcome,teamImage,nextFixture,startedFixture,countdownParts,fixtureVenue,retainKickoffFixtures}=require('../static/darts-tv-studio.js');
+test('the ten-minute recap expires at the actual final time, not at each refresh',()=>{
+ const {summaryUntil}=require('../static/darts-tv-studio.js'),end=Date.parse('2026-10-18T18:00:00Z'),item={kind:'final',finishedAt:new Date(end).toISOString()};
+ assert.equal(summaryUntil(item,end),end+600000);assert.equal(summaryUntil(item,end+590000),end+600000);assert(summaryUntil(item,end+600001)<end+600001);
+ assert.equal(summaryUntil({summaryUntil:new Date(end+1234).toISOString()},end),end+1234);assert.equal(summaryUntil({kind:'final'},end),0,'old results do not acquire a new recap on page open');
+});
 test('TV averages use known current-leg darts and remaining points, without inventing missing values',()=>{
  assert.equal(avg({remaining:84,darts:18,average:55.5,totalDarts:99}),'69,5');
  assert.equal(avg({remaining:501,darts:0}),'0,0');

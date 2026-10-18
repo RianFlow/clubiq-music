@@ -390,6 +390,15 @@ async function deleteSocial(){const id=Number($('#socialId').value);if(!id||!con
 let checkedTournamentSource = '', tournamentBusy = false;
 function tournamentLabel(item){const date=item.event.date?new Date(item.event.date).toLocaleDateString('de-DE'):'';return `${item.event.name}${date?' · '+date:''}`;}
 async function loadTournament(){const item=await api('/api/v1/darts/admin/tournament');$('#tournamentCurrent').textContent=`Aktiv: ${tournamentLabel(item)}`;$('#tournamentSource').value=item.source;}
+async function loadMatchWatch(){
+  const target=$('#matchWatchStatus');if(!target)return;
+  try{const data=await api('/api/v1/darts/admin/match-watch'),list=document.createElement('div'),labels={idle:'Kein nächster Termin bekannt',upcoming:'Nächster Termin',waiting:'Warten auf Live-Spielstände',live:'Live',interrupted:'Verbindung wird wiederhergestellt',finished:'Beendet · Zusammenfassung'};
+    const time=value=>value?new Date(value).toLocaleString('de-DE'):'Noch keine erfolgreiche Prüfung';
+    for(const team of data.teams||[]){const row=document.createElement('p'),name=document.createElement('strong'),detail=document.createElement('span');name.textContent=`Barver ${team.team} · ${labels[team.state]||'Wird geprüft'}`;detail.textContent=`${team.match?`${team.match.home} gegen ${team.match.away} · `:''}Letzter erfolgreicher Abruf: ${time(team.lastSuccess)}${team.error?' · Spielplan wird erneut geprüft':''}`;row.append(name,document.createElement('br'),detail);list.append(row);}
+    if(!list.children.length)list.textContent='Der Server startet die Mannschaftsüberwachung.';target.replaceChildren(list);
+  }catch(_){target.textContent='Der Status konnte gerade nicht geladen werden. Bitte erneut aktualisieren.';}
+}
+$('#refreshMatchWatch')?.addEventListener('click',loadMatchWatch);
 function invalidateTournament(){checkedTournamentSource='';$('#activateTournament').disabled=true;$('#tournamentPreview').hidden=true;}
 $('#tournamentSource').addEventListener('input',invalidateTournament);
 $('#checkTournament').addEventListener('click',async()=>{
@@ -410,8 +419,8 @@ async function openAdmin(password, username = state.username) {
   if(!state.cookieMode){sessionStorage.setItem('clubiq_darts_admin',password);sessionStorage.setItem('clubiq_darts_admin_username',state.username);}
   $('#adminPassword').value='';
   $('#loginPanel').hidden=true; $('#adminPanel').hidden=false; $('#logout').hidden=false;
-  const results=await Promise.allSettled([loadData(),loadSponsors(),loadEvents(),loadSocial(),loadTournament(),loadAppointmentNotices()]);
-  const targets=['#dataStatus','#sponsorDataStatus','#eventDataStatus','#socialDataStatus','#tournamentCurrent','#noticeStatus'];
+  const results=await Promise.allSettled([loadData(),loadSponsors(),loadEvents(),loadSocial(),loadTournament(),loadAppointmentNotices(),loadMatchWatch()]);
+  const targets=['#dataStatus','#sponsorDataStatus','#eventDataStatus','#socialDataStatus','#tournamentCurrent','#noticeStatus','#matchWatchStatus'];
   results.forEach((result,index)=>{if(result.status==='rejected')$(targets[index]).textContent=`Laden fehlgeschlagen: ${result.reason?.message||'Unbekannter Fehler'}`;});
 }
 

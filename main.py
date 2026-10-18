@@ -35,6 +35,8 @@ from darts_feed import DartsFeedUnavailable, get_darts_center, get_darts_feed, g
 from darts_notices import create_router as create_notices_router
 from darts_fixtures import refresh_fixture_snapshots
 from darts_live import darts_live_hub, timestamp_ns
+from darts_match_watch import TeamMatchWatch
+from darts_resilience import load_snapshot, save_snapshot
 from darts_web_app import router as darts_web_app_router
 from darts_training_live import training_live_monitor
 from darts_tournament import get_tournament, get_series_tournament, preview_tournament, SOURCE as DEFAULT_TOURNAMENT_SOURCE
@@ -541,23 +543,15 @@ def poll_darts_push_events() -> None:
         print(f"[DARTS PUSH] {type(exc).__name__} ({cause}): Push-Prüfung wird später wiederholt.")
 
 
+team_match_watch = TeamMatchWatch(
+    darts_live_hub, lambda: get_darts_season(),
+    lambda: load_snapshot("team-match-watch"),
+    lambda state: save_snapshot("team-match-watch", state),
+)
+
+
 def sync_darts_live_groups() -> None:
-    try:
-        season = get_darts_season()
-        if season.get("stale") or season.get("degraded"):
-            # The cached season still has verified scheduled dates and match IDs.
-            # Keep watching imminent/rearranged fixtures even while 3K's league feed
-            # is stale. Never use a stale final to end a live stream.
-            cached_fixtures = [
-                item for item in season.get("matches") or []
-                if item.get("kind") in ("upcoming", "live")
-            ]
-            darts_live_hub.reconcile(cached_fixtures)
-        else:
-            # The compact ticker omits matches moved to a different round.
-            darts_live_hub.reconcile(season.get("matches") or [])
-    except (DartsFeedUnavailable, ValueError, requests.RequestException) as exc:
-        print(f"[DARTS LIVE] {type(exc).__name__}: Begegnungen werden später erneut geprüft.")
+    team_match_watch.poll()
 
 
 def deliver_darts_live_events() -> None:
@@ -725,7 +719,7 @@ class DartsPushSubscribe(BaseModel):
     teams: list[str] = Field(default_factory=lambda: ["A", "B", "C", "D"], max_length=4)
     players: list[str] = Field(default_factory=list, max_length=100)
     training: bool = False
-    eventTypes: list[str] = Field(default_factory=lambda: sorted(PUSH_EVENT_TYPES), max_length=6)
+    eventTypes: list[str] = Field(default_factory=lambda: sorted(PUSH_EVENT_TYPES), max_length=7)
 
 
 class DartsPushUnsubscribe(BaseModel):
@@ -739,7 +733,7 @@ class DartsNativePushRequest(BaseModel):
     teams: list[str] = Field(default_factory=lambda: ["A", "B", "C", "D"], max_length=4)
     players: list[Annotated[str, Field(min_length=1, max_length=100)]] = Field(default_factory=list, max_length=100)
     training: bool = False
-    eventTypes: list[str] = Field(default_factory=lambda: sorted(PUSH_EVENT_TYPES), max_length=6)
+    eventTypes: list[str] = Field(default_factory=lambda: sorted(PUSH_EVENT_TYPES), max_length=7)
 
 
 class DartsPresenceHeartbeat(BaseModel):
@@ -1016,6 +1010,12 @@ def darts_admin_verify():
     return {"status": "ok"}
 
 
+@app.get("/api/v1/darts/admin/match-watch", dependencies=[Depends(require_darts_admin)])
+def darts_admin_match_watch(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return team_match_watch.status()
+
+
 @app.get("/api/v1/darts/admin/tournament", dependencies=[Depends(require_darts_admin)])
 def darts_admin_tournament(response: Response):
     response.headers["Cache-Control"] = "no-store"
@@ -1053,7 +1053,7 @@ def privacy_notice():
 @app.get("/api/v1/darts/ticker")
 def darts_ticker():
     try:
-        return get_darts_feed()
+        return team_match_watch.overlay(get_darts_feed(), "items")
     except DartsFeedUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
@@ -1129,7 +1129,7 @@ def darts_ranking():
 @app.get("/api/v1/darts/season")
 def darts_season():
     try:
-        return get_darts_season()
+        return team_match_watch.overlay(get_darts_season())
     except DartsFeedUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 

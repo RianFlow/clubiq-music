@@ -1,5 +1,5 @@
 export const API_ORIGIN='https://barverdarts.clubiq.party';
-export const TYPES={'180':'180er',high_finish:'High Finishes',leg:'Gewonnene Legs',game:'Einzelne Partien',match:'Mannschaftsergebnisse',player_start:'Spieler startet seine Partie'};
+export const TYPES={'180':'180er',high_finish:'High Finishes',leg:'Gewonnene Legs',game:'Einzelne Partien',match:'Mannschaftsergebnisse',match_start:'Mannschaftsspiel beginnt',player_start:'Spieler startet seine Partie'};
 export const API_PATH=/^\/api\/v1\/darts\/(season|live|highlights|player-profiles|matches\/\d+|trainings|training(?:\/live)?(?:\?event_id=[1-9]\d{0,7})?)$/;
 export function apiUrl(path){if(!API_PATH.test(path))throw new Error('Nicht öffentlicher App-Endpunkt');return API_ORIGIN+path;}
 export function publicLink(path){
