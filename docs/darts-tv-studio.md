@@ -21,7 +21,7 @@ bleibt die kompakte Ansicht mit einzeln vergrößerbaren Boards erhalten.
   mit Gruppenbild, bekannten Einzelergebnissen und Bestleistungen sichtbar.
   Der Abschlusszeitpunkt bleibt bei Aktualisierung und Neustart erhalten.
   Bereits beendete Spiele werden beim Öffnen nicht erneut gefeiert.
-- Bedienung: Maus bewegen, **B** oder **Tab**. Mannschaftsauswahl,
+- Bedienung: Menüknopf, **B** oder **Tab**. Mannschaftsauswahl,
   Kaderpräsentation, Hell/Dunkel und TV-Modus beenden sind dort erreichbar.
   Spielerprofile laufen weiterhin jeweils acht Sekunden.
 - Die Mannschaftsauswahl begrenzt die dargestellten Spiele. Bestätigte Ereignisse
@@ -31,6 +31,8 @@ bleibt die kompakte Ansicht mit einzeln vergrößerbaren Boards erhalten.
   die gewählte Mannschaft und der laufende Countdown ändern sich dadurch nicht.
 - Am Handy öffnet ausschließlich ein kleiner Menüknopf die Auswahl. „Fertig“
   oder Tippen außerhalb schließen sie; Berührungen der Spiele öffnen kein Menü.
+- Im Studio hat der Menüknopf einen eigenen Platz neben dem Sponsor. Die
+  geöffnete Bedienung sitzt über der Sponsorenleiste, auch bei mehrzeiligen Namen.
 
 Die dauerhafte serverseitige Spielüberwachung und den Start-Push beschreibt
 [Mannschaftsspiele überwachen](darts-match-watch.md).
