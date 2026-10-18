@@ -9,6 +9,7 @@ from threading import RLock
 
 TEAMS = ("A", "B", "C", "D")
 SUMMARY_SECONDS = 600
+RESULT_RETENTION_SECONDS = 60 * 86400
 WATCH_WINDOW = 8 * 3600
 FIXTURE_FIELDS = (
     "id", "home", "away", "barverTeam", "barverTeams", "barverSides", "league",
@@ -91,11 +92,12 @@ class TeamMatchWatch:
             for key, entry in list(self.entries.items()):
                 item = entry["match"]
                 planned = stamp(item.get("plannedAt"))
-                expiry = stamp(entry.get("finishedAt")) + SUMMARY_SECONDS if entry.get("finishedAt") else planned + WATCH_WINDOW
+                expiry = stamp(entry.get("finishedAt")) + RESULT_RETENTION_SECONDS if entry.get("finishedAt") else planned + WATCH_WINDOW
                 if expiry and expiry < seconds:
                     del self.entries[key]
                     continue
-                stable.append({**item, "kind": "upcoming"} if item.get("kind") == "pending" else item)
+                if not entry.get("finishedAt") or stamp(entry["finishedAt"]) + SUMMARY_SECONDS >= seconds:
+                    stable.append({**item, "kind": "upcoming"} if item.get("kind") == "pending" else item)
             self.hub.reconcile(stable)
             for key, entry in self.entries.items():
                 item, group = entry["match"], self.hub.get_group(key) or {}
@@ -104,6 +106,12 @@ class TeamMatchWatch:
                 if group.get("finished") or item.get("kind") == "final":
                     entry.setdefault("finishedAt", group.get("finishedAt") or item.get("updatedAt") or iso)
                     item["kind"] = "final"
+                    if group.get("meta", {}).get("kind") == "final" and group["meta"].get("score"):
+                        item["score"] = group["meta"]["score"]
+                    else:
+                        latest = max(boards, key=lambda board: (board.get("teamScoreHome") or 0) + (board.get("teamScoreGuest") or 0), default={})
+                        if all(isinstance(latest.get(field), int) for field in ("teamScoreHome", "teamScoreGuest")):
+                            item["score"] = f"{latest['teamScoreHome']}:{latest['teamScoreGuest']}"
                     state = "finished"
                 elif confirmed:
                     state = "interrupted" if group.get("stale") or seconds - stamp(group.get("lastSuccess")) > 120 else "live"
@@ -136,6 +144,7 @@ class TeamMatchWatch:
             priority = {"live": 0, "interrupted": 0, "waiting": 1, "finished": 2, "upcoming": 3}
             for code in TEAMS:
                 candidates = [entry for entry in self.entries.values() if code in codes(entry["match"])]
+                candidates = [entry for entry in candidates if entry["state"] != "finished" or stamp(entry.get("finishedAt")) + SUMMARY_SECONDS >= seconds]
                 entry = min(candidates, key=lambda value: (priority[value["state"]], stamp(value["match"].get("plannedAt"))), default=None)
                 group = self.hub.get_group(str(entry["match"]["id"])) if entry else None
                 teams.append({"team": code, "state": entry["state"] if entry else "idle",
@@ -154,6 +163,16 @@ class TeamMatchWatch:
     def overlay(self, payload, field="matches"):
         """Publish the same verified state to the website and Web-App APIs."""
         items = {str(item["id"]): deepcopy(item) for item in payload.get(field, [])}
+        # Ending the TV recap must not erase a verified result and resurrect a
+        # stale "upcoming" fixture. Keep results independently of live boards.
+        for key, entry in list(self.entries.items()):
+            if entry.get("finishedAt") and entry["match"].get("kind") == "final":
+                item = {**deepcopy(entry["match"]), **items.get(key, {})}
+                item.update(kind="final", finishedAt=entry["finishedAt"])
+                official = items.get(key, {})
+                if entry["match"].get("score") and not (official.get("kind") == "final" and official.get("score") and not payload.get("stale")):
+                    item["score"] = entry["match"]["score"]
+                items[key] = item
         for group in self.hub.snapshot().get("groups", []):
             key, state = group["groupKey"], group.get("watchState")
             if group.get("retired") or state not in ("waiting", "live", "interrupted", "finished"):
@@ -172,4 +191,13 @@ class TeamMatchWatch:
             elif all(isinstance(latest.get(k), int) for k in ("teamScoreHome", "teamScoreGuest")):
                 item["score"] = f"{latest['teamScoreHome']}:{latest['teamScoreGuest']}"
             items[key] = item
-        return {**payload, field: list(items.values())}
+        result = {**payload, field: list(items.values())}
+        if field == "matches" and "teams" in payload:
+            teams = deepcopy(payload["teams"])
+            for team in teams:
+                if "matches" not in team:
+                    continue
+                team["matches"] = [deepcopy(items.get(str(item["id"]), item)) for item in team["matches"]]
+                team["nextMatch"] = next((item for item in team["matches"] if item.get("kind") in ("live", "upcoming")), None)
+            result["teams"] = teams
+        return result

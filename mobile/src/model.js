@@ -29,7 +29,8 @@ export function matchesFor(season,live,team='',now=Date.now()){
     const score=m.kind!=='final'&&Number.isInteger(latest?.teamScoreHome)&&Number.isInteger(latest?.teamScoreGuest)?`${latest.teamScoreHome}:${latest.teamScoreGuest}`:m.score;
     const age=now-Math.floor(Number(latest?.lastUpdateNs)/1e6);
     const betweenBoards=boardFinished(latest)&&Number.isInteger(latest?.teamScoreHome)&&Number.isInteger(latest?.teamScoreGuest)&&latest.teamScoreHome+latest.teamScoreGuest>0&&latest.teamScoreHome+latest.teamScoreGuest<12&&age>=0&&age<600000;
-    return {...m,score,boards,liveStale:!!group?.stale,kind:m.kind==='final'||group?.finished?'final':boards.length||(!group?.retired&&betweenBoards)?'live':m.kind};
+    const elapsed=Number.isFinite(Date.parse(m.plannedAt))&&now-Date.parse(m.plannedAt)>8*3600000;
+    return {...m,score,boards,liveStale:!!group?.stale,kind:m.kind==='final'||group?.finished?'final':boards.length||(!group?.retired&&betweenBoards)?'live':elapsed&&['upcoming','live'].includes(m.kind)?'pending':m.kind};
   }).sort((a,b)=>a.plannedAt&&b.plannedAt?String(a.plannedAt).localeCompare(String(b.plannedAt)):a.plannedAt?-1:b.plannedAt?1:0);
 }
 export function liveBoardView(board,now=Date.now(),unavailable=false){

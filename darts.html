@@ -6,7 +6,12 @@
   <meta name="theme-color" content="#163c36">
   <title>SV Barver Darts</title>
   <meta name="description" content="SV Barver Darts A, B, C und D: Spielpläne, Spielberichte und Live-Ansichten gemeinsam verfolgen.">
-  <link rel="icon" href="/pics/logo.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/barver-app/icon-192.png?v=20261018-logo1">
+  <link rel="apple-touch-icon" href="/static/barver-app/apple-touch-icon.png?v=20261018-logo1">
+  <link rel="manifest" href="/app/manifest.webmanifest?v=20261018-shared1">
+  <meta name="apple-mobile-web-app-title" content="Barver Darts">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <script defer src="/static/darts-web-app.js?v=20261018-shared1"></script>
   <script>try{const t=localStorage.getItem('clubiq_darts_theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(_){}</script>
   <link rel="preload" href="/pics/sv-barver-darts-tight-512.webp" as="image" type="image/webp">
   <link rel="stylesheet" href="/static/darts.css?v=20261018-tv-start1">
@@ -22,7 +27,7 @@
   <script defer src="/static/darts-player-data.js?v=20261006-training1"></script>
   <link rel="stylesheet" href="/static/darts-team-photo.css?v=20261017-photo-names1">
   <script defer src="/static/darts-team-photo.js?v=20261017-photo-names1"></script>
-  <script defer src="/static/darts.js?v=20261018-match-watch1"></script>
+  <script defer src="/static/darts.js?v=20261018-shared1"></script>
   <script defer src="/static/darts-cms-news.js?v=20261015-reliability"></script>
 <link rel="stylesheet" href="/static/darts-typography.css?v=20261004-type1"><link rel="stylesheet" href="/static/darts-usability.css?v=20261015-reliability"><script defer src="/static/darts-article-links.js?v=20261015-reliability"></script></head>
 <body>
@@ -58,7 +63,7 @@
       <p>Wähle deine Mannschaften, Spieler und Meldungsarten. Deine Lieblingsmannschaft erscheint auf der Startseite zuerst. Diese Einstellungen gelten für dieses Gerät.</p>
       <div class="preferences-grid">
         <fieldset><legend>Mannschaften</legend><div id="pushTeams"></div></fieldset>
-        <fieldset><legend>Meldungsarten</legend><div id="pushTypes"></div></fieldset>
+        <fieldset><legend>Meldungsarten</legend><div id="pushTypes"></div><label><input type="checkbox" name="training" id="pushTraining"> Vereinstraining verfolgen</label></fieldset>
         <fieldset><legend>Spieler auswählen</legend><p id="playerOptionsStatus">Spieler werden geladen …</p><div id="pushPlayers" class="player-options"></div></fieldset>
       </div>
       <button type="submit">Einstellungen speichern</button><span id="preferencesStatus" role="status"></span>

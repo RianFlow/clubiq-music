@@ -128,7 +128,16 @@ class MatchWatchTests(unittest.TestCase):
         self.assertEqual(restored.get_group("1657285")["summaryUntil"], group["summaryUntil"])
         self.now += timedelta(seconds=481)
         second_watch.poll()
-        self.assertEqual(second_watch.overlay({"matches": []})["matches"], [])
+        result = second_watch.overlay({"matches": []})["matches"][0]
+        self.assertEqual(result["kind"], "final")
+        self.assertEqual(result["score"], "4:8")
+        self.assertEqual(second_watch.status()["teams"][1]["state"], "idle")
+        stale = second_watch.overlay({"matches": [self.fixture]})["matches"][0]
+        self.assertEqual(stale["kind"], "final", "an old schedule cannot resurrect a completed game")
+        self.assertEqual(stale["score"], "4:8")
+        team = second_watch.overlay({"matches": [self.fixture], "teams": [{"code": "B", "matches": [self.fixture]}]})["teams"][0]
+        self.assertEqual(team["matches"][0]["kind"], "final")
+        self.assertIsNone(team["nextMatch"])
 
     def test_normal_days_do_not_refresh_the_schedule_every_ten_seconds(self):
         self.fixture["plannedAt"] = (self.now + timedelta(days=2)).isoformat()
