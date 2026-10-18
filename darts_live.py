@@ -317,7 +317,7 @@ class DartsLiveHub:
             meta = {
                 key: item.get(key) for key in (
                     "id", "home", "away", "barverTeam", "barverTeams", "barverSides", "league",
-                    "competitionBadge", "plannedAt", "url", "score", "updatedAt", "kind",
+                    "competitionBadge", "plannedAt", "url", "score", "updatedAt", "kind", "homeVenue", "awayVenue",
                 )
             }
             if item.get("kind") == "final":
@@ -340,6 +340,8 @@ class DartsLiveHub:
                     continue
                 group["meta"] = {**(group.get("meta") or {}), **meta}
                 group["finished"] = True
+                group["retired"] = False
+                group.setdefault("finishedAt", meta.get("updatedAt") or now.isoformat())
                 group["finalizedBySeason"] = True
                 group["connected"] = False
                 group["source"] = "season"
@@ -473,6 +475,8 @@ class DartsLiveHub:
                         "occurred_at": latest_final.get("lastUpdate"), "finalOnly": clinched_before,
                         "event_id": _event_id(group_key, "match-final", home_score, guest_score),
                     })
+            if group["finished"]:
+                group.setdefault("finishedAt", group.get("lastUpdate") or now)
             if changed:
                 self._revision += 1
                 group["revision"] = self._revision
@@ -510,10 +514,42 @@ class DartsLiveHub:
     def _public_group(self, group: dict) -> dict:
         result = {key: group.get(key) for key in (
             "groupKey", "database", "meta", "connected", "source", "stale", "finished", "lastUpdate",
-            "lastSuccess", "lastError", "revision", "retired",
+            "lastSuccess", "lastError", "revision", "retired", "watchState", "finishedAt", "summaryUntil",
         )}
         result["matches"] = sorted(group["matches"].values(), key=lambda item: (item.get("board") or "", item["matchKey"]))
         return result
+
+    def restore_snapshot(self, snapshot: dict) -> None:
+        """Restore a public baseline without replaying any transition events."""
+        with self._lock:
+            for saved in snapshot.get("groups", []):
+                key = str(saved.get("groupKey") or "")
+                if not key.isdigit() or key in self._groups or not isinstance(saved.get("meta"), dict):
+                    continue
+                group = self._empty_group(key, saved["meta"])
+                group.update({field: saved[field] for field in ("finished", "lastUpdate", "lastSuccess", "finishedAt", "summaryUntil") if saved.get(field) is not None})
+                group["matches"] = {board["matchKey"]: board for board in saved.get("matches", [])
+                                    if board.get("groupKey") == key and isinstance(board.get("matchKey"), str)}
+                group["observedSnapshot"] = True
+                group["clinchNotified"] = any(max(board.get("teamScoreHome") or 0, board.get("teamScoreGuest") or 0) >= 7 for board in group["matches"].values())
+                group["stale"] = True
+                group["source"] = "last-known"
+                self._groups[key] = group
+
+    def set_watch_state(self, group_key: str, state: str, finished_at: str | None = None) -> None:
+        with self._lock:
+            group = self._groups.get(group_key)
+            if not group:
+                return
+            previous = (group.get("watchState"), group.get("finishedAt"))
+            group["watchState"] = state
+            if finished_at:
+                group["finishedAt"] = finished_at
+                group["summaryUntil"] = datetime.fromtimestamp(timestamp_ns(finished_at) / 1e9 + 600, timezone.utc).isoformat()
+            if previous != (group.get("watchState"), group.get("finishedAt")):
+                self._revision += 1
+                group["revision"] = self._revision
+                self._broadcast({"type": "live-status", "revision": self._revision, "group": self._public_group(group)})
 
     def snapshot(self) -> dict:
         with self._lock:
@@ -585,6 +621,10 @@ class _GroupConnector:
         self.hub.apply(self.group_key, matches, "rest")
         return bool(matches)
 
+    def _rest_interval(self) -> int:
+        group = self.hub.get_group(self.group_key) or {}
+        return REST_FALLBACK_SECONDS if any(not board.get("comingSoon") for board in group.get("matches", [])) else 30
+
     def _sockjs_url(self) -> str:
         server = f"{random.SystemRandom().randrange(1000):03d}"
         session = secrets.token_urlsafe(8).replace("-", "a").replace("_", "b")[:8]
@@ -626,8 +666,15 @@ class _GroupConnector:
             self._rest_sync()  # Fill any gap between the initial request and subscription.
             self.hub.set_connection(self.group_key, True)
             last_heartbeat = time.monotonic()
-            next_rest_sync = last_heartbeat + REST_FALLBACK_SECONDS
+            next_rest_sync = last_heartbeat + self._rest_interval()
             while not self._stop.is_set() and not self.hub.group_finished(self.group_key):
+                # Heartbeats or unrelated frames must not starve the safety check.
+                if time.monotonic() >= next_rest_sync:
+                    try:
+                        self._rest_sync()
+                    except (requests.RequestException, ValueError):
+                        pass
+                    next_rest_sync = time.monotonic() + self._rest_interval()
                 try:
                     message = ws.recv()
                 except Exception as exc:
@@ -641,7 +688,7 @@ class _GroupConnector:
                                 self._rest_sync()
                             except (requests.RequestException, ValueError):
                                 pass
-                            next_rest_sync = current_time + REST_FALLBACK_SECONDS
+                            next_rest_sync = current_time + self._rest_interval()
                         if current_time - last_heartbeat >= 10:
                             self._sockjs_send(ws, "\n")
                             last_heartbeat = current_time
@@ -668,6 +715,7 @@ class _GroupConnector:
             self.hub.set_connection(self.group_key, False)
 
     def _run(self) -> None:
+        failures = 0
         try:
             while not self._stop.is_set():
                 try:
@@ -680,7 +728,9 @@ class _GroupConnector:
                         break
                 except (requests.RequestException, ValueError, RuntimeError, OSError, _WEBSOCKET_ERROR) as exc:
                     self.hub.set_connection(self.group_key, False, type(exc).__name__)
-                    if self._stop.wait(REST_FALLBACK_SECONDS if websocket is None else RECONNECT_SECONDS):
+                    failures += 1
+                    delay = self._rest_interval() if websocket is None else min(30, RECONNECT_SECONDS * 2 ** min(failures - 1, 3))
+                    if self._stop.wait(delay):
                         break
                     try:
                         self._rest_sync()

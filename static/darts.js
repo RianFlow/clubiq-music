@@ -28,7 +28,7 @@ function dartsTableRank(entry) {
 function dartsSeasonRanks(data) {
   return {...data,teams:(data.teams||[]).map(team=>({...team,rank:dartsTableRank(team)}))};
 }
-const DARTS_EVENT_LABELS = {'180':'180er',high_finish:'High Finishes',leg:'Gewonnene und verlorene Legs',game:'Siege und Niederlagen in Einzel- und Doppelpartien',match:'Gesamtergebnisse'};
+const DARTS_EVENT_LABELS = {'180':'180er',high_finish:'High Finishes',leg:'Gewonnene und verlorene Legs',game:'Siege und Niederlagen in Einzel- und Doppelpartien',match:'Gesamtergebnisse',match_start:'Mannschaftsspiel beginnt'};
 function dartsHighlightIdentity(item) {
   const team=/^[A-D]$/.test(item.team||'')?item.team:dartsTeamCode(item.team||'');
   if(item.gameId!=null&&['leg','game'].includes(item.type))return JSON.stringify([item.matchId,item.type,String(item.gameId),team,item.type==='leg'?item.winnerSide:'',item.type==='leg'?item.legCount:item.homeLegs,item.type==='leg'?'':item.awayLegs]);
@@ -876,12 +876,14 @@ function initDarts() {
     if (!group?.groupKey) return null;
     const matchId=Number(group.meta?.id || group.groupKey);
     const existing=(tickerData.items||[]).find(entry=>entry.id===matchId);
-    if (group.stale) return existing || null;
-    if(!group.finished&&!dartsLiveGroupActive(group))return existing || null;
+    if(group.retired)return existing || null;
+    const watching=['waiting','live','interrupted'].includes(group.watchState);
+    if (group.stale&&!watching&&!group.finished) return existing || null;
+    if(!group.finished&&!dartsLiveGroupActive(group)&&!watching)return existing || null;
     if(existing?.kind==='final'&&!group.finished)return existing;
     const latest=(group.matches || []).slice().sort((a,b)=>(b.lastUpdateNs||0)-(a.lastUpdateNs||0))[0];
     let item=(tickerData.items || []).find(entry=>entry.id===matchId);
-    if (!item && group.meta && !group.finished) {
+    if (!item && group.meta) {
       item={
         id:matchId,
         home:group.meta.home || 'Heim',
@@ -907,7 +909,10 @@ function initDarts() {
       if(group.finished&&finalEvent)item.score=finalEvent.score;
       else if (!keepFinal&&group.finished&&group.meta?.score) item.score=group.meta.score;
       else if (!keepFinal&&latest&&Number.isInteger(latest.teamScoreHome)&&Number.isInteger(latest.teamScoreGuest)) item.score=`${latest.teamScoreHome}:${latest.teamScoreGuest}`;
-      item.kind=group.finished?'final':'live'; item.updatedAt=group.lastUpdate || item.updatedAt;
+      item.kind=group.finished?'final':group.watchState==='waiting'?'upcoming':'live'; item.updatedAt=group.lastUpdate || item.updatedAt;
+      item.finishedAt=group.finishedAt;item.summaryUntil=group.summaryUntil;item.watchState=group.watchState;
+      item.liveFeedDelayed=group.watchState==='interrupted';
+      if(group.finished)item.resultGames=(group.matches||[]).filter(dartsLiveGameFinished).map(board=>({id:board.matchKey,homeName:board.home?.name,awayName:board.guest?.name,homeLegs:board.home?.legs,awayLegs:board.guest?.legs,home:board.home,away:board.guest}));
       item.text=`${item.home} ${item.score || '–'} ${item.away}`;
     }
     return item;
@@ -915,7 +920,7 @@ function initDarts() {
   function applyServerLiveGroup(group) {
     if (!group?.groupKey) return;
     serverLiveGroups.set(String(group.groupKey),group);
-    if (group.stale) {renderToday(tickerData);updateFreshness(true);return;}
+    if (group.stale&&!group.watchState&&!group.finished) {renderToday(tickerData);updateFreshness(true);return;}
     const moments=!demoLive&&Array.isArray(group.events)?group.events.map(dartsLiveMoment).filter(Boolean):[];
     if(moments.length){const merged=new Map([...recentHighlights,...moments].map(moment=>[dartsHighlightIdentity(moment),moment]));recentHighlights=[...merged.values()].sort((a,b)=>Date.parse(b.occurredAt||0)-Date.parse(a.occurredAt||0)).slice(0,60);}
     const serverCenters=[...serverLiveGroups.values()].filter(entry=>dartsLiveGroupActive(entry)).map(liveGroupAsCenter);
@@ -999,7 +1004,8 @@ function initDarts() {
     const live = tvActive ? liveAll.filter(item=>(item.barverTeams || [barverTeam(item)]).filter(Boolean).some(code=>tvTeams.has(code))) : liveAll;
     const upcoming = wanted.filter(item=>item.kind==='upcoming');
     const finals = wanted.filter(item=>item.kind==='final');
-    const shown = tvActive ? live : live.slice(0,1);
+    const recaps=tvActive&&window.DartsTvStudio?finals.filter(item=>(item.barverTeams||[barverTeam(item)]).some(code=>tvTeams.has(code))&&window.DartsTvStudio.summaryUntil(item)>Date.now()):[];
+    const shown = tvActive ? [...live,...recaps] : live.slice(0,1);
     if(tvActive&&window.DartsTvStudio&&(window.matchMedia('(min-width:651px)').matches||!live.length)){
       target.hidden=false;target.dataset.liveCount=String(live.length);
       window.DartsTvStudio.render({container:target,selected:[...tvTeams],items,playerNode:matchPlayerNode,openMatch,exitTv,openPlayer:(member,code)=>openPlayerProfile(member,teamByCode(code)||{code,name:`SV Barver Darts ${code}`}),locationForMatch:item=>appointmentLocation({kind:'match',match:currentFixtures().find(row=>row.id===item.id)||item}),models:live.map(item=>{
@@ -1009,6 +1015,7 @@ function initDarts() {
       })});return;
     }
     window.DartsTvStudio?.close();
+    window.DartsTvStudio?.compactControls(tvActive);
     target.hidden=!shown.length&&!appTv;
     target.dataset.liveCount=String(shown.length);
     const today = new Date().toLocaleDateString('de-DE');
@@ -1020,6 +1027,7 @@ function initDarts() {
     if (!shown.length) {target.replaceChildren();if(appTv){const empty=document.createElement('p');empty.className='panel-loading app-tv-empty';empty.textContent='Für deine Mannschaftsauswahl läuft gerade keine Begegnung. Sobald eine Partie beginnt, erscheint sie hier automatisch.';target.append(empty);}return;}
     const fragment=document.createDocumentFragment();
     for (const item of shown) {
+      if(item.kind==='final'&&tvActive&&window.DartsTvStudio){const card=document.createElement('article');card.className='today-game tv-mobile-result';card.dataset.matchId=item.id;card.append(window.DartsTvStudio.summaryCard(item));const report=document.createElement('button');report.type='button';report.textContent='Spielbericht öffnen';report.addEventListener('click',()=>openMatch(item.id));card.append(report);fragment.append(card);continue;}
       const card=document.createElement('article'); card.className=`today-game ${item.kind}`;
       const code=barverTeam(item); const badge=document.createElement('b'); badge.textContent=item.kind==='live'?'LIVE':item.kind==='final'?'ERGEBNIS':item.isSpecial?competitionLabel(item):'NÄCHSTES SPIEL';
       const team=document.createElement('span'); team.className='today-team';
@@ -2606,7 +2614,7 @@ function initDarts() {
   let tvChoicesLoaded=false;
   async function loadTvChoices(){if(tvChoicesLoaded)return;try{const response=await fetch('/api/v1/darts/ranking');if(!response.ok)throw new Error();const data=await response.json();const group=document.createElement('optgroup');group.label=data.name;for(const event of [...data.events].sort((a,b)=>Date.parse(b.start)-Date.parse(a.start))){const option=document.createElement('option');option.value=event.id;option.textContent=event.name;group.append(option);}q('#tvTournamentChoice').append(group);tvChoicesLoaded=true;}catch(_){q('#tvLauncherNote').textContent='Das aktuelle Vereinsturnier ist verfügbar. Die DBD-Runden konnten gerade nicht geladen werden.';}}
   q('#fullscreen').addEventListener('click',()=>{if(appTv||document.fullscreenElement){exitTv();return;}q('#tvTeamChoice').value=favorite;q('#tvLauncher').showModal();loadTvChoices();});
-  if(appTv){q('#fullscreen').textContent=tvReturnLabel;q('#tvTeamControls').prepend(q('#liveDataStatus'));q('.darts-header .brand').href=tvHome;}
+  if(appTv){q('#fullscreen').textContent=tvReturnLabel;if(!q('#liveDataStatus').classList.contains('tv-compact-status'))q('#tvTeamControls').prepend(q('#liveDataStatus'));q('.darts-header .brand').href=tvHome;}
   q('#closeTvLauncher').addEventListener('click',()=>q('#tvLauncher').close());
   q('#tvLauncherForm').addEventListener('change',()=>{const tournament=q('#tvLauncherForm input[name="tvType"]:checked').value==='tournament';q('#tvTeamField').hidden=tournament;q('#tvTournamentField').hidden=!tournament;});
   function openWindowTv(){const url=new URL('/app/live',location.origin);url.searchParams.set('teams',[...tvTeams].join(','));url.searchParams.set('appTheme',document.documentElement.dataset.theme==='dark'?'dark':'light');url.searchParams.set('return','website');location.assign(url.href);}

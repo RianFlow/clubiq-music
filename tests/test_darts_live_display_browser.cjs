@@ -200,6 +200,8 @@ const server=http.createServer((req,res)=>{
     assert.equal(await mixedPortraits.first().getAttribute('alt'),'Vereinslogo für Max Lowak','failed victory photos retain their slot with the crest');
     await page.waitForFunction(()=>[...document.querySelectorAll('.darts-broadcast-card img')].every(img=>img.naturalWidth>0));
     await page.locator('.darts-broadcast-card.type-game').waitFor({state:'detached'});
+    assert.equal(await page.locator('#tvTeamControls').isVisible(),false,'team selection is tucked into the compact menu');
+    await page.getByRole('button',{name:'Bedienung',exact:true}).click();
     await page.getByRole('button',{name:'Alle',exact:true}).click();
     await page.locator('#tvTeamControls [data-tv-team="B"]').click();
     await page.locator('#todayGrid .app-tv-empty').waitFor();

@@ -17,11 +17,23 @@ bleibt die kompakte Ansicht mit einzeln vergrößerbaren Boards erhalten.
   Einzel-, Doppel- und Mannschaftsergebnisse erscheinen acht Sekunden.
   Siege ganzer Partien erhalten zusätzlich eine kurze Animation; Niederlagen
   bleiben kleine Hinweise. Andere Mannschaftsfelder bleiben sichtbar.
-- Ein gerade beendetes Mannschaftsspiel bleibt bis zu 90 Sekunden als Ergebnis
-  sichtbar. Bereits beendete Spiele werden beim Öffnen nicht erneut gefeiert.
+- Ein gerade beendetes Mannschaftsspiel bleibt zehn Minuten als Zusammenfassung
+  mit Gruppenbild, bekannten Einzelergebnissen und Bestleistungen sichtbar.
+  Der Abschlusszeitpunkt bleibt bei Aktualisierung und Neustart erhalten.
+  Bereits beendete Spiele werden beim Öffnen nicht erneut gefeiert.
 - Bedienung: Maus bewegen, **B** oder **Tab**. Mannschaftsauswahl,
   Kaderpräsentation, Hell/Dunkel und TV-Modus beenden sind dort erreichbar.
   Spielerprofile laufen weiterhin jeweils acht Sekunden.
+- Die Mannschaftsauswahl begrenzt die dargestellten Spiele. Bestätigte Ereignisse
+  anderer Barver-Mannschaften werden trotzdem eingeblendet, bei fehlendem
+  Mannschaftsfeld als übergreifende Grafik. Spielerbilder, Doppelpaarungen und
+  Mannschaftsfotos bleiben dabei erhalten. Mehrere Siege laufen nacheinander;
+  die gewählte Mannschaft und der laufende Countdown ändern sich dadurch nicht.
+- Am Handy öffnet ausschließlich ein kleiner Menüknopf die Auswahl. „Fertig“
+  oder Tippen außerhalb schließen sie; Berührungen der Spiele öffnen kein Menü.
+
+Die dauerhafte serverseitige Spielüberwachung und den Start-Push beschreibt
+[Mannschaftsspiele überwachen](darts-match-watch.md).
 
 `static/darts-tv-studio.js` erhält ausschließlich die bereits geladenen Daten
 aus `static/darts.js`; es öffnet keine zusätzliche 3K- oder API-Verbindung.

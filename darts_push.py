@@ -53,6 +53,9 @@ def _event_identity(league: str, event: dict) -> tuple[str, str] | None:
         identity = f"{event.get('performanceId') or event.get('player')}|{event.get('value')}|{event.get('count')}"
     elif event_type == "leg":
         identity = f"{event.get('gameId')}|{event.get('winnerSide')}|{event.get('legCount')}"
+    elif event_type == "match_start":
+        # Stable across transports, reconnects and server restarts; separate for derbies.
+        return event_type, f"match-start|{match_id}|{event.get('team')}"
     elif event_type == "player_start":
         if not event.get("gameId") or not event.get("player"):
             return None
@@ -79,7 +82,11 @@ def barver_push_event(league: str, event: dict) -> dict | None:
     match_id = event["matchId"]
     player = str(event.get("player") or team_name).strip()[:100]
     count = event.get("count") if isinstance(event.get("count"), int) and event.get("count") > 0 else 1
-    if event_type == "player_start":
+    if event_type == "match_start":
+        title = f"🎯 Barver {team_match.group(1)} spielt jetzt!"
+        body = f"{event.get('home') or 'Heim'} gegen {event.get('away') or 'Gast'} – jetzt live verfolgen."[:220]
+        tag = f"clubiq-match-start-{match_id}-{team_match.group(1)}"
+    elif event_type == "player_start":
         title = f"🎯 {player} startet"
         board = str(event.get("board") or "").strip()[:20]
         body = f"{team_name}" + (f" · Board {board}" if board else "") + " · Partie ist jetzt live"
@@ -120,7 +127,7 @@ def barver_push_event(league: str, event: dict) -> dict | None:
         **({key: event[key] for key in ("winnerSide", "legCount", "homeLegs", "awayLegs", "barverWon") if key in event and isinstance(event[key], (int, bool, str))}),
         "title": title,
         "body": body,
-        "url": "https://barverdarts.clubiq.party/",
+        "url": f"https://barverdarts.clubiq.party/app/?match={match_id}" if event_type == "match_start" else "https://barverdarts.clubiq.party/",
         "tag": tag,
     }
 
@@ -182,7 +189,7 @@ def push_payload(event: dict) -> str:
     )
 
 
-PUSH_EVENT_TYPES = {"180", "high_finish", "leg", "game", "match", "player_start"}
+PUSH_EVENT_TYPES = {"180", "high_finish", "leg", "game", "match", "player_start", "match_start"}
 
 
 def subscription_matches(event: dict, teams: list, players: list, event_types: list, training: bool = False) -> bool:
