@@ -20,7 +20,12 @@ const server=http.createServer((req,res)=>{
   if(p==='/api/v1/darts/training')return json(res,payload(Number(url.searchParams.get('event_id')||33228)));
   const file=path.resolve(root,'.'+(['/training','/app/training'].includes(p)?'/turnier.html':p));
   if(!file.startsWith(root+path.sep)){res.writeHead(403).end();return;}
-  fs.readFile(file,(error,body)=>res.writeHead(error?404:200,{'Content-Type':({'.html':'text/html','.js':'text/javascript','.css':'text/css','.webp':'image/webp','.png':'image/png'})[path.extname(file)]||'application/octet-stream'}).end(error?'':body));
+  fs.readFile(file,(error,body)=>{
+    // Keep automatic polling in the existing training test; this fixture drives
+    // source observations itself, after Playwright's clock has been installed.
+    if(!error&&path.extname(file)==='.html')body=Buffer.from(body.toString().replace('<head>','<head><script>window.setInterval=()=>0;</script>'));
+    res.writeHead(error?404:200,{'Content-Type':({'.html':'text/html','.js':'text/javascript','.css':'text/css','.webp':'image/webp','.png':'image/png'})[path.extname(file)]||'application/octet-stream'}).end(error?'':body);
+  });
 });
 (async()=>{
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -28,9 +33,6 @@ const server=http.createServer((req,res)=>{
   try{
     const page=await browser.newPage({viewport:{width:1920,height:1080}}),errors=[];
     page.on('pageerror',error=>errors.push(error.message));await page.route('https://**',route=>route.abort());
-    // Existing training tests cover polling. Drive observations explicitly here,
-    // so interval requests cannot race the fixture changes and toast expiry.
-    await page.addInitScript(()=>{window.setInterval=()=>0;});
     await page.clock.install({time:new Date('2026-10-20T18:00:00Z')});await page.goto(origin+'/training?tv=1');
     await page.locator('.player-average').filter({hasText:'AVG 48,2'}).first().waitFor();
     await page.waitForFunction(()=>!busy&&!trainingSearchBusy);
@@ -45,7 +47,7 @@ const server=http.createServer((req,res)=>{
     assert.match(await page.locator('#trainingHighlightCards').innerText(),/18 Darts/);
     // Repeat the same source observation after the toast expires: no replay.
     await page.clock.runFor(15010);await page.waitForFunction(()=>!busy);await page.evaluate(()=>refresh());assert.equal(await page.locator('#highlight').isVisible(),false);
-    stale=true;step=2;await page.evaluate(()=>refresh());assert.equal(await page.locator('#highlight').isVisible(),false);assert.equal(await page.locator('#trainingHighlightsState').innerText(),'Letzter bekannter Stand');
+    stale=true;step=2;await page.evaluate(()=>refresh());assert.equal(await page.locator('#highlight').isVisible(),false,await page.locator('#highlight').innerText());assert.equal(await page.locator('#trainingHighlightsState').innerText(),'Letzter bekannter Stand');
     stale=false;partial=true;await page.evaluate(()=>refresh());assert.equal(await page.locator('#trainingHighlightCards article').count(),3,'a partial refresh keeps known official highlights');
     assert.equal(await page.locator('#trainingHighlightsState').innerText(),'Letzter bekannter Stand');partial=false;
     await page.locator('#showTrainingHighlights').click();assert.equal(await page.locator('#view').inputValue(),'performances');assert.equal(await page.locator('#trainingHighlights').isVisible(),false);
