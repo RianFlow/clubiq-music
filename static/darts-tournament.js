@@ -16,6 +16,7 @@ let panelState={};try{const saved=JSON.parse(localStorage.getItem(panelStorage)|
 document.body.classList.toggle('tv',tv);document.body.classList.toggle('demo',demo);
 function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
 function average(value){return typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=180?value.toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1}):'–';}
+function highlightClass(label){return 'training-highlight achievement-'+(label==='180er'?'180':label.includes('Finish')?'finish':'shortgame');}
 function savePanels(){try{localStorage.setItem(panelStorage,JSON.stringify(panelState));}catch(_){}}
 function displayPanels(){
   const displayOpen=panelState.display!==false,highlightsOpen=panelState.highlights!==false;
@@ -37,14 +38,15 @@ function boardHighlightsView(match){
   const root=node('div',undefined,'board-highlights'),entry=boardHighlights.get(match.id);
   root.append(node('small','Highlights im Spiel','board-highlights-label'));
   if(entry&&entry.expiresAt>Date.now()){
-    const notice=node('strong',entry.text,'board-highlight-notice'+(entry.animate?' is-new':''));notice.title=entry.text;entry.animate=false;root.append(notice);
+    const type=entry.text.startsWith('180 geworfen!')?'180':entry.text.startsWith('High Finish')?'finish':'other';
+    const notice=node('strong',entry.text,'board-highlight-notice achievement-'+type+(entry.animate?' is-new':''));notice.title=entry.text;entry.animate=false;root.append(notice);
   }else{
     const counters=node('div',undefined,'board-highlight-counters');
     // Live counters belong to this match, not necessarily to its current leg.
     // Training-wide performances cannot safely be assigned to an individual board.
     for(const [name,side]of[[match.home,match.live?.home],[match.away,match.live?.guest]]){
-      const values=[];if(Number.isInteger(side?.count180)&&side.count180>0)values.push(`${side.count180} × 180`);if(Number.isFinite(side?.highFinish)&&side.highFinish>=100)values.push(`HF ${side.highFinish}`);
-      if(values.length){const chip=node('span',undefined,'board-highlight-counter');chip.title=`${name}: ${values.join(' · ')}`;chip.append(node('span',name,'board-highlight-name'),node('strong',values.join(' · ')));counters.append(chip);}
+      const values=[];if(Number.isInteger(side?.count180)&&side.count180>0)values.push({text:`${side.count180} × 180`,type:'180'});if(Number.isFinite(side?.highFinish)&&side.highFinish>=100)values.push({text:`HF ${side.highFinish}`,type:'finish'});
+      if(values.length){const chip=node('span',undefined,'board-highlight-counter');chip.title=`${name}: ${values.map(value=>value.text).join(' · ')}`;chip.append(node('span',name,'board-highlight-name'));for(const value of values)chip.append(node('strong',value.text,'achievement-score achievement-'+value.type));counters.append(chip);}
     }
     root.append(counters.childElementCount?counters:node('span',match.live?'Noch keine Bestleistungen gemeldet.':'Highlights warten auf 3K-Daten.','board-highlight-empty'));
   }
@@ -84,7 +86,7 @@ function renderHighlights(sidebar){
   if(shorts.length)cards.push([shorts[0].type==='SGD'?'Shortgame im Doppel':'Shortgame',`${shorts[0].value} Darts`,shorts[0].name]);
   root.hidden=!trainingPage||!cards.length||['performances','placement','summary'].includes(q('#view').value);q('#trainingHighlightCards').replaceChildren();
   q('#trainingHighlightsState').textContent=data?.stale||data?.performancesUnavailable?'Letzter bekannter Stand':'Offizielle Bestleistungen';
-  for(const[label,value,name]of cards){const item=node('article',undefined,'training-highlight');item.append(node('span',label,'highlight-label'),node('strong',value,'highlight-value'),node('span',name,'highlight-player'));q('#trainingHighlightCards').append(item);}
+  for(const[label,value,name]of cards){const item=node('article',undefined,highlightClass(label));item.append(node('span',label,'highlight-label'),node('strong',value,'highlight-value'),node('span',name,'highlight-player'));q('#trainingHighlightCards').append(item);}
 }
 function trainingSummary(state){
   const root=node('section',undefined,'training-summary'),head=node('div',undefined,'summary-head'),intro=node('div');
@@ -97,7 +99,7 @@ function trainingSummary(state){
   const highlights=node('section',undefined,'summary-highlights');highlights.append(node('h3','Bestleistungen'));
   if(data.performancesUnavailable)highlights.append(node('p','Bestleistungen werden erneut geladen. Angezeigt wird der letzte bekannte Stand.','summary-status'));
   const cards=node('div',undefined,'training-highlight-cards');
-  for(const item of window.DartsTrainingSummary.highlights(data)){const card=node('article',undefined,'training-highlight');card.append(node('span',item.label,'highlight-label'),node('strong',item.value,'highlight-value'),node('span',item.name,'highlight-player'));cards.append(card);}
+  for(const item of window.DartsTrainingSummary.highlights(data)){const card=node('article',undefined,highlightClass(item.label));card.append(node('span',item.label,'highlight-label'),node('strong',item.value,'highlight-value'),node('span',item.name,'highlight-player'));cards.append(card);}
   highlights.append(cards.childElementCount?cards:node('p',data.performancesUnavailable?'Noch keine Bestleistungen verfügbar.':'Noch keine Bestleistungen von 3K gemeldet.','summary-status'));root.append(highlights);
   const columns=node('div',undefined,'summary-columns'),results=node('section',undefined,'summary-panel');results.append(node('h3','Zuletzt entschieden'));
   const matches=sorted('final');for(const match of matches.slice(0,tv?6:12)){const row=node('div',undefined,'summary-result');row.append(node('span',match.home),node('strong',`${match.homeLegs??'–'} : ${match.awayLegs??'–'}`),node('span',match.away));results.append(row);}
