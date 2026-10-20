@@ -12,11 +12,12 @@ if(trainingPage){
 let tv=initialTv,data=null,page=0,groupIndex=0,groupPage=0,alternateTable=false,busy=false,previous=new Map(),initialized=false,highlightTimer,demoPaused=false,demoTick=0;
 document.body.classList.toggle('tv',tv);document.body.classList.toggle('demo',demo);
 function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
+function average(value){return typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=180?value.toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1}):'–';}
 function sorted(kind){return(data?.matches||[]).filter(m=>m.kind===kind).sort((a,b)=>kind==='final'?String(b.updatedAt).localeCompare(String(a.updatedAt)):String(a.board).localeCompare(String(b.board),'de',{numeric:true})||a.id-b.id);}
 function card(m){
   const n=node('article',undefined,'board'),head=node('div',undefined,'board-head');
   head.append(node('strong',m.board?`Board ${m.board}`:'Board noch offen'),node('span',m.kind==='live'?'LIVE':m.kind==='final'?'ENDSTAND':m.round||m.phase,m.kind==='live'?'live-badge':''));n.append(head);
-  for(const[i,name,side]of[[0,m.home,m.live?.home],[1,m.away,m.live?.guest]]){const row=node('div',undefined,'player'+(m.live?.currentPlayerIndex===i?' throwing':'')),stats=node('span',undefined,'player-live');stats.append(node('strong',side?.points??'–','points'));if(Number.isInteger(side?.darts))stats.append(node('small',`${side.darts} Darts`,'darts-count'));row.append(node('span',name),stats);n.append(row);}
+  for(const[i,name,side]of[[0,m.home,m.live?.home],[1,m.away,m.live?.guest]]){const row=node('div',undefined,'player'+(m.live?.currentPlayerIndex===i?' throwing':'')),identity=node('span',undefined,'player-identity'),stats=node('span',undefined,'player-live');identity.append(node('span',name,'player-name'));if(m.kind==='live'){const avg=node('small',`AVG ${average(side?.average)}`,'player-average');avg.title='3-Dart-Average im gesamten Spiel';identity.append(avg);}stats.append(node('strong',side?.points??'–','points'));if(Number.isInteger(side?.darts))stats.append(node('small',`${side.darts} Darts`,'darts-count'));row.append(identity,stats);n.append(row);}
   n.append(node('div',`Legs ${m.live?.home?.legs??m.homeLegs??'–'} : ${m.live?.guest?.legs??m.awayLegs??'–'}`,'legs'));
   if(m.kind==='live'&&!m.live)n.append(node('small','Aktuelle Leg-Punkte noch nicht von 3K verfügbar.'));return n;
 }
@@ -34,10 +35,25 @@ function currentGroup(){
   q('#groupPosition').textContent=group?`Gruppe ${groupIndex+1} von ${groups.length}${pages>1?` · Tabellen-Seite ${groupPage+1}/${pages}`:''}${q('#rotate').checked?' · Wechsel alle 20 Sek.':''}`:'';return group;
 }
 function groupOptions(){const select=q('#groupChoice'),keep=select.value;select.replaceChildren(Object.assign(node('option','Alle Gruppen · wechselnd'),{value:'auto'}));for(const g of data.groups||[])select.append(Object.assign(node('option',g.name),{value:g.id}));select.value=[...select.options].some(o=>o.value===keep)?keep:'auto';}
+function renderHighlights(sidebar){
+  const root=q('#trainingHighlights');if(!root)return;
+  const inSidebar=tv&&sidebar&&matchMedia('(min-width:1101px)').matches;
+  root.classList.toggle('in-sidebar',inSidebar);
+  if(inSidebar){if(root.parentElement!==q('#groupSidebar'))q('#groupSidebar').prepend(root);}else if(root.parentElement!==q('main'))q('main').insertBefore(root,q('#notice'));
+  const rows=(data?.performances||[]).filter(row=>typeof row.name==='string'&&Number.isFinite(row.value)&&row.value>0),cards=[];
+  const highs=rows.filter(row=>row.type==='HS'&&row.value===180),finishes=rows.filter(row=>row.type==='HF'&&row.value<=170).sort((a,b)=>b.value-a.value),shorts=rows.filter(row=>['SG','SGD'].includes(row.type)).sort((a,b)=>a.value-b.value);
+  if(highs.length){const total=highs.reduce((sum,row)=>sum+(Number.isInteger(row.count)&&row.count>0?row.count:1),0);cards.push(['180er',`${total} × 180`,highs.length===1?highs[0].name:`${highs[0].name} u. a.`]);}
+  if(finishes.length)cards.push(['High Finish',String(finishes[0].value),finishes[0].name]);
+  if(shorts.length)cards.push([shorts[0].type==='SGD'?'Shortgame im Doppel':'Shortgame',`${shorts[0].value} Darts`,shorts[0].name]);
+  root.hidden=!trainingPage||!cards.length||['performances','placement'].includes(q('#view').value);q('#trainingHighlightCards').replaceChildren();
+  q('#trainingHighlightsState').textContent=data?.stale||data?.performancesUnavailable?'Letzter bekannter Stand':'Offizielle Bestleistungen';
+  for(const[label,value,name]of cards){const item=node('article',undefined,'training-highlight');item.append(node('span',label,'highlight-label'),node('strong',value,'highlight-value'),node('span',name,'highlight-player'));q('#trainingHighlightCards').append(item);}
+}
 function render(){
   if(!data)return;const kind=q('#view').value,size=Number(q('#pageSize').value),groups=data.groups||[];
   const tablesOnly=kind==='groups'||(tv&&kind==='live'&&q('#tableMode').value==='alternate'&&alternateTable),sidebar=!tablesOnly&&!['participants','performances','placement'].includes(kind)&&q('#tableMode').value==='sidebar';
   q('#stage').classList.toggle('with-sidebar',sidebar);q('#groupSidebar').hidden=!sidebar;q('#boards').classList.toggle('tables-only',tablesOnly);document.body.classList.toggle('compact',tv&&(size>=12||sidebar));q('#boards').replaceChildren();
+  renderHighlights(sidebar);
   document.body.classList.toggle('many-boards',tv&&size>=12);
   const group=currentGroup();q('#groupTable').replaceChildren(group?table(group,groupPage,true):node('p','Gruppen und Tabellen erscheinen hier, sobald 3K sie veröffentlicht.','group-empty'));
   if(kind==='performances'||kind==='placement'){
@@ -58,7 +74,8 @@ function announce(text){clearTimeout(highlightTimer);q('#highlight').textContent
 function changes(next){
   if(data&&(data.event.id!==next.event.id||data.event.database!==next.event.database)){previous.clear();initialized=false;page=groupIndex=groupPage=0;alternateTable=false;clearTimeout(highlightTimer);q('#highlight').hidden=true;}
   const notices=[];
-  for(const m of next.matches){const old=previous.get(m.id);if(old&&initialized){if(m.kind==='final'&&old.kind!=='final'&&m.homeLegs!==null&&m.awayLegs!==null)notices.push(`${m.homeLegs>m.awayLegs?m.home:m.away} gewinnt · ${m.homeLegs}:${m.awayLegs}`);if(m.live&&old.live)for(const key of['home','guest']){const a=old.live[key],b=m.live[key];if(b.count180>a.count180)notices.push(`180 geworfen! ${b.name} · Board ${m.board}`);if(b.highFinish>a.highFinish&&b.highFinish>=100)notices.push(`High Finish ${b.highFinish} · ${b.name}`);if(b.legs>a.legs)notices.push(`Leg für ${b.name} · Board ${m.board}`);}}previous.set(m.id,m);}
+  for(const m of next.matches){const old=previous.get(m.id);if(old&&initialized){if(m.kind==='final'&&old.kind!=='final'&&m.homeLegs!==null&&m.awayLegs!==null)notices.push(`${m.homeLegs>m.awayLegs?m.home:m.away} gewinnt · ${m.homeLegs}:${m.awayLegs}`);if(m.live&&old.live)for(const key of['home','guest']){const a=old.live[key],b=m.live[key];if(b.count180>a.count180)notices.push(`180 geworfen! ${b.name} · Board ${m.board}`);if(b.highFinish>a.highFinish&&b.highFinish>=100)notices.push(`High Finish ${b.highFinish} · ${b.name}`);if(b.legs>a.legs)notices.push(`Leg für ${b.name} · Board ${m.board} · AVG ${average(b.average)}`);}}previous.set(m.id,m);}
+  if(trainingPage&&data&&initialized&&data.event.id===next.event.id&&!data.performancesUnavailable&&!next.performancesUnavailable){for(const row of next.performances||[]){if(!['SG','SGD'].includes(row.type)||!Number.isFinite(row.value)||row.value<=0)continue;const before=(data.performances||[]).find(old=>old.type===row.type&&old.name===row.name&&old.value===row.value);if(!before||(row.count??1)>(before.count??1))notices.push(`Shortgame: ${row.value} Darts · ${row.name}`);}}
   const ids=new Set(next.matches.map(m=>m.id));for(const id of previous.keys())if(!ids.has(id))previous.delete(id);initialized=true;if(notices.length)announce(notices.slice(0,3).join(' · '));
 }
 function accept(next){
@@ -114,7 +131,7 @@ async function loadTournamentChoices(){
   if(trainingPage)return loadTrainingChoices();
   try{const response=await fetch('/api/v1/darts/ranking');if(!response.ok)return;const ranking=await response.json();const group=document.createElement('optgroup');group.label=ranking.name;for(const event of [...ranking.events].sort((a,b)=>Date.parse(b.start)-Date.parse(a.start))){const option=node('option',event.name);option.value=String(event.id);group.append(option);}q('#tournamentChoice').append(group);if(selectedEvent&&ranking.events.some(event=>String(event.id)===selectedEvent))q('#tournamentChoice').value=selectedEvent;}catch(_){}
 }
-function chooseEvent(value){selectedEvent=value;selectionVersion++;requestController?.abort();viewChosen=false;alternateTable=false;clearTimeout(highlightTimer);q('#highlight').hidden=true;params.delete('event');if(selectedEvent)params.set('event',selectedEvent);history.replaceState(null,'',location.pathname+(params.size?'?'+params.toString():''));tournamentLink();data=null;previous.clear();initialized=false;page=groupIndex=groupPage=0;q('#boards').replaceChildren();q('#results').replaceChildren();q('#groupTable').replaceChildren();q('#groupChoice').replaceChildren(node('option','Alle Gruppen · wechselnd'));q('#groupChoice').firstChild.value='auto';q('#eventTitle').textContent=trainingPage?'Training wird geladen …':'Turnier wird geladen …';q('#eventInfo').textContent='';q('#source').removeAttribute('href');q('#notice').textContent='';refresh();}
+function chooseEvent(value){q('#trainingHighlights').hidden=true;selectedEvent=value;selectionVersion++;requestController?.abort();viewChosen=false;alternateTable=false;clearTimeout(highlightTimer);q('#highlight').hidden=true;params.delete('event');if(selectedEvent)params.set('event',selectedEvent);history.replaceState(null,'',location.pathname+(params.size?'?'+params.toString():''));tournamentLink();data=null;previous.clear();initialized=false;page=groupIndex=groupPage=0;q('#boards').replaceChildren();q('#results').replaceChildren();q('#groupTable').replaceChildren();q('#groupChoice').replaceChildren(node('option','Alle Gruppen · wechselnd'));q('#groupChoice').firstChild.value='auto';q('#eventTitle').textContent=trainingPage?'Training wird geladen …':'Turnier wird geladen …';q('#eventInfo').textContent='';q('#source').removeAttribute('href');q('#notice').textContent='';refresh();}
 q('#tournamentChoice').addEventListener('change',()=>chooseEvent(q('#tournamentChoice').value));
 tournamentLink();q('#tournamentChoice').disabled=demo;if(selectedEvent)q('#eventTitle').textContent='Turnier wird geladen …';loadTournamentChoices();
 if(trainingPage&&!demo){
@@ -137,6 +154,7 @@ if(trainingPage&&!demo){
 }
 function advanceGroup(direction=1){const group=currentGroup(),pages=Math.max(1,Math.ceil((group?.entries.length||0)/8));if(direction===1&&groupPage+1<pages)groupPage++;else{groupPage=0;if(q('#groupChoice').value==='auto')groupIndex+=direction;}render();}
 q('#view').addEventListener('change',()=>{viewChosen=true;page=0;alternateTable=false;render();});q('#pageSize').addEventListener('change',()=>{page=0;render();});q('#tableMode').addEventListener('change',()=>{alternateTable=false;render();});q('#groupChoice').addEventListener('change',()=>{groupPage=0;render();});q('#rotate').addEventListener('change',render);
+q('#showTrainingHighlights')?.addEventListener('click',()=>{q('#view').value='performances';q('#view').dispatchEvent(new Event('change'));});
 q('#previous').addEventListener('click',()=>{if(q('#boards').classList.contains('tables-only')){q('#groupChoice').value='auto';advanceGroup(-1);}else{page--;render();}});q('#next').addEventListener('click',()=>{if(q('#boards').classList.contains('tables-only')){q('#groupChoice').value='auto';advanceGroup();}else{page++;render();}});q('#groupPrevious').addEventListener('click',()=>{q('#groupChoice').value='auto';advanceGroup(-1);});q('#groupNext').addEventListener('click',()=>{q('#groupChoice').value='auto';advanceGroup();});
 q('#fullscreen').addEventListener('click',async()=>{tv=true;document.body.classList.add('tv');try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch(_){q('#notice').textContent='TV-Ansicht aktiv. Vollbild ist in diesem Browser nicht verfügbar.';}render();});
 document.addEventListener('fullscreenchange',()=>{tv=initialTv||!!document.fullscreenElement;document.body.classList.toggle('tv',tv);render();});window.addEventListener('online',refresh);

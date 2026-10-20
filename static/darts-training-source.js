@@ -55,6 +55,15 @@
   function placements(data) {
     if(!Array.isArray(data))throw new Error('Platzierungen unvollständig');return data.filter(p=>p.participant?.displayName).map(p=>({rank:text(p.place),name:text(p.participant.displayName)}));
   }
+  function liveSide(players,index) {
+    const indexed=players.filter(p=>p&&typeof p==='object').map((p,i)=>({...p,index:Number.isInteger(p.index)&&p.index>=0&&p.index<100?p.index:i})).sort((a,b)=>a.index-b.index);
+    const members=indexed.filter(p=>p.index%2===index),first=members[0]||{};
+    const total=(field,max)=>{const values=members.map(p=>number(p[field]));return values.length&&values.every(v=>v!==null&&v<=max)?values.reduce((sum,v)=>sum+v,0):null;};
+    const totalScore=total('scoreTotal',100000),totalDarts=total('dartsTotal',10000);
+    return {name:members.map(p=>text(p.playerName)).join(' & '),points:number(first.points),darts:total('darts',1000),legs:number(first.legs),
+      totalScore,totalDarts,average:totalScore!==null&&totalDarts>0?Math.round(totalScore/totalDarts*30)/10:null,
+      count180:total('count180',10000)??0,highFinish:Math.max(0,...members.map(p=>{const value=number(p.highfinish);return value!==null&&value<=170?value:0;}))};
+  }
   async function loadEvent(id,signal) {
     if(!Number.isSafeInteger(id)||id<=0||id>10000000)throw new Error('Ungültiges Training.');
     const controller=new AbortController(),abort=()=>controller.abort(),timer=setTimeout(abort,20000);signal?.addEventListener('abort',abort,{once:true});
@@ -80,12 +89,12 @@
         (async()=>{try{result.placements=placements(await read(`${base}/placement`,controller.signal));}catch(_){result.placementsUnavailable=true;result.degraded=true;}})(),
         (async()=>{
           if(event.status==='FINISH')return;
-          try{const payload=await read(`${live}/match/5/0/${id}`,controller.signal);for(const raw of payload.data||[]){const m=rows.get(Number(raw.matchKey));if(!m||!raw.statusActive||raw.statusFinished||!Array.isArray(raw.matchPlayers)||raw.matchPlayers.length<2)continue;const side=index=>{const members=raw.matchPlayers.filter((_,i)=>i%2===index),p=members[0]||{};return {name:members.map(p=>text(p.playerName)).join(' & '),points:number(p.points),darts:number(p.darts),legs:number(p.legs),count180:number(p.count180),highFinish:number(p.highFinish)};};m.kind='live';m.board=text(raw.board)||m.board;m.live={home:side(0),guest:side(1),currentPlayerIndex:Number.isInteger(raw.currentplayerIndex)?raw.currentplayerIndex%2:null};result.livePointsAvailable=true;}}catch(_){/* Pairings stay usable without the scorer. */}
+          try{const payload=await read(`${live}/match/5/0/${id}`,controller.signal);for(const raw of (Array.isArray(payload)?payload:payload.data||[])){const m=rows.get(Number(raw.matchKey));if(!m||!raw.statusActive||raw.statusFinished||!Array.isArray(raw.matchPlayers)||raw.matchPlayers.length<2)continue;m.kind='live';m.board=text(raw.board)||m.board;m.live={home:liveSide(raw.matchPlayers,0),guest:liveSide(raw.matchPlayers,1),currentPlayerIndex:Number.isInteger(raw.currentplayerIndex)?raw.currentplayerIndex%2:null};result.livePointsAvailable=true;}}catch(_){/* Pairings stay usable without the scorer. */}
         })(),
       ]);
       if(controller.signal.aborted)throw new Error('Trainingsabruf dauert zu lange.');return result;
     }finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
   }
-  const exported={source,eventModel,select,discover,loadEvent,matchModel,groupModels,performances,placements};
+  const exported={source,eventModel,select,discover,loadEvent,matchModel,groupModels,performances,placements,liveSide};
   if(typeof module!=='undefined'&&module.exports)module.exports=exported;else window.DartsTrainingSource=exported;
 })();
