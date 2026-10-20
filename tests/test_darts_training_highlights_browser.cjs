@@ -32,7 +32,8 @@ const server=http.createServer((req,res)=>{
   const origin='http://127.0.0.1:'+server.address().port,browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHANNEL?{channel:process.env.PLAYWRIGHT_CHANNEL}:{})});
   try{
     const page=await browser.newPage({viewport:{width:1920,height:1080}}),errors=[];
-    page.on('pageerror',error=>errors.push(error.message));await page.route('https://**',route=>route.abort());
+    page.on('pageerror',error=>errors.push(error.message));
+    await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
     await page.clock.install({time:new Date('2026-10-20T18:00:00Z')});await page.goto(origin+'/training?tv=1');
     await page.locator('.player-average').filter({hasText:'AVG 48,2'}).first().waitFor();
     await page.waitForFunction(()=>!busy&&!trainingSearchBusy);
