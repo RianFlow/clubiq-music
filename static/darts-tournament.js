@@ -12,6 +12,7 @@ if(trainingPage){
 let tv=initialTv,data=null,page=0,groupIndex=0,groupPage=0,alternateTable=false,busy=false,previous=new Map(),initialized=false,highlightTimer,demoPaused=false,demoTick=0;
 const boardHighlights=new Map(),panelStorage='clubiq_darts_board_panels_v1';
 let summaryAutoSelected=false,lastSummaryDue=null;
+let performancePageIndex=0;
 let panelState={};try{const saved=JSON.parse(localStorage.getItem(panelStorage)||'{}');if(saved&&typeof saved==='object'&&!Array.isArray(saved))panelState=saved;}catch(_){}
 document.body.classList.toggle('tv',tv);document.body.classList.toggle('demo',demo);
 function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
@@ -88,6 +89,21 @@ function renderHighlights(sidebar){
   q('#trainingHighlightsState').textContent=data?.stale||data?.performancesUnavailable?'Letzter bekannter Stand':'Offizielle Bestleistungen';
   for(const[label,value,name]of cards){const item=node('article',undefined,highlightClass(label));item.append(node('span',label,'highlight-label'),node('strong',value,'highlight-value'),node('span',name,'highlight-player'));q('#trainingHighlightCards').append(item);}
 }
+function performanceList(limit){
+  const root=node('section',undefined,'performance-list'),head=node('div',undefined,'performance-list-head'),intro=node('div');intro.append(node('h3','Besondere Ereignisse'),node('p',data.stale||data.performancesUnavailable?'Letzter bekannter Stand · Bestleistungen werden erneut geladen.':'Offizielle 3K-Bestleistungen · nach Art und Spieler gruppiert','summary-status'));head.append(intro);
+  const groups=window.DartsTrainingSummary.performanceGroups(data),pages=Math.max(1,...groups.map(group=>Math.ceil(group.total/limit)));performancePageIndex=(performancePageIndex%pages+pages)%pages;
+  if(pages>1){const controls=node('div',undefined,'performance-list-controls'),previous=node('button','‹'),next=node('button','›');previous.type=next.type='button';previous.setAttribute('aria-label','Vorherige Ereignisse');next.setAttribute('aria-label','Nächste Ereignisse');previous.addEventListener('click',()=>{performancePageIndex--;render();});next.addEventListener('click',()=>{performancePageIndex++;render();});controls.append(previous,node('span',`${performancePageIndex+1} / ${pages}`),next);head.append(controls);}root.append(head);
+  const columns=node('div',undefined,'performance-event-groups');
+  for(const group of groups){
+    const section=node('section',undefined,'performance-event-group achievement-'+group.style),title=node('div',undefined,'performance-event-heading');title.append(node('h4',group.label),node('span',`${group.total} ${group.total===1?'Ereignis':'Ereignisse'}`));section.append(title);
+    if(group.total){const ownPages=Math.ceil(group.total/limit),offset=(performancePageIndex%ownPages)*limit,list=node('ol',undefined,'performance-events');list.start=offset+1;
+      for(const row of window.DartsTrainingSummary.performancePage(group,offset,limit)){const item=node('li',undefined,'performance-event'),identity=node('span',undefined,'performance-event-identity');identity.append(node('span',row.name,'performance-event-player'));if(row.detail)identity.append(node('small',row.detail));item.append(identity,node('strong',row.label,'performance-event-value'));list.append(item);}section.append(list);
+      if(ownPages>1)section.append(node('small',`${offset+1}–${Math.min(offset+limit,group.total)} von ${group.total}`,'performance-event-range'));
+    }else section.append(node('p',data.performancesUnavailable?'Derzeit keine Einträge verfügbar.':group.style==='180'?'Noch keine 180er von 3K gemeldet.':group.style==='finish'?'Noch keine High Finishes von 3K gemeldet.':'Noch keine Shortgames von 3K gemeldet.','performance-events-empty'));
+    columns.append(section);
+  }
+  root.append(columns);return root;
+}
 function trainingSummary(state){
   const root=node('section',undefined,'training-summary'),head=node('div',undefined,'summary-head'),intro=node('div');
   intro.append(node('p','Unser Trainingsabend','eyebrow'),node('h2',state.complete||state.due&&!state.live.length?'Trainingsrückblick':'Zwischenstand','summary-title'));
@@ -96,13 +112,9 @@ function trainingSummary(state){
   if(state.live.length){const back=node('button','Zu den Live-Boards');back.type='button';back.addEventListener('click',()=>{q('#view').value='live';q('#view').dispatchEvent(new Event('change'));});head.append(back);}root.append(head);
   const stats=node('div',undefined,'summary-stats');
   for(const[label,value]of[['Teilnehmer',state.participants],['Beendete Spiele',state.finished.length],['Gemeldete Legs',state.legs??'–'],['Noch live',state.live.length]]){const item=node('div',undefined,'summary-stat');item.append(node('strong',value),node('span',label));stats.append(item);}root.append(stats);
-  const highlights=node('section',undefined,'summary-highlights');highlights.append(node('h3','Bestleistungen'));
-  if(data.performancesUnavailable)highlights.append(node('p','Bestleistungen werden erneut geladen. Angezeigt wird der letzte bekannte Stand.','summary-status'));
-  const cards=node('div',undefined,'training-highlight-cards');
-  for(const item of window.DartsTrainingSummary.highlights(data)){const card=node('article',undefined,highlightClass(item.label));card.append(node('span',item.label,'highlight-label'),node('strong',item.value,'highlight-value'),node('span',item.name,'highlight-player'));cards.append(card);}
-  highlights.append(cards.childElementCount?cards:node('p',data.performancesUnavailable?'Noch keine Bestleistungen verfügbar.':'Noch keine Bestleistungen von 3K gemeldet.','summary-status'));root.append(highlights);
+  const highlights=node('section',undefined,'summary-highlights');highlights.append(performanceList(tv?4:8));root.append(highlights);
   const columns=node('div',undefined,'summary-columns'),results=node('section',undefined,'summary-panel');results.append(node('h3','Zuletzt entschieden'));
-  const matches=sorted('final');for(const match of matches.slice(0,tv?6:12)){const row=node('div',undefined,'summary-result');row.append(node('span',match.home),node('strong',`${match.homeLegs??'–'} : ${match.awayLegs??'–'}`),node('span',match.away));results.append(row);}
+  const matches=sorted('final');for(const match of matches.slice(0,tv?4:12)){const row=node('div',undefined,'summary-result');row.append(node('span',match.home),node('strong',`${match.homeLegs??'–'} : ${match.awayLegs??'–'}`),node('span',match.away));results.append(row);}
   if(!matches.length)results.append(node('p','Noch keine abgeschlossenen Begegnungen gemeldet.','summary-status'));
   const allResults=node('button','Alle Ergebnisse ansehen');allResults.type='button';allResults.addEventListener('click',()=>{q('#view').value='final';q('#view').dispatchEvent(new Event('change'));});results.append(allResults);columns.append(results);
   const standings=node('section',undefined,'summary-panel summary-standings'),placements=data.placements||[],groups=data.groups||[];
@@ -128,12 +140,15 @@ function render(){
   const tablesOnly=kind==='groups'||(tv&&kind==='live'&&q('#tableMode').value==='alternate'&&alternateTable),sidebar=!tablesOnly&&!['participants','performances','placement','summary'].includes(kind)&&q('#tableMode').value==='sidebar';
   q('#stage').classList.toggle('with-sidebar',sidebar);q('#groupSidebar').hidden=!sidebar;q('#boards').classList.toggle('tables-only',tablesOnly);document.body.classList.toggle('compact',tv&&(size>=12||sidebar));q('#boards').replaceChildren();
   q('#boards').classList.toggle('summary-view',kind==='summary');document.body.classList.toggle('training-recap',kind==='summary');
+  q('#boards').classList.toggle('performances-view',kind==='performances');
   renderHighlights(sidebar);
   document.body.classList.toggle('many-boards',tv&&size>=12);
   const group=currentGroup();q('#groupTable').replaceChildren(group?table(group,groupPage,true):node('p','Gruppen und Tabellen erscheinen hier, sobald 3K sie veröffentlicht.','group-empty'));
   if(kind==='summary'){
     q('#boards').append(trainingSummary(summary));q('#pageCount').textContent=tv&&groups.length&&!data.placements?.length?`Gruppe ${groupIndex+1} / ${groups.length}`:'Trainingsrückblick';q('#previous').disabled=q('#next').disabled=!tv||!groups.length||!!data.placements?.length;
-  }else if(kind==='performances'||kind==='placement'){
+  }else if(kind==='performances'){
+    const count=window.DartsTrainingSummary.performanceGroups(data).reduce((sum,group)=>sum+group.total,0);q('#boards').append(performanceList(tv?6:16));q('#pageCount').textContent=`${count} ${count===1?'Ereignis':'Ereignisse'}`;q('#previous').disabled=q('#next').disabled=true;
+  }else if(kind==='placement'){
     const key=kind==='performances'?'performances':'placements',rows=data[key]||[];if(data[key+'Unavailable'])q('#boards').append(node('p',rows.length?'Letzter bekannter Stand · Dieser Bereich wird erneut geladen.':'Dieser Bereich ist gerade nicht erreichbar. Wir versuchen es automatisch erneut.','empty'));
     for(const row of rows){const item=node('article',undefined,'board');item.append(node('h2',row.name));item.append(node('p',kind==='placement'?`Platz ${row.rank||'–'}`:row.type==='HS'?`${row.count??1} × 180`:row.type==='HF'?`High Finish: ${row.value}`:`Shortgame: ${row.value} Darts`,'legs'));q('#boards').append(item);}
     if(!rows.length&&!data[key+'Unavailable'])q('#boards').append(node('p',kind==='placement'?'Noch keine offiziellen Platzierungen veröffentlicht.':'Noch keine Bestleistungen veröffentlicht.','empty'));
@@ -150,7 +165,7 @@ function render(){
 }
 function announce(text){clearTimeout(highlightTimer);q('#highlight').textContent=text;q('#highlight').hidden=false;highlightTimer=setTimeout(()=>q('#highlight').hidden=true,15000);}
 function changes(next){
-  if(data&&(data.event.id!==next.event.id||data.event.database!==next.event.database)){previous.clear();boardHighlights.clear();initialized=false;page=groupIndex=groupPage=0;alternateTable=false;clearTimeout(highlightTimer);q('#highlight').hidden=true;}
+  if(data&&(data.event.id!==next.event.id||data.event.database!==next.event.database)){previous.clear();boardHighlights.clear();performancePageIndex=0;initialized=false;page=groupIndex=groupPage=0;alternateTable=false;clearTimeout(highlightTimer);q('#highlight').hidden=true;}
   const notices=[];
   const notice=(match,text)=>{notices.push(text);rememberBoardHighlight(match,text);};
   for(const m of next.matches){const old=previous.get(m.id);if(old&&initialized){if(m.kind==='final'&&old.kind!=='final'&&Number.isFinite(m.homeLegs)&&Number.isFinite(m.awayLegs))notice(m,`${m.homeLegs>m.awayLegs?m.home:m.away} gewinnt · ${m.homeLegs}:${m.awayLegs}`);if(m.live&&old.live)for(const key of['home','guest']){const a=old.live[key],b=m.live[key];if(b.count180>a.count180)notice(m,`180 geworfen! ${b.name} · Board ${m.board}`);if(b.highFinish>a.highFinish&&b.highFinish>=100)notice(m,`High Finish ${b.highFinish} · ${b.name}`);if(b.legs>a.legs)notice(m,`Leg für ${b.name} · Board ${m.board} · AVG ${average(b.average)}`);}}previous.set(m.id,m);}
@@ -210,7 +225,7 @@ async function loadTournamentChoices(){
   if(trainingPage)return loadTrainingChoices();
   try{const response=await fetch('/api/v1/darts/ranking');if(!response.ok)return;const ranking=await response.json();const group=document.createElement('optgroup');group.label=ranking.name;for(const event of [...ranking.events].sort((a,b)=>Date.parse(b.start)-Date.parse(a.start))){const option=node('option',event.name);option.value=String(event.id);group.append(option);}q('#tournamentChoice').append(group);if(selectedEvent&&ranking.events.some(event=>String(event.id)===selectedEvent))q('#tournamentChoice').value=selectedEvent;}catch(_){}
 }
-function chooseEvent(value){summaryAutoSelected=false;q('#trainingWrapUp').hidden=true;q('#trainingHighlights').hidden=true;selectedEvent=value;selectionVersion++;requestController?.abort();viewChosen=false;alternateTable=false;clearTimeout(highlightTimer);q('#highlight').hidden=true;params.delete('event');if(selectedEvent)params.set('event',selectedEvent);history.replaceState(null,'',location.pathname+(params.size?'?'+params.toString():''));tournamentLink();data=null;previous.clear();boardHighlights.clear();initialized=false;page=groupIndex=groupPage=0;q('#boards').replaceChildren();q('#results').replaceChildren();q('#groupTable').replaceChildren();q('#groupChoice').replaceChildren(node('option','Alle Gruppen · wechselnd'));q('#groupChoice').firstChild.value='auto';q('#eventTitle').textContent=trainingPage?'Training wird geladen …':'Turnier wird geladen …';q('#eventInfo').textContent='';q('#source').removeAttribute('href');q('#notice').textContent='';refresh();}
+function chooseEvent(value){summaryAutoSelected=false;q('#trainingWrapUp').hidden=true;q('#trainingHighlights').hidden=true;selectedEvent=value;selectionVersion++;requestController?.abort();viewChosen=false;alternateTable=false;clearTimeout(highlightTimer);q('#highlight').hidden=true;params.delete('event');if(selectedEvent)params.set('event',selectedEvent);history.replaceState(null,'',location.pathname+(params.size?'?'+params.toString():''));tournamentLink();data=null;previous.clear();boardHighlights.clear();performancePageIndex=0;initialized=false;page=groupIndex=groupPage=0;q('#boards').replaceChildren();q('#results').replaceChildren();q('#groupTable').replaceChildren();q('#groupChoice').replaceChildren(node('option','Alle Gruppen · wechselnd'));q('#groupChoice').firstChild.value='auto';q('#eventTitle').textContent=trainingPage?'Training wird geladen …':'Turnier wird geladen …';q('#eventInfo').textContent='';q('#source').removeAttribute('href');q('#notice').textContent='';refresh();}
 q('#tournamentChoice').addEventListener('change',()=>chooseEvent(q('#tournamentChoice').value));
 tournamentLink();q('#tournamentChoice').disabled=demo;if(selectedEvent)q('#eventTitle').textContent='Turnier wird geladen …';loadTournamentChoices();
 if(trainingPage&&!demo){
@@ -223,7 +238,7 @@ if(trainingPage&&!demo){
     event.preventDefault();const button=q('#trainingLinkForm button');button.disabled=true;q('#trainingLinkError').hidden=true;
     try{
       const id=window.DartsTrainingSource.source(q('#trainingLink').value),next=await window.DartsTrainingSource.loadEvent(id);
-      selectedEvent=String(id);selectionVersion++;requestController?.abort();viewChosen=false;data=null;previous.clear();boardHighlights.clear();initialized=false;
+      selectedEvent=String(id);selectionVersion++;requestController?.abort();viewChosen=false;data=null;previous.clear();boardHighlights.clear();performancePageIndex=0;initialized=false;
       params.set('event',selectedEvent);history.replaceState(null,'',location.pathname+'?'+params.toString());tournamentLink();accept(next);
       try{localStorage.setItem('clubiq_darts_training',next.source);localStorage.setItem('clubiq_darts_training_catalog',JSON.stringify(trainingCatalog));}catch(_){}
       q('#trainingLinkForm').closest('details').open=false;
@@ -232,13 +247,13 @@ if(trainingPage&&!demo){
   });
 }
 function advanceGroup(direction=1){const group=currentGroup(),pages=Math.max(1,Math.ceil((group?.entries.length||0)/8));if(direction===1&&groupPage+1<pages)groupPage++;else{groupPage=0;if(q('#groupChoice').value==='auto')groupIndex+=direction;}render();}
-q('#view').addEventListener('change',()=>{viewChosen=true;summaryAutoSelected=false;page=0;alternateTable=false;render();});q('#pageSize').addEventListener('change',()=>{page=0;render();});q('#tableMode').addEventListener('change',()=>{alternateTable=false;render();});q('#groupChoice').addEventListener('change',()=>{groupPage=0;render();});q('#rotate').addEventListener('change',render);
+q('#view').addEventListener('change',()=>{viewChosen=true;summaryAutoSelected=false;performancePageIndex=0;page=0;alternateTable=false;render();});q('#pageSize').addEventListener('change',()=>{page=0;render();});q('#tableMode').addEventListener('change',()=>{alternateTable=false;render();});q('#groupChoice').addEventListener('change',()=>{groupPage=0;render();});q('#rotate').addEventListener('change',render);
 q('#showTrainingHighlights')?.addEventListener('click',()=>{q('#view').value='performances';q('#view').dispatchEvent(new Event('change'));});
 q('#showTrainingSummary').addEventListener('click',()=>{q('#view').value='summary';q('#view').dispatchEvent(new Event('change'));});
 q('#previous').addEventListener('click',()=>{if(q('#boards').classList.contains('tables-only')||q('#view').value==='summary'){q('#groupChoice').value='auto';advanceGroup(-1);}else{page--;render();}});q('#next').addEventListener('click',()=>{if(q('#boards').classList.contains('tables-only')||q('#view').value==='summary'){q('#groupChoice').value='auto';advanceGroup();}else{page++;render();}});q('#groupPrevious').addEventListener('click',()=>{q('#groupChoice').value='auto';advanceGroup(-1);});q('#groupNext').addEventListener('click',()=>{q('#groupChoice').value='auto';advanceGroup();});
 q('#fullscreen').addEventListener('click',async()=>{tv=true;document.body.classList.add('tv');try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch(_){q('#notice').textContent='TV-Ansicht aktiv. Vollbild ist in diesem Browser nicht verfügbar.';}render();});
 document.addEventListener('fullscreenchange',()=>{tv=initialTv||!!document.fullscreenElement;document.body.classList.toggle('tv',tv);render();});window.addEventListener('online',refresh);
-setInterval(()=>{if(!document.hidden){if(trainingPage&&data&&window.DartsTrainingSummary.overview(data).due!==lastSummaryDue)render();refresh();}},15000);setInterval(()=>{if(tv&&q('#rotate').checked&&!document.hidden&&!(demo&&demoPaused)){page++;render();}},12000);
+setInterval(()=>{if(!document.hidden){if(trainingPage&&data&&window.DartsTrainingSummary.overview(data).due!==lastSummaryDue)render();refresh();}},15000);setInterval(()=>{if(tv&&q('#rotate').checked&&!document.hidden&&!(demo&&demoPaused)){page++;performancePageIndex++;render();}},12000);
 setInterval(()=>{if(!q('#rotate').checked||document.hidden||(demo&&demoPaused))return;advanceGroup();if(tv&&q('#tableMode').value==='alternate'){alternateTable=!alternateTable;render();}},20000);
 window.addEventListener('resize',render);
 if(demo){

@@ -2,6 +2,11 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
 const {chromium}=require('playwright');
 const root=path.resolve(__dirname,'..'),streams=new Set();
+async function liveBoardHeight(page){
+  // Select and measure in one browser task: an SSE refresh may replace the board.
+  const measurement=await page.waitForFunction(()=>{const board=document.querySelector('#todayGrid .today-live-game');return board?.getClientRects().length?board.getBoundingClientRect().height||false:false;});
+  try{return await measurement.jsonValue();}finally{await measurement.dispose();}
+}
 const fixture={id:1280527,home:'DC Brenndorf E',away:'SV Barver Darts B',barverTeam:'B',barverTeams:['B'],kind:'upcoming',score:null,eventId:1445,league:'kl04',plannedAt:new Date(Date.now()+300000).toISOString(),url:'https://portal.3k-darts.com/'};
 let remaining=416,paused=false,moments=[],darts=12,lastScore=85,gameLegs=2,gameKey='1280782',teamFinished=false;
 const league={key:'kl04',name:'Kreisligen 04',short:'KL 04',event:1445};
@@ -159,12 +164,12 @@ const server=http.createServer((req,res)=>{
     await page.waitForFunction(()=>document.body.classList.contains('app-tv'));
     await page.locator('#todayGrid .today-live-game').waitFor();
     const compact=page.locator('#todayGrid .today-live-game');
-    const compactHeight=(await compact.boundingBox()).height;
+    const compactHeight=await liveBoardHeight(page);
     assert.ok(compactHeight<220,'mobile board overview stays small');
     assert.equal(await compact.locator('.today-live-facts').isVisible(),false);
     await compact.getByRole('button',{name:/Vergrößern:/}).click();
     assert.equal(await compact.locator('.today-live-facts').isVisible(),true);
-    assert.ok((await compact.boundingBox()).height>compactHeight+80,'tap expands the game');
+    assert.ok(await liveBoardHeight(page)>compactHeight+80,'tap expands the game');
     remaining=76;publish();
     await compact.getByText('76',{exact:true}).waitFor();
     assert.equal(await compact.locator('.today-board-toggle').getAttribute('aria-expanded'),'true','live updates preserve expansion');
