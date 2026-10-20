@@ -6,6 +6,7 @@ assert.equal(summary.overview(winter,'2026-12-01T20:29:59Z').due,false);
 assert.equal(summary.overview(winter,'2026-12-01T20:30:00Z').automatic,true,'21:30 Berlin in winter');
 assert.equal(summary.overview({...winter,event:{date:null,status:'ACTIVE'}},'2026-12-01T22:00:00Z').due,false,'unknown date is not guessed');
 assert.equal(summary.overview({...winter,stale:true},'2026-12-01T20:30:00Z').automatic,false,'a stale unfinished source does not force a recap');
+assert.equal(summary.overview({...winter,event:{...winter.event,status:'FINISH'},matches:[...winter.matches,{kind:'live'}]},'2026-12-01T20:30:00Z').automatic,false,'a contradictory event status never hides a reported live game');
 assert.equal(summary.overview({...winter,matches:[{kind:'final',homeLegs:null,awayLegs:null}]},'2026-12-01T20:30:00Z').legs,null);
 assert.deepEqual(summary.highlights({performances:[{type:'HF',name:'Test',value:180}]}),[]);
 let phase='live',partial=false;
