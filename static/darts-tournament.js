@@ -10,15 +10,51 @@ if(trainingPage){
   try{trainingCatalog=JSON.parse(localStorage.getItem('clubiq_darts_training_catalog')||'null');q('#autoTrainingSearch').checked=localStorage.getItem('clubiq_darts_training_auto')!=='off';}catch(_){}
 }else for(const option of q('#view').querySelectorAll('[value=performances],[value=placement]'))option.remove();
 let tv=initialTv,data=null,page=0,groupIndex=0,groupPage=0,alternateTable=false,busy=false,previous=new Map(),initialized=false,highlightTimer,demoPaused=false,demoTick=0;
+const boardHighlights=new Map(),panelStorage='clubiq_darts_board_panels_v1';
+let panelState={};try{const saved=JSON.parse(localStorage.getItem(panelStorage)||'{}');if(saved&&typeof saved==='object'&&!Array.isArray(saved))panelState=saved;}catch(_){}
 document.body.classList.toggle('tv',tv);document.body.classList.toggle('demo',demo);
 function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
 function average(value){return typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=180?value.toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1}):'–';}
+function savePanels(){try{localStorage.setItem(panelStorage,JSON.stringify(panelState));}catch(_){}}
+function displayPanels(){
+  const displayOpen=panelState.display!==false,highlightsOpen=panelState.highlights!==false;
+  q('#displayControlsFields').hidden=!displayOpen;q('#displayCollapsedSummary').hidden=displayOpen;
+  q('#toggleDisplayControls').textContent=displayOpen?'Bedienung einklappen':'Bedienung aufklappen';q('#toggleDisplayControls').setAttribute('aria-expanded',String(displayOpen));
+  q('#trainingHighlightCards').hidden=!highlightsOpen;q('#toggleTrainingHighlights').textContent=highlightsOpen?'Einklappen':'Aufklappen';q('#toggleTrainingHighlights').setAttribute('aria-expanded',String(highlightsOpen));
+  q('#trainingHighlights').classList.toggle('is-collapsed',!highlightsOpen);
+}
+q('#trainingControls').open=panelState.search!==false;displayPanels();
+q('#trainingControls').addEventListener('toggle',()=>{panelState.search=q('#trainingControls').open;savePanels();render();});
+q('#toggleDisplayControls').addEventListener('click',()=>{panelState.display=panelState.display===false;savePanels();displayPanels();render();});
+q('#toggleTrainingHighlights').addEventListener('click',()=>{panelState.highlights=panelState.highlights===false;savePanels();displayPanels();render();});
 function sorted(kind){return(data?.matches||[]).filter(m=>m.kind===kind).sort((a,b)=>kind==='final'?String(b.updatedAt).localeCompare(String(a.updatedAt)):String(a.board).localeCompare(String(b.board),'de',{numeric:true})||a.id-b.id);}
+function rememberBoardHighlight(match,text){
+  const entry={text,expiresAt:Date.now()+15000,animate:true};boardHighlights.set(match.id,entry);
+  setTimeout(()=>{if(boardHighlights.get(match.id)===entry){boardHighlights.delete(match.id);render();}},15000);
+}
+function boardHighlightsView(match){
+  const root=node('div',undefined,'board-highlights'),entry=boardHighlights.get(match.id);
+  root.append(node('small','Highlights im Spiel','board-highlights-label'));
+  if(entry&&entry.expiresAt>Date.now()){
+    const notice=node('strong',entry.text,'board-highlight-notice'+(entry.animate?' is-new':''));notice.title=entry.text;entry.animate=false;root.append(notice);
+  }else{
+    const counters=node('div',undefined,'board-highlight-counters');
+    // Live counters belong to this match, not necessarily to its current leg.
+    // Training-wide performances cannot safely be assigned to an individual board.
+    for(const [name,side]of[[match.home,match.live?.home],[match.away,match.live?.guest]]){
+      const values=[];if(Number.isInteger(side?.count180)&&side.count180>0)values.push(`${side.count180} × 180`);if(Number.isFinite(side?.highFinish)&&side.highFinish>=100)values.push(`HF ${side.highFinish}`);
+      if(values.length){const chip=node('span',undefined,'board-highlight-counter');chip.title=`${name}: ${values.join(' · ')}`;chip.append(node('span',name,'board-highlight-name'),node('strong',values.join(' · ')));counters.append(chip);}
+    }
+    root.append(counters.childElementCount?counters:node('span',match.live?'Noch keine Bestleistungen gemeldet.':'Highlights warten auf 3K-Daten.','board-highlight-empty'));
+  }
+  return root;
+}
 function card(m){
   const n=node('article',undefined,'board'),head=node('div',undefined,'board-head');
   head.append(node('strong',m.board?`Board ${m.board}`:'Board noch offen'),node('span',m.kind==='live'?'LIVE':m.kind==='final'?'ENDSTAND':m.round||m.phase,m.kind==='live'?'live-badge':''));n.append(head);
   for(const[i,name,side]of[[0,m.home,m.live?.home],[1,m.away,m.live?.guest]]){const row=node('div',undefined,'player'+(m.live?.currentPlayerIndex===i?' throwing':'')),identity=node('span',undefined,'player-identity'),stats=node('span',undefined,'player-live');identity.append(node('span',name,'player-name'));if(m.kind==='live'){const avg=node('small',`AVG ${average(side?.average)}`,'player-average');avg.title='3-Dart-Average im gesamten Spiel';identity.append(avg);}stats.append(node('strong',side?.points??'–','points'));if(Number.isInteger(side?.darts))stats.append(node('small',`${side.darts} Darts`,'darts-count'));row.append(identity,stats);n.append(row);}
   n.append(node('div',`Legs ${m.live?.home?.legs??m.homeLegs??'–'} : ${m.live?.guest?.legs??m.awayLegs??'–'}`,'legs'));
+  if(m.kind==='live'||boardHighlights.has(m.id))n.append(boardHighlightsView(m));
   if(m.kind==='live'&&!m.live)n.append(node('small','Aktuelle Leg-Punkte noch nicht von 3K verfügbar.'));return n;
 }
 function table(group,tablePage=0,limited=false){
@@ -68,13 +104,15 @@ function render(){
     if(!items.length)q('#boards').append(node('div',kind==='live'?(data.scheduleReady?'Gerade kein laufendes Spiel gemeldet. Neue Spiele erscheinen automatisch.':'Die Gruppen und Paarungen sind noch nicht veröffentlicht. Die Anzeige übernimmt sie automatisch, sobald 3K sie freigibt.'):kind==='upcoming'?'Noch keine kommenden Paarungen veröffentlicht.':'Noch keine Ergebnisse verfügbar.','empty'));
   }
   q('#results').replaceChildren(...sorted('final').slice(0,6).map(m=>node('div',`${m.home} ${m.homeLegs??'–'}:${m.awayLegs??'–'} ${m.away}`,'result')));
+  q('#displayCollapsedSummary').textContent=q('#view').selectedOptions[0].textContent;
   q('#stage').style.setProperty('--stage-top',`${Math.ceil(q('#stage').getBoundingClientRect().top)}px`);
 }
 function announce(text){clearTimeout(highlightTimer);q('#highlight').textContent=text;q('#highlight').hidden=false;highlightTimer=setTimeout(()=>q('#highlight').hidden=true,15000);}
 function changes(next){
-  if(data&&(data.event.id!==next.event.id||data.event.database!==next.event.database)){previous.clear();initialized=false;page=groupIndex=groupPage=0;alternateTable=false;clearTimeout(highlightTimer);q('#highlight').hidden=true;}
+  if(data&&(data.event.id!==next.event.id||data.event.database!==next.event.database)){previous.clear();boardHighlights.clear();initialized=false;page=groupIndex=groupPage=0;alternateTable=false;clearTimeout(highlightTimer);q('#highlight').hidden=true;}
   const notices=[];
-  for(const m of next.matches){const old=previous.get(m.id);if(old&&initialized){if(m.kind==='final'&&old.kind!=='final'&&m.homeLegs!==null&&m.awayLegs!==null)notices.push(`${m.homeLegs>m.awayLegs?m.home:m.away} gewinnt · ${m.homeLegs}:${m.awayLegs}`);if(m.live&&old.live)for(const key of['home','guest']){const a=old.live[key],b=m.live[key];if(b.count180>a.count180)notices.push(`180 geworfen! ${b.name} · Board ${m.board}`);if(b.highFinish>a.highFinish&&b.highFinish>=100)notices.push(`High Finish ${b.highFinish} · ${b.name}`);if(b.legs>a.legs)notices.push(`Leg für ${b.name} · Board ${m.board} · AVG ${average(b.average)}`);}}previous.set(m.id,m);}
+  const notice=(match,text)=>{notices.push(text);rememberBoardHighlight(match,text);};
+  for(const m of next.matches){const old=previous.get(m.id);if(old&&initialized){if(m.kind==='final'&&old.kind!=='final'&&Number.isFinite(m.homeLegs)&&Number.isFinite(m.awayLegs))notice(m,`${m.homeLegs>m.awayLegs?m.home:m.away} gewinnt · ${m.homeLegs}:${m.awayLegs}`);if(m.live&&old.live)for(const key of['home','guest']){const a=old.live[key],b=m.live[key];if(b.count180>a.count180)notice(m,`180 geworfen! ${b.name} · Board ${m.board}`);if(b.highFinish>a.highFinish&&b.highFinish>=100)notice(m,`High Finish ${b.highFinish} · ${b.name}`);if(b.legs>a.legs)notice(m,`Leg für ${b.name} · Board ${m.board} · AVG ${average(b.average)}`);}}previous.set(m.id,m);}
   if(trainingPage&&data&&initialized&&data.event.id===next.event.id&&!data.performancesUnavailable&&!next.performancesUnavailable){for(const row of next.performances||[]){if(!['SG','SGD'].includes(row.type)||!Number.isFinite(row.value)||row.value<=0)continue;const before=(data.performances||[]).find(old=>old.type===row.type&&old.name===row.name&&old.value===row.value);if(!before||(row.count??1)>(before.count??1))notices.push(`Shortgame: ${row.value} Darts · ${row.name}`);}}
   const ids=new Set(next.matches.map(m=>m.id));for(const id of previous.keys())if(!ids.has(id))previous.delete(id);initialized=true;if(notices.length)announce(notices.slice(0,3).join(' · '));
 }
@@ -131,7 +169,7 @@ async function loadTournamentChoices(){
   if(trainingPage)return loadTrainingChoices();
   try{const response=await fetch('/api/v1/darts/ranking');if(!response.ok)return;const ranking=await response.json();const group=document.createElement('optgroup');group.label=ranking.name;for(const event of [...ranking.events].sort((a,b)=>Date.parse(b.start)-Date.parse(a.start))){const option=node('option',event.name);option.value=String(event.id);group.append(option);}q('#tournamentChoice').append(group);if(selectedEvent&&ranking.events.some(event=>String(event.id)===selectedEvent))q('#tournamentChoice').value=selectedEvent;}catch(_){}
 }
-function chooseEvent(value){q('#trainingHighlights').hidden=true;selectedEvent=value;selectionVersion++;requestController?.abort();viewChosen=false;alternateTable=false;clearTimeout(highlightTimer);q('#highlight').hidden=true;params.delete('event');if(selectedEvent)params.set('event',selectedEvent);history.replaceState(null,'',location.pathname+(params.size?'?'+params.toString():''));tournamentLink();data=null;previous.clear();initialized=false;page=groupIndex=groupPage=0;q('#boards').replaceChildren();q('#results').replaceChildren();q('#groupTable').replaceChildren();q('#groupChoice').replaceChildren(node('option','Alle Gruppen · wechselnd'));q('#groupChoice').firstChild.value='auto';q('#eventTitle').textContent=trainingPage?'Training wird geladen …':'Turnier wird geladen …';q('#eventInfo').textContent='';q('#source').removeAttribute('href');q('#notice').textContent='';refresh();}
+function chooseEvent(value){q('#trainingHighlights').hidden=true;selectedEvent=value;selectionVersion++;requestController?.abort();viewChosen=false;alternateTable=false;clearTimeout(highlightTimer);q('#highlight').hidden=true;params.delete('event');if(selectedEvent)params.set('event',selectedEvent);history.replaceState(null,'',location.pathname+(params.size?'?'+params.toString():''));tournamentLink();data=null;previous.clear();boardHighlights.clear();initialized=false;page=groupIndex=groupPage=0;q('#boards').replaceChildren();q('#results').replaceChildren();q('#groupTable').replaceChildren();q('#groupChoice').replaceChildren(node('option','Alle Gruppen · wechselnd'));q('#groupChoice').firstChild.value='auto';q('#eventTitle').textContent=trainingPage?'Training wird geladen …':'Turnier wird geladen …';q('#eventInfo').textContent='';q('#source').removeAttribute('href');q('#notice').textContent='';refresh();}
 q('#tournamentChoice').addEventListener('change',()=>chooseEvent(q('#tournamentChoice').value));
 tournamentLink();q('#tournamentChoice').disabled=demo;if(selectedEvent)q('#eventTitle').textContent='Turnier wird geladen …';loadTournamentChoices();
 if(trainingPage&&!demo){
@@ -144,7 +182,7 @@ if(trainingPage&&!demo){
     event.preventDefault();const button=q('#trainingLinkForm button');button.disabled=true;q('#trainingLinkError').hidden=true;
     try{
       const id=window.DartsTrainingSource.source(q('#trainingLink').value),next=await window.DartsTrainingSource.loadEvent(id);
-      selectedEvent=String(id);selectionVersion++;requestController?.abort();viewChosen=false;data=null;previous.clear();initialized=false;
+      selectedEvent=String(id);selectionVersion++;requestController?.abort();viewChosen=false;data=null;previous.clear();boardHighlights.clear();initialized=false;
       params.set('event',selectedEvent);history.replaceState(null,'',location.pathname+'?'+params.toString());tournamentLink();accept(next);
       try{localStorage.setItem('clubiq_darts_training',next.source);localStorage.setItem('clubiq_darts_training_catalog',JSON.stringify(trainingCatalog));}catch(_){}
       q('#trainingLinkForm').closest('details').open=false;
