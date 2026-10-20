@@ -27,5 +27,21 @@
     if(shorts.length)result.push({label:shorts[0].type==='SGD'?'Kürzestes Leg im Doppel':'Kürzestes Leg',value:`${shorts[0].value} Darts`,name:names(shorts.filter(row=>row.value===shorts[0].value&&row.type===shorts[0].type))});
     return result;
   }
-  const api={overview,highlights};if(typeof module==='object'&&module.exports)module.exports=api;else root.DartsTrainingSummary=api;
+  function performanceGroups(data){
+    const groups=[{label:'180er',style:'180',entries:[],total:0},{label:'High Finishes',style:'finish',entries:[],total:0},{label:'Shortgames',style:'shortgame',entries:[],total:0}];
+    for(const row of data.performances||[]){
+      if(typeof row.name!=='string'||!row.name.trim()||!Number.isInteger(row.value)||row.value<=0)continue;
+      const index=row.type==='HS'&&row.value===180?0:row.type==='HF'&&row.value<=170?1:['SG','SGD'].includes(row.type)?2:-1;
+      if(index<0)continue;const count=row.count==null?1:Number.isInteger(row.count)&&row.count>=0?row.count:0;if(!count)continue;
+      groups[index].entries.push({name:row.name,value:row.value,count,label:index===0?'180':index===1?String(row.value):`${row.value} Darts`,detail:row.type==='SGD'?'Doppel':''});groups[index].total+=count;
+    }
+    for(const group of groups)group.entries.sort((a,b)=>group.style==='finish'?b.value-a.value||a.name.localeCompare(b.name,'de'):group.style==='shortgame'?a.value-b.value||a.name.localeCompare(b.name,'de'):a.name.localeCompare(b.name,'de'));
+    return groups;
+  }
+  function performancePage(group,offset,limit){
+    // Counts can be aggregated by 3K. Expand only the visible page, not a huge array.
+    const rows=[];let skip=Math.max(0,offset),remaining=Math.max(0,Math.min(100,limit));
+    for(const entry of group.entries){if(skip>=entry.count){skip-=entry.count;continue;}for(let i=skip;i<entry.count&&remaining;i++,remaining--)rows.push({...entry,occurrence:i+1});skip=0;if(!remaining)break;}return rows;
+  }
+  const api={overview,highlights,performanceGroups,performancePage};if(typeof module==='object'&&module.exports)module.exports=api;else root.DartsTrainingSummary=api;
 })(typeof window==='object'?window:globalThis);
