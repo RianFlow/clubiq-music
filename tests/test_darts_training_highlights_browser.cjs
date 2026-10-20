@@ -28,6 +28,9 @@ const server=http.createServer((req,res)=>{
   try{
     const page=await browser.newPage({viewport:{width:1920,height:1080}}),errors=[];
     page.on('pageerror',error=>errors.push(error.message));await page.route('https://**',route=>route.abort());
+    // Existing training tests cover polling. Drive observations explicitly here,
+    // so interval requests cannot race the fixture changes and toast expiry.
+    await page.addInitScript(()=>{window.setInterval=()=>0;});
     await page.clock.install({time:new Date('2026-10-20T18:00:00Z')});await page.goto(origin+'/training?tv=1');
     await page.locator('.player-average').filter({hasText:'AVG 48,2'}).first().waitFor();
     await page.waitForFunction(()=>!busy&&!trainingSearchBusy);
