@@ -7,6 +7,8 @@ assert.equal(summary.overview(winter,'2026-12-01T20:30:00Z').automatic,true,'21:
 assert.equal(summary.overview({...winter,event:{date:null,status:'ACTIVE'}},'2026-12-01T22:00:00Z').due,false,'unknown date is not guessed');
 assert.equal(summary.overview({...winter,stale:true},'2026-12-01T20:30:00Z').automatic,false,'a stale unfinished source does not force a recap');
 assert.equal(summary.overview({...winter,event:{...winter.event,status:'FINISH'},matches:[...winter.matches,{kind:'live'}]},'2026-12-01T20:30:00Z').automatic,false,'a contradictory event status never hides a reported live game');
+assert.equal(summary.overview({...winter,matches:[...winter.matches,{kind:'upcoming'}]},'2026-12-01T20:30:00Z').automatic,true,'unplayed planned rounds do not block an evening recap');
+assert.equal(summary.overview({...winter,matches:[...winter.matches,{kind:'upcoming'}]},'2026-12-01T20:30:00Z').complete,false,'a recap does not declare unplayed pairings finished');
 assert.equal(summary.overview({...winter,matches:[{kind:'final',homeLegs:null,awayLegs:null}]},'2026-12-01T20:30:00Z').legs,null);
 assert.deepEqual(summary.highlights({performances:[{type:'HF',name:'Test',value:180}]}),[]);
 let phase='live',partial=false;
@@ -42,7 +44,7 @@ const server=http.createServer((req,res)=>{
     await page.selectOption('#view','summary');assert.equal(await page.locator('.summary-title').innerText(),'Zwischenstand');assert.match(await page.locator('.summary-status').first().innerText(),/1 Spiel läuft noch/);
     await page.getByRole('button',{name:'Zu den Live-Boards',exact:true}).click();await page.clock.runFor(15010);await page.waitForFunction(()=>!busy);
     assert.equal(await page.locator('#trainingWrapUp').isVisible(),true,'the 21:30 Berlin boundary is recognized automatically');assert.equal(await page.locator('#view').inputValue(),'live','live boards are not interrupted by the scheduled end');
-    phase='pending';await page.evaluate(()=>refresh());assert.equal(await page.locator('#view').inputValue(),'live','unplayed pairings prevent a premature final recap');
+    phase='pending';await page.evaluate(()=>refresh());assert.equal(await page.locator('#view').inputValue(),'summary','planned rounds do not block an evening recap');assert.match(await page.locator('.summary-status').first().innerText(),/noch 1 Begegnung offen/);
     phase='done';await page.evaluate(()=>refresh());assert.equal(await page.locator('#view').inputValue(),'summary');assert.equal(await page.locator('.summary-title').innerText(),'Trainingsrückblick');
     assert.deepEqual(await page.locator('.summary-stat strong').allTextContents(),['18','10','41','0']);assert.match(await page.locator('.summary-highlights').innerText(),/3 × 180/);assert.match(await page.locator('.summary-highlights').innerText(),/124/);assert.match(await page.locator('.summary-highlights').innerText(),/18 Darts/);
     const before=await page.locator('.summary-standings h2').innerText();await page.locator('#next').click();assert.notEqual(await page.locator('.summary-standings h2').innerText(),before);

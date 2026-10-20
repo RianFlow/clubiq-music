@@ -15,7 +15,8 @@
     for(const match of [...finished,...live]){const home=score(match.live?.home?.legs??match.homeLegs),away=score(match.live?.guest?.legs??match.awayLegs);if(home!==null&&away!==null){legs+=home+away;hasLegs=true;}}
     // A scheduled end is an opportunity for a recap, never proof that a live game ended.
     const complete=live.length===0&&(event.status==='FINISH'||due&&!data.stale&&upcoming.length===0&&finished.length>0);
-    return {due,complete,automatic:complete,finished,live,upcoming,legs:hasLegs?legs:null,participants:(data.participants||[]).length};
+    const automatic=live.length===0&&(event.status==='FINISH'||due&&!data.stale&&finished.length>0);
+    return {due,complete,automatic,finished,live,upcoming,legs:hasLegs?legs:null,participants:(data.participants||[]).length};
   }
   function highlights(data){
     const rows=(data.performances||[]).filter(row=>typeof row.name==='string'&&Number.isFinite(row.value)&&row.value>0),result=[];

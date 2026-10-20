@@ -88,8 +88,8 @@ function renderHighlights(sidebar){
 }
 function trainingSummary(state){
   const root=node('section',undefined,'training-summary'),head=node('div',undefined,'summary-head'),intro=node('div');
-  intro.append(node('p','Unser Trainingsabend','eyebrow'),node('h2',state.complete?'Trainingsrückblick':'Zwischenstand','summary-title'));
-  const status=data.stale?'Letzter bekannter Stand · Die Verbindung wird erneut versucht.':state.live.length?`${state.live.length} ${state.live.length===1?'Spiel läuft':'Spiele laufen'} noch. Die Ergebnisse werden weiter aktualisiert.`:state.upcoming.length?`${state.upcoming.length} weitere Begegnungen sind bei 3K noch offen.`:state.complete?'Die gemeldeten Ergebnisse und Bestleistungen im Überblick.':'Die Zusammenfassung wächst mit den Ergebnissen · automatisch ab 21:30 Uhr.';
+  intro.append(node('p','Unser Trainingsabend','eyebrow'),node('h2',state.complete||state.due&&!state.live.length?'Trainingsrückblick':'Zwischenstand','summary-title'));
+  const status=data.stale?'Letzter bekannter Stand · Die Verbindung wird erneut versucht.':state.live.length?`${state.live.length} ${state.live.length===1?'Spiel läuft':'Spiele laufen'} noch. Die Ergebnisse werden weiter aktualisiert.`:!state.complete&&state.upcoming.length?`Bei 3K ${state.upcoming.length===1?'ist':'sind'} noch ${state.upcoming.length} ${state.upcoming.length===1?'Begegnung':'Begegnungen'} offen. Hier stehen die bisher gemeldeten Ergebnisse.`:state.complete?'Die gemeldeten Ergebnisse und Bestleistungen im Überblick.':'Die Zusammenfassung wächst mit den Ergebnissen · automatisch ab 21:30 Uhr.';
   intro.append(node('p',status,'summary-status'));head.append(intro);
   if(state.live.length){const back=node('button','Zu den Live-Boards');back.type='button';back.addEventListener('click',()=>{q('#view').value='live';q('#view').dispatchEvent(new Event('change'));});head.append(back);}root.append(head);
   const stats=node('div',undefined,'summary-stats');
