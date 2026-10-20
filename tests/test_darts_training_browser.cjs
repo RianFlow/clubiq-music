@@ -31,7 +31,7 @@ const server=http.createServer((req,res)=>{
     await page.getByRole('heading',{name:'Training 32260',exact:true}).waitFor();await page.locator('#boards tbody tr').waitFor();
     assert.equal(await page.locator('#view').inputValue(),'groups');assert.equal(await page.locator('iframe').count(),0);
     assert.equal(await page.locator('#trainingControls').isVisible(),true);assert.equal(await page.locator('#eventInfo').innerText(),'22.9.2026 · 2 Teilnehmer · 0 laufende Spiele · 1 Gruppe');
-    await page.selectOption('#view','performances');await page.getByText('2 × 180',{exact:true}).waitFor();
+    await page.selectOption('#view','performances');await page.locator('#boards').getByText('2 × 180',{exact:true}).waitFor();
     await page.selectOption('#view','placement');await page.getByText('Noch keine offiziellen Platzierungen veröffentlicht.').waitFor();
     await page.waitForFunction(()=>!trainingSearchBusy&&!busy);next=true;await page.click('#findTrainings');await page.getByRole('heading',{name:'Training 33000',exact:true}).waitFor();
     assert.equal(await page.locator('#view').inputValue(),'participants');assert.equal(await page.locator('#boards .board').count(),2);

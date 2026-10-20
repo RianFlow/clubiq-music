@@ -1,17 +1,18 @@
 'use strict';
 const assert=require('node:assert/strict'),source=require('../static/darts-training-source.js');
 const event=(id=32260,status='FINISH',date='2026-09-21T22:00:00Z')=>({id,statusCd:status,datetime:date,name:`Training ${id}`,mandantKey:1931,dbId:5,paid:true});
-const calls=[];let extrasFail=false;
+const calls=[];let extrasFail=false,liveFixture=false;
 global.fetch=async url=>{
   calls.push(url);const path=new URL(url).pathname;
   let body;
-  if(path.endsWith('/page'))body={totalPages:2,content:[event(url.includes('page=0&')?31849:20147)]};
+  if(new URL(url).hostname==='live.3k-darts.com')body={data:[{matchKey:'44',board:'3',statusActive:true,currentplayerIndex:0,matchPlayers:[{index:1,playerName:'B',points:410,darts:9,dartsTotal:30,scoreTotal:500,count180:0,highfinish:0,legs:0},{index:0,playerName:'A',points:320,darts:12,dartsTotal:48,scoreTotal:771,count180:1,highfinish:124,legs:1}]}]};
+  else if(path.endsWith('/page'))body={totalPages:2,content:[event(url.includes('page=0&')?31849:20147)]};
   else if(path.endsWith('/participant'))body=[{id:1,displayName:'<script>A</script>',paid:true,email:'private'}];
   else if(path.endsWith('/performance'))body=extrasFail?{}:{performanceCatalog:[{performanceTypeCd:'HS',playerPerformances:[{value:180,count:2,participant:{displayName:'A',paid:true}}]}]};
   else if(path.endsWith('/placement'))body=[];
   else if(path.endsWith('/round/8'))body={matches:[{id:44,statusCd:'FINISH',participantHome:{displayName:'A'},participantGuest:{displayName:'B'},legsHome:3,legsAway:1}],tableInfo:{tableEntries:[{name:'Gruppe 1',tableEntries:[{placement:'2.',participantName:'B'},{placement:'1.',participantName:'A'}]}]}};
   else if(path.endsWith('/phase/7'))body={rounds:[{id:8}]};
-  else body={event:event(Number(path.split('/').at(-1))),phases:[{id:7}]};
+  else body={event:event(Number(path.split('/').at(-1)),liveFixture?'ACTIVE':'FINISH'),phases:[{id:7}]};
   return {ok:true,json:async()=>body};
 };
 (async()=>{
@@ -28,6 +29,9 @@ global.fetch=async url=>{
   assert.deepEqual(result.groups[0].entries.map(e=>e.rank),['2.','1.']);assert.equal(result.performances[0].count,2);
   assert.equal(JSON.stringify(result).includes('private'),false);assert.equal(JSON.stringify(result).includes('paid'),false);assert.equal(JSON.stringify(catalog).includes('paid'),false);
   assert.ok(calls.every(url=>url.startsWith('https://backend4.3k-darts.com/2k-backend4/api/v1/frontend/event/')));
+  liveFixture=true;const liveResult=await source.loadEvent(32260),home=liveResult.matches[0].live.home;assert.equal(home.average,48.2);assert.equal(home.points,320);assert.equal(home.darts,12);assert.equal(home.highFinish,124);assert.equal(liveResult.matches[0].live.guest.average,50);
+  for(const player of [{dartsTotal:3},{scoreTotal:180},{scoreTotal:180,dartsTotal:0},{scoreTotal:'180',dartsTotal:3}])assert.equal(source.liveSide([{index:0,...player}],0).average,null,'incomplete scores must never become a fabricated AVG');
+  const doubles=source.liveSide([{index:2,playerName:'C',darts:6,dartsTotal:12,scoreTotal:240},{index:1,playerName:'B'},{index:0,playerName:'A',darts:9,dartsTotal:18,scoreTotal:360}],0);assert.equal(doubles.average,60);assert.equal(doubles.darts,15);assert.equal(doubles.name,'A & C');liveFixture=false;
   extrasFail=true;const partial=await source.loadEvent(32260);assert.equal(partial.degraded,true);assert.equal(partial.performancesUnavailable,true);assert.equal(partial.matches.length,1);
   global.fetch=async()=>{throw new Error('offline');};await assert.rejects(()=>source.discover([past]));
   console.log('Training source: safe links, discovery, Berlin dates, exact phases, official ranks, privacy and partial failures OK');
