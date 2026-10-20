@@ -65,6 +65,7 @@ jobs:
           NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_darts_tournament_browser.cjs
           NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_darts_training_browser.cjs
           NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_darts_training_highlights_browser.cjs
+          NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_darts_training_summary_browser.cjs
           NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_cms_browser.cjs
           NODE_PATH="$RUNNER_TEMP/music-browser-tests/node_modules" node tests/test_club_darts_browser.cjs
       - name: App mit Training und Push-Auswahl prüfen

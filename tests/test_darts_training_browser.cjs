@@ -29,7 +29,7 @@ const server=http.createServer((req,res)=>{
     });
     await page.clock.install({time:new Date('2026-10-06T10:00:00Z')});await page.goto(`${origin}/training`);
     await page.getByRole('heading',{name:'Training 32260',exact:true}).waitFor();await page.locator('#boards tbody tr').waitFor();
-    assert.equal(await page.locator('#view').inputValue(),'groups');assert.equal(await page.locator('iframe').count(),0);
+    assert.equal(await page.locator('#view').inputValue(),'summary');await page.selectOption('#view','groups');assert.equal(await page.locator('iframe').count(),0);
     assert.equal(await page.locator('#trainingControls').isVisible(),true);assert.equal(await page.locator('#eventInfo').innerText(),'22.9.2026 · 2 Teilnehmer · 0 laufende Spiele · 1 Gruppe');
     await page.selectOption('#view','performances');await page.locator('#boards').getByText('2 × 180',{exact:true}).waitFor();
     await page.selectOption('#view','placement');await page.getByText('Noch keine offiziellen Platzierungen veröffentlicht.').waitFor();
@@ -42,7 +42,7 @@ const server=http.createServer((req,res)=>{
     await page.locator('#trainingControls details summary').click();await page.fill('#trainingLink','https://portal.3k-darts.com/frontend/events/5/event/999/participants');await page.click('#trainingLinkForm button');await page.getByText('Dieser Link gehört nicht zu einem Training von SV Barver.').waitFor();assert.equal(await page.locator('#eventTitle').innerText(),'Training 31849');
     await page.fill('#trainingLink','https://live.3k-darts.com/event/5/32260');await page.click('#trainingLinkForm button');await page.getByRole('heading',{name:'Training 32260',exact:true}).waitFor();assert.match(page.url(),/event=32260/);
     // Both connections fail after a complete snapshot: reload keeps the correct event.
-    fail=true;await page.reload();await page.getByRole('heading',{name:'Training 32260',exact:true}).waitFor();await page.getByText(/Die letzten Daten bleiben sichtbar/).waitFor();assert.equal(await page.locator('#boards .board').count(),1);
+    fail=true;await page.reload();await page.getByRole('heading',{name:'Training 32260',exact:true}).waitFor();await page.getByText(/Die letzten Daten bleiben sichtbar/).waitFor();assert.equal(await page.locator('#boards .summary-title').innerText(),'Trainingsrückblick');
     assert.equal(await page.locator('#autoTrainingSearch').isChecked(),false);
     for(const width of [390,320]){await page.setViewportSize({width,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`overflow at ${width}`);}
     await page.screenshot({path:path.join(root,'outputs/training-mobile.png'),fullPage:true});
